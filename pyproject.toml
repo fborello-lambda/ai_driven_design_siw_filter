@@ -1,0 +1,24 @@
+[project]
+name = "siw-filter"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "csxcad",
+    "cython>=3.2.5",
+    "h5py>=3.16.0",
+    "matplotlib>=3.10.9",
+    "numpy>=2.4.6",
+    "openems",
+    "scikit-rf>=1.12.0",
+    "scipy>=1.17.1",
+    "setuptools>=82.0.1",
+]
+
+[tool.uv]
+no-build-isolation-package = ["csxcad", "openems"]
+
+[tool.uv.sources]
+csxcad = { path = "../../openEMS-Project/CSXCAD/python" }
+openems = { path = "../../openEMS-Project/openEMS/python" }
