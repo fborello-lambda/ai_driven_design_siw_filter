@@ -31,7 +31,7 @@ from CSXCAD import ContinuousStructure
 from openEMS import openEMS
 from openEMS.physical_constants import C0 as OEMS_C0
 
-from config import SPEC, EPS0, FilterSpec
+from config import SPEC, EPS0, FilterSpec, out_s2p, out_img
 from siw_geometry import Geometry, build_geometry
 
 UNIT = 1e-3   # geometry passed to openEMS in millimetres
@@ -76,16 +76,26 @@ def make_fdtd(f_center: float, f_cutoff: float, end_criteria: float = 1e-4,
 
 
 def _add_substrate_and_planes(csx: ContinuousStructure, spec: FilterSpec,
-                              x0: float, x1: float, y0: float, y1: float):
-    """Substrate box (z 0..h) + top PEC copper plane covering [x0..x1]x[y0..y1]."""
+                              x0: float, x1: float, y0: float, y1: float,
+                              top_x0: float | None = None,
+                              top_x1: float | None = None):
+    """Substrate box (z 0..h) + top PEC copper plane.
+
+    The substrate spans [x0..x1]x[y0..y1]. The top PEC plane spans
+    [top_x0..top_x1] (defaults to the full substrate). Restrict the top plane
+    to the SIW cavity region so it does NOT short out a microstrip feed/taper
+    that lives in the lead-in region.
+    """
     sub = spec.substrate
     h = _m(sub.h)
     kappa = sub.kappa(spec.f0)
     mat = csx.AddMaterial("substrate", epsilon=sub.eps_r, kappa=kappa)
     mat.AddBox([x0, y0, 0.0], [x1, y1, h], priority=1)
     pec = csx.AddMetal("copper")
+    tx0 = x0 if top_x0 is None else top_x0
+    tx1 = x1 if top_x1 is None else top_x1
     # top SIW plane (zero-thickness sheet at z=h)
-    pec.AddBox([x0, y0, h], [x1, y1, h], priority=10)
+    pec.AddBox([tx0, y0, h], [tx1, y1, h], priority=10)
     return pec, h
 
 
@@ -137,38 +147,134 @@ def _add_taper_feed_port(csx: ContinuousStructure, fdtd: openEMS, pec, g: Geomet
     return port
 
 
+def _clean_lines(lines: list[float], min_gap: float) -> list[float]:
+    """Remove mesh lines closer than min_gap to prevent near-zero cells."""
+    out: list[float] = []
+    for v in sorted(lines):
+        if not out or abs(v - out[-1]) >= min_gap:
+            out.append(v)
+    return out
+
+
 def auto_mesh(csx: ContinuousStructure, g: Geometry, h: float,
               x_lo: float, x_hi: float, res_factor: float = 20.0):
     """Build a graded mesh: lambda/res_factor in dielectric, via centres anchored,
-    thirds-rule cells at trace edges, air above the substrate."""
+    thirds-rule cells around each via, air above the substrate."""
     sub = g.spec.substrate
     f_max = g.spec.f0 * 1.4
     res = OEMS_C0 / (f_max * np.sqrt(sub.eps_r)) / UNIT / res_factor   # mm
-    third = np.array([2 * res / 3, -res / 3]) / 3.0
+    d_mm = _m(g.spec.d_via)
+    third = d_mm / 3.0          # thirds-rule offset for via resolution
+    min_gap = third * 0.5       # dedup threshold: half a third
 
     mesh = csx.GetGrid()
     mesh.SetDeltaUnit(UNIT)
     half = _m(g.a_siw) / 2.0
 
-    # --- x ---
-    xs = sorted({round(_m(x), 4) for (x, y) in g.vias})
-    mesh.AddLine("x", xs)
-    mesh.AddLine("x", [x_lo, x_hi, 0.0, _m(g.L_inner)])
+    # --- x: via centres + thirds-rule + domain bounds ---
+    raw_x = [x_lo, x_hi, 0.0, _m(g.L_inner)]
+    for (x, _) in g.vias:
+        c = round(_m(x), 4)
+        raw_x += [c, c - third, c + third]
+    mesh.AddLine("x", _clean_lines(raw_x, min_gap))
     mesh.SmoothMeshLines("x", res)
 
-    # --- y ---
-    ys = sorted({round(_m(y), 4) for (x, y) in g.vias})
-    mesh.AddLine("y", ys)
-    for edge in (+half, -half):
-        mesh.AddLine("y", edge + third)
-    mesh.AddLine("y", [-half - 4 * res, half + 4 * res])
+    # --- y: via centres + thirds-rule + midpoints between adjacent vias ---
+    raw_y = [-half - 4 * res, half + 4 * res]
+    unique_y = sorted({round(_m(y), 4) for (_, y) in g.vias})
+    for c in unique_y:
+        raw_y += [c, c - third, c + third]
+    # midpoint between every adjacent via pair so the gap gets >=1 cell
+    for a, b in zip(unique_y[:-1], unique_y[1:]):
+        raw_y.append((a + b) / 2.0)
+    # feed width edges
+    w2 = _m(g.W_ms) / 2.0
+    raw_y += [w2, -w2]
+    mesh.AddLine("y", _clean_lines(raw_y, min_gap))
     mesh.SmoothMeshLines("y", res)
 
-    # --- z --- substrate + air above
+    # --- z: substrate layers + air above ---
     mesh.AddLine("z", np.linspace(0.0, h, 4))
     mesh.AddLine("z", h + np.array([res, 8 * res, 20 * res]))
     mesh.SmoothMeshLines("z", res)
     return mesh, res
+
+
+# ---------------------------------------------------------------------------
+# Full filter — lumped-port variant (no taper, ports at SIW end faces)
+# ---------------------------------------------------------------------------
+def build_full_filter_lumped(g: Geometry, res_factor: float = 18.0,
+                             end_criteria: float = 1e-4):
+    """Full N-cavity filter with lumped ports directly at the SIW end faces.
+
+    Bypasses the microstrip taper entirely — ports sit at x=0 and x=L_inner,
+    centred at y=0, z=h/2. This is the same weak-coupling approach used in
+    calibrate.py and avoids the MSLPort/taper issues seen in the MSL model.
+    The impedance is not 50 Ohm matched (SIW Z_PI != 50 Ohm) so S11 will look
+    poor, but S21 passband shape and centre frequency are reliable.
+    """
+    spec = g.spec
+    fdtd = make_fdtd(spec.f0, 0.5 * spec.f0, end_criteria=end_criteria)
+    fdtd.SetBoundaryCond(["MUR", "MUR", "MUR", "MUR", "PEC", "MUR"])
+    csx = ContinuousStructure()
+    fdtd.SetCSX(csx)
+
+    h = _m(spec.substrate.h)
+    radius = _m(spec.d_via) / 2.0
+    half = _m(g.a_siw) / 2.0
+    over = _m(spec.d_via)
+    L_inner = _m(g.L_inner)
+
+    pec, _ = _add_substrate_and_planes(csx, spec,
+                                       -over, L_inner + over,
+                                       -half - over, half + over)
+    _add_vias(pec, g.vias, radius, h)
+
+    # Lumped ports at the SIW end faces, inset slightly from the end wall
+    inset = _m(g.L_cav) * 0.15
+    yoff  = half * 0.5
+    port_in  = fdtd.AddLumpedPort(1, 50,
+                                   [inset, yoff, 0], [inset, yoff, h],
+                                   "z", excite=1, priority=5)
+    port_out = fdtd.AddLumpedPort(2, 50,
+                                   [L_inner - inset, yoff, 0],
+                                   [L_inner - inset, yoff, h],
+                                   "z", excite=0, priority=5)
+
+    # mesh — same thirds-rule approach as calibrate.py
+    d_mm  = _m(spec.d_via)
+    third = d_mm / 3.0
+    min_gap = third * 0.5
+
+    sub = spec.substrate
+    f_max = spec.f0 * 1.4
+    res = OEMS_C0 / (f_max * np.sqrt(sub.eps_r)) / UNIT / res_factor
+
+    mesh = csx.GetGrid()
+    mesh.SetDeltaUnit(UNIT)
+
+    xs_via = sorted({round(_m(x), 4) for x, _ in g.vias})
+    ys_via = sorted({round(_m(y), 4) for _, y in g.vias})
+
+    raw_x = [-over, L_inner + over, inset, L_inner - inset]
+    for c in xs_via:
+        raw_x += [c, c - third, c + third]
+    mesh.AddLine("x", _clean_lines(raw_x, min_gap))
+    mesh.SmoothMeshLines("x", res)
+
+    raw_y = [-half - 4 * res, half + 4 * res, yoff]
+    for c in ys_via:
+        raw_y += [c, c - third, c + third]
+    for a, b in zip(ys_via[:-1], ys_via[1:]):
+        raw_y.append((a + b) / 2.0)
+    mesh.AddLine("y", _clean_lines(raw_y, min_gap))
+    mesh.SmoothMeshLines("y", res)
+
+    mesh.AddLine("z", np.linspace(0, h, 4))
+    mesh.AddLine("z", [h + res, h + 8 * res])
+    mesh.SmoothMeshLines("z", res)
+
+    return fdtd, csx, [port_in, port_out]
 
 
 # ---------------------------------------------------------------------------
@@ -201,9 +307,11 @@ def build_full_filter(g: Geometry, res_factor: float = 18.0,
     x_lo = -_m(g.L_taper + g.L_feed)
     x_hi = _m(g.L_inner + g.L_taper + g.L_feed)
 
-    # substrate spans the whole board; top plane only over the cavity region
+    # substrate spans the whole board; top plane ONLY over the cavity region
+    # so the microstrip feed/taper in the lead-in is not shorted to ground.
     pec, _ = _add_substrate_and_planes(csx, spec, x_lo, x_hi,
-                                       -half - over, half + over)
+                                       -half - over, half + over,
+                                       top_x0=0.0, top_x1=_m(g.L_inner))
 
     _add_vias(pec, g.vias, radius, h)
 
@@ -216,14 +324,19 @@ def build_full_filter(g: Geometry, res_factor: float = 18.0,
 
 def run_filter_sim(g: Geometry | None = None, sim_path: str | None = None,
                    res_factor: float = 18.0, n_freq: int = 601,
-                   save_s2p: str = "openems.s2p", plot: bool = True) -> SimResult:
+                   save_s2p: str | None = None, plot: bool = True,
+                   end_criteria: float = 1e-4, nr_threads: int = 8,
+                   lumped: bool = False) -> SimResult:
     if g is None:
         g = build_geometry(SPEC)
+    if save_s2p is None:
+        save_s2p = out_s2p("openems.s2p")
     if sim_path is None:
         sim_path = os.path.join(tempfile.gettempdir(), "siw_filter")
 
-    fdtd, csx, ports = build_full_filter(g, res_factor=res_factor)
-    fdtd.Run(sim_path, cleanup=True)
+    builder = build_full_filter_lumped if lumped else build_full_filter
+    fdtd, csx, ports = builder(g, res_factor=res_factor, end_criteria=end_criteria)
+    fdtd.Run(sim_path, cleanup=True, numThreads=nr_threads)
 
     f = np.linspace(2.0e9, 3.7e9, n_freq)
     for p in ports:
@@ -235,7 +348,7 @@ def run_filter_sim(g: Geometry | None = None, sim_path: str | None = None,
         _write_s2p(_proj(save_s2p), f, s11, s21)
         print(f"Wrote {_proj(save_s2p)}")
     if plot:
-        _plot(f, s11, s21, g, _proj("openems_response.png"))
+        _plot(f, s11, s21, g, out_img("openems_response.png"))
     return SimResult(f=f, s11=s11, s21=s21)
 
 
@@ -276,13 +389,26 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="openEMS SIW filter simulation")
     ap.add_argument("--res", type=float, default=18.0,
                     help="mesh res factor (lambda/res in dielectric); higher=finer/slower")
+    ap.add_argument("--end-criteria", type=float, default=1e-4,
+                    help="FDTD end criteria (1e-3 = fast/rough, 1e-4 = normal, 1e-5 = accurate)")
+    ap.add_argument("--threads", type=int, default=8,
+                    help="number of CPU threads for openEMS")
+    ap.add_argument("--fast", action="store_true",
+                    help="quick check: res=10, end_criteria=1e-3 (~5-10 min)")
+    ap.add_argument("--lumped", action="store_true",
+                    help="use lumped ports at SIW faces (no taper); reliable passband shape")
     ap.add_argument("--build-only", action="store_true",
                     help="build CSX and write XML, do not run FDTD")
     args = ap.parse_args()
 
+    if args.fast:
+        args.res = 10.0
+        args.end_criteria = 1e-3
+
     g = build_geometry(SPEC)
     if args.build_only:
-        fdtd, csx, ports = build_full_filter(g, res_factor=args.res)
+        fdtd, csx, ports = build_full_filter(g, res_factor=args.res,
+                                             end_criteria=args.end_criteria)
         out = os.path.join(tempfile.gettempdir(), "siw_filter")
         os.makedirs(out, exist_ok=True)
         xml = os.path.join(out, "siw_filter.xml")
@@ -293,4 +419,5 @@ if __name__ == "__main__":
         print(f"Built CSX OK -> {xml}")
         print(f"Mesh: {nx} x {ny} x {nz} = {nx*ny*nz:,} cells")
     else:
-        run_filter_sim(g, res_factor=args.res)
+        run_filter_sim(g, res_factor=args.res, end_criteria=args.end_criteria,
+                       nr_threads=args.threads, lumped=args.lumped)

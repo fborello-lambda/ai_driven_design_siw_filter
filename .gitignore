@@ -8,3 +8,16 @@ wheels/
 
 # Virtual environments
 .venv
+
+# All script outputs go here (regenerable); committed figures live in v1_data/.
+# Exception: keep the EM calibration cache (expensive to regenerate, hours of
+# openEMS) so a fresh clone still gets the calibrated iris widths.
+/output/*
+!/output/data
+/output/data/*
+!/output/data/calibration.json
+
+# Stray photos in the project root are never committed (only v1_data/ ones are).
+/*.png
+/*.jpeg
+/*.jpg

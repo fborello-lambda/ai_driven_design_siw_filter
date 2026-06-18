@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from config import SPEC, FilterSpec
+from config import SPEC, FilterSpec, out_s2p, out_img
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +146,7 @@ def synthesize(spec: FilterSpec = SPEC) -> SynthesisResult:
     return SynthesisResult(spec=spec, g=g, k=k, qe_in=qe_in, qe_out=qe_out, M=M)
 
 
-def write_target_s2p(res: SynthesisResult, path: str = "target.s2p",
+def write_target_s2p(res: SynthesisResult, path: str | None = None,
                      span: float = 0.25, n_points: int = 801):
     """Generate the ideal target response and save it as a Touchstone file.
 
@@ -155,6 +155,8 @@ def write_target_s2p(res: SynthesisResult, path: str = "target.s2p",
     """
     import skrf as rf
 
+    if path is None:
+        path = out_s2p("target.s2p")
     spec = res.spec
     f = np.linspace(spec.f0 * (1 - span), spec.f0 * (1 + span), n_points)
     s11, s21 = sparams_from_matrix(res.M, spec.FBW, spec.f0, f)
@@ -196,8 +198,8 @@ if __name__ == "__main__":
     with np.printoptions(precision=4, suppress=True):
         print(res.M)
 
-    ntwk, f, s11, s21 = write_target_s2p(res, "target.s2p")
-    print("\nWrote target.s2p")
+    ntwk, f, s11, s21 = write_target_s2p(res)
+    print(f"\nWrote {out_s2p('target.s2p')}")
 
     # Quick passband sanity check
     fmask = (f >= spec.f1) & (f <= spec.f2)
@@ -227,7 +229,7 @@ if __name__ == "__main__":
         ax.grid(True, alpha=0.3)
         ax.legend()
         fig.tight_layout()
-        fig.savefig("target_response.png", dpi=120)
-        print("Wrote target_response.png")
+        fig.savefig(out_img("target_response.png"), dpi=120)
+        print(f"Wrote {out_img('target_response.png')}")
     except Exception as e:
         print(f"(plot skipped: {e})")

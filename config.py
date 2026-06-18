@@ -7,7 +7,44 @@ See CLAUDE.md sections 1, 7 for the meaning of each parameter.
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
+
+# ---------------------------------------------------------------------------
+# Output layout (single source of truth for where every script writes/reads).
+# Centralising this here keeps inter-script dependencies consistent: e.g.
+# compare.py reads the .s2p that synthesis.py / openems_sim.py wrote, and
+# siw_geometry.py reads the calibration cache that calibrate.py wrote.
+# ---------------------------------------------------------------------------
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.path.join(_ROOT, "output")
+
+
+def _out(subdir: str, name: str) -> str:
+    """Absolute path to ``name`` inside ``output/<subdir>/`` (dir created)."""
+    d = os.path.join(OUTPUT_DIR, subdir)
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, name)
+
+
+def out_img(name: str) -> str:
+    """output/imgs/<name> — plots and figures (.png)."""
+    return _out("imgs", name)
+
+
+def out_s2p(name: str) -> str:
+    """output/s2p/<name> — Touchstone S-parameter files (.s2p)."""
+    return _out("s2p", name)
+
+
+def out_bas(name: str) -> str:
+    """output/bas/<name> — CST VBA macros (.bas)."""
+    return _out("bas", name)
+
+
+def out_data(name: str) -> str:
+    """output/data/<name> — caches, CSVs, JSON (calibration, via coords)."""
+    return _out("data", name)
 
 # ---------------------------------------------------------------------------
 # Physical constants

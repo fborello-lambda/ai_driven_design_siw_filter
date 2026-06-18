@@ -35,13 +35,13 @@ import numpy as np
 from CSXCAD import ContinuousStructure
 from openEMS import openEMS
 
-from config import SPEC, FilterSpec
+from config import SPEC, FilterSpec, out_data, out_img
 from siw_geometry import Geometry, build_geometry, _dedupe_vias
 import openems_sim as oe
 
 # Absolute path: openEMS.Run() chdir's into the sim directory, so a relative
-# path would otherwise be written there instead of the project root.
-CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibration.json")
+# path would otherwise be written there instead of the project output dir.
+CACHE = out_data("calibration.json")
 
 
 def _clean_lines(lines, min_gap: float) -> list[float]:

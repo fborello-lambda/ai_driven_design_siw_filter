@@ -15,7 +15,7 @@ Run:  uv run python cst_export.py
 
 from __future__ import annotations
 
-from config import SPEC, FilterSpec
+from config import SPEC, FilterSpec, out_bas
 from siw_geometry import Geometry, build_geometry
 
 MM = 1e3  # metres -> mm (CST units set to mm)
@@ -83,6 +83,11 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     ]
     for i, w in enumerate(g.iris_widths, start=1):
         params.append((f"w_iris{i}{i+1}", _f(w), f"iris {i}-{i+1} width [mm]"))
+    # External coupling aperture (input/output iris) -> controls Qe -> bandwidth.
+    # Default ~0.6*a_siw as a starting point; tune in CST to set the bandwidth.
+    w_ext_default = 0.6 * g.a_siw
+    params.append(("w_ext", _f(w_ext_default),
+                   "EXTERNAL iris gap (input/output) -> Qe -> bandwidth [mm]"))
 
     s.append("\n' ---- parameters (editable in the GUI) -----------------------------\n")
     for name, val, desc in params:
@@ -131,6 +136,29 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
             '.Zrange "0", "h_sub+t_cu"', '.Segments "0"',
             ".Create", "End With",
         ]))
+
+    # ---- external coupling irises (input/output) -----------------------
+    # Transverse via rows at the SIW input/output faces with a central gap of
+    # w_ext. Narrowing w_ext weakens the external coupling (raises Qe), which
+    # narrows the bandwidth. The Y positions reference the w_ext parameter so
+    # the gap is tunable directly in CST.
+    s.append("\n' ---- external coupling irises (gap = w_ext, controls Qe/BW) -------\n")
+    n_ext = int((half - 0.6 * g.a_siw / 2.0) / spec.p_via) + 1
+    faces = {"in": "0", "out": _f(L_inner)}
+    for fname, xexpr in faces.items():
+        for k in range(n_ext):
+            off = f"w_ext/2 + {k + 0.5:.1f}*p_via"
+            for sgn, tag in (("+", "t"), ("-", "b")):
+                yc = f"{off}" if sgn == "+" else f"-({off})"
+                s.append(_hist(f"define cylinder: component1:viaext_{fname}_{tag}{k}", [
+                    "With Cylinder", ".Reset",
+                    f'.Name "viaext_{fname}_{tag}{k}"',
+                    '.Component "component1"', '.Material "PEC"',
+                    '.Axis "z"', '.Outerradius "rvia"', '.Innerradius "0"',
+                    f'.Xcenter "{xexpr}"', f'.Ycenter "{yc}"',
+                    '.Zrange "0", "h_sub+t_cu"', '.Segments "0"',
+                    ".Create", "End With",
+                ]))
 
     # ---- tapers + feed traces (extruded point-list polygons) -----------
     s.append("\n' ---- microstrip feeds + tapers (extruded copper traces) -----------\n")
@@ -221,8 +249,10 @@ End Sub
     return "".join(s)
 
 
-def write_bas(path: str = "siw_filter.bas",
+def write_bas(path: str | None = None,
               spec: FilterSpec = SPEC) -> Geometry:
+    if path is None:
+        path = out_bas("siw_filter.bas")
     g = build_geometry(spec)
     bas = generate_bas(g)
     with open(path, "w", newline="\r\n") as fh:   # CST/VBA expects CRLF

@@ -17,7 +17,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Polygon, Rectangle
 
-from config import SPEC, FilterSpec
+from config import SPEC, FilterSpec, out_img, out_data
 from siw_geometry import Geometry, build_geometry
 
 MM = 1e3  # metres -> mm for plotting/CSV
@@ -105,5 +105,5 @@ def _dim_v(ax, x, y0, y1, label, color="0.3", off=2):
 
 if __name__ == "__main__":
     g = build_geometry(SPEC)
-    export_via_csv(g, "via_coords.csv")
-    plot_layout(g, "layout.png")
+    export_via_csv(g, out_data("via_coords.csv"))
+    plot_layout(g, out_img("layout.png"))

@@ -25,10 +25,10 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from config import C0, EPS0, MU0, SPEC, FilterSpec
+from config import C0, EPS0, MU0, SPEC, FilterSpec, out_data
 from synthesis import synthesize, SynthesisResult
 
-_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calibration.json")
+_CACHE = out_data("calibration.json")
 
 ETA0 = math.sqrt(MU0 / EPS0)        # free-space wave impedance ~376.73 ohm
 
@@ -202,7 +202,7 @@ def build_geometry(spec: FilterSpec = SPEC,
     a_siw = a_siw_from_a_eff(a_eff, d, p)
     fc_actual = te10_cutoff(a_eff, sub.eps_r)
     L_eff = te101_length(spec.f0, a_eff, sub.eps_r)
-    L_cav = L_eff                              # first pass: no iris loading yet
+    L_cav = L_eff                              # analytical TE101 length; matched-feed openEMS + CST confirm ~38mm is correct
     # prefer EM-calibrated iris widths (calibrate.py); fall back to placeholder
     iris_widths = []
     iris_calibrated = True
