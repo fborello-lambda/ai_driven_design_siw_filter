@@ -151,6 +151,25 @@ class FilterSpec:
 SPEC = FilterSpec()
 
 
+# ---------------------------------------------------------------------------
+# FINAL design — Palace-optimized values (2026-06-20).
+# The analytical first pass in siw_geometry gets these dimensions wrong because
+# the microstrip tapers + external irises load the cavities. These numbers come
+# from the per-cavity Palace optimizer (palace_opt.py): S11 < -16 dB in band,
+# IL ~1.5 dB, centred ~2.87 GHz. When USE_OPTIMIZED is True, build_geometry
+# overrides the computed L_cav / iris / w_ext / feed with these (dimensions mm).
+# (Optimizer found L_end=34.4, L_mid=34.3 -> ~equal, so uniform 34.4 is used.)
+# ---------------------------------------------------------------------------
+USE_OPTIMIZED = True
+OPTIMIZED_DESIGN = {
+    "L_cav_mm":   34.4,
+    "w_iris_mm":  13.0,
+    "w_ext_mm":   16.0,
+    "W_ms_mm":    2.26,
+    "L_taper_mm": 15.46,
+}
+
+
 if __name__ == "__main__":
     spec = SPEC
     sub = spec.substrate

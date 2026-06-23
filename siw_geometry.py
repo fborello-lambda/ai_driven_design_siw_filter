@@ -162,6 +162,7 @@ class Geometry:
     L_cav: float
     iris_widths: list[float]            # N-1 internal irises (from k)
     iris_calibrated: bool               # True if widths came from the EM fit
+    w_ext: float                        # external (input/output) iris gap [m] -> Qe
 
     # feed/taper [m]
     W_ms: float
@@ -175,8 +176,13 @@ class Geometry:
     lambda_g_ms: float
     lambda0: float
 
+    # optional per-cavity lengths [m]; if set, overrides the uniform L_cav for
+    # wall placement (end cavities can be shorter than the middle). len == N.
+    L_cavs: list[float] | None = None
+
     # drawable primitives
     vias: list[tuple[float, float]] = field(default_factory=list)  # (x,y) centers
+    ext_iris_vias: list[tuple[float, float]] = field(default_factory=list)  # input/output iris
     cavity_bounds: list[tuple[float, float]] = field(default_factory=list)
     taper_polys: list[np.ndarray] = field(default_factory=list)
     feed_polys: list[np.ndarray] = field(default_factory=list)
@@ -186,6 +192,8 @@ class Geometry:
 
     @property
     def L_inner(self) -> float:
+        if self.L_cavs:
+            return sum(self.L_cavs)
         return self.spec.N * self.L_cav
 
 
@@ -228,10 +236,23 @@ def build_geometry(spec: FilterSpec = SPEC,
         spec=spec, syn=syn,
         a_eff=a_eff, a_siw=a_siw, fc_actual=fc_actual, L_eff=L_eff, L_cav=L_cav,
         iris_widths=iris_widths, iris_calibrated=iris_calibrated,
+        w_ext=0.6 * a_siw,                 # input/output iris gap (Qe knob); tune in CST/openEMS
         W_ms=W_ms, eps_eff_ms=eps_eff_ms, L_taper=L_taper, L_feed=L_feed,
         Z_PI=Z_PI,
         lambda_g_siw=lambda_g_siw, lambda_g_ms=lambda_g_ms, lambda0=spec.lambda0,
     )
+
+    # Override the analytical first pass with the Palace-optimized final design.
+    from config import USE_OPTIMIZED, OPTIMIZED_DESIGN
+    if USE_OPTIMIZED:
+        od = OPTIMIZED_DESIGN
+        g.L_cav = od["L_cav_mm"] * 1e-3
+        g.iris_widths = [od["w_iris_mm"] * 1e-3] * len(g.iris_widths)
+        g.iris_calibrated = True
+        g.w_ext = od["w_ext_mm"] * 1e-3
+        g.W_ms = od["W_ms_mm"] * 1e-3
+        g.L_taper = od["L_taper_mm"] * 1e-3
+
     _build_primitives(g)
     _check_design_rules(g)
     return g
@@ -261,24 +282,38 @@ def _build_primitives(g: Geometry) -> None:
 
     vias: list[tuple[float, float]] = []
 
-    # Side-wall via columns along x at y = +/- a_siw/2. Force the column count
-    # to a multiple of N so the internal transverse walls land *exactly* on a
-    # side column (equal cavities, no clashing corner vias). p_side stays close
-    # to p_via.
-    n_side = int(round(L_inner / p))
-    n_side = max(N, N * round(n_side / N))     # nearest multiple of N
-    col_per_cav = n_side // N
-    xs = np.linspace(0.0, L_inner, n_side + 1)
-    for x in xs:
-        vias.append((x, +half))
-        vias.append((x, -half))
-
-    # N-1 internal transverse walls (irises) on the shared side columns.
-    # y grid across the width at pitch p, symmetric about 0, centre gap removed.
-    # Endpoint vias at y = +/-half coincide with the side wall -> deduped below.
+    # y grid across the width at pitch p, symmetric about 0 (for transverse walls)
     n_trans = int(round(g.a_siw / p))
     y_grid = np.linspace(-half, half, n_trans + 1)
-    wall_x = [xs[i * col_per_cav] for i in range(1, N)]
+
+    if g.L_cavs:
+        # --- per-cavity lengths: place side columns segment-by-segment so every
+        # internal wall lands exactly on a side column (no clashing corners). ---
+        edges = [0.0]
+        for Lc in g.L_cavs:
+            edges.append(edges[-1] + Lc)
+        for x0, x1 in zip(edges[:-1], edges[1:]):
+            ncol = max(1, int(round((x1 - x0) / p)))
+            for x in np.linspace(x0, x1, ncol + 1):
+                vias.append((x, +half))
+                vias.append((x, -half))
+        wall_x = edges[1:-1]
+    else:
+        # Side-wall via columns along x at y = +/- a_siw/2. Force the column count
+        # to a multiple of N so the internal transverse walls land *exactly* on a
+        # side column (equal cavities, no clashing corner vias). p_side stays close
+        # to p_via.
+        n_side = int(round(L_inner / p))
+        n_side = max(N, N * round(n_side / N))     # nearest multiple of N
+        col_per_cav = n_side // N
+        xs = np.linspace(0.0, L_inner, n_side + 1)
+        for x in xs:
+            vias.append((x, +half))
+            vias.append((x, -half))
+        wall_x = [xs[i * col_per_cav] for i in range(1, N)]
+
+    # N-1 internal transverse walls (irises) on the shared side columns.
+    # Endpoint vias at y = +/-half coincide with the side wall -> deduped below.
     for i, x_wall in enumerate(wall_x):
         w = g.iris_widths[i]
         for y in y_grid:
@@ -286,6 +321,28 @@ def _build_primitives(g: Geometry) -> None:
                 vias.append((x_wall, y))
 
     g.vias = _dedupe_vias(vias, min_sep=0.9 * spec.d_via)
+
+    # External coupling irises: transverse via rows at the input/output faces
+    # (x=0 and x=L_inner) with a central gap of w_ext. Same placement as the
+    # CST .bas: centres start at w_ext/2 + 0.5*p and step outward by p. Kept in
+    # a separate list so they don't duplicate in the main via loop.
+    ext: list[tuple[float, float]] = []
+    if g.w_ext > 0.0:
+        # Iris vias from the gap edge (w_ext/2) outward at pitch p. Keep only
+        # those that stay clear of the side wall at y=half (no overlap with the
+        # corner via). Offsets reference w_ext so the gap stays tunable in CST.
+        radius = spec.d_via / 2.0
+        k = 0
+        while True:
+            off = g.w_ext / 2.0 + (k + 0.5) * p
+            if off + radius > half - radius:      # would touch/cross the side wall
+                break
+            for x_face in (0.0, L_inner):
+                ext.append((x_face, +off))
+                ext.append((x_face, -off))
+            k += 1
+    g.ext_iris_vias = ext
+
     # Cavity bounds from the (grid-snapped) wall positions.
     edges = [0.0] + wall_x + [L_inner]
     g.cavity_bounds = [(edges[i], edges[i + 1]) for i in range(N)]

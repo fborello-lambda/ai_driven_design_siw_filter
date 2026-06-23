@@ -39,6 +39,12 @@ def generate_bas(g: Geometry) -> str:
     Lt, Lf, W = g.L_taper, g.L_feed, g.W_ms
     xmin, xmax = -Lt - Lf, L_inner + Lt + Lf          # board ends at the feeds
     _, _, ymin, ymax = g.board
+    # Parametric X expressions so W_ms/L_taper/L_feed are LIVE knobs in CST:
+    # the board edges and ports track the feed length. L_inner stays numeric
+    # (locked to the baked via walls) so changing feed dims never desyncs them.
+    Li = _f(L_inner)
+    xmin_e = "-(L_taper+L_feed)"
+    xmax_e = f"{Li}+L_taper+L_feed"
     t_cu = sub.cu_thickness
     h_air = 6.0 * sub.h                                # air above the board
 
@@ -84,9 +90,9 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     for i, w in enumerate(g.iris_widths, start=1):
         params.append((f"w_iris{i}{i+1}", _f(w), f"iris {i}-{i+1} width [mm]"))
     # External coupling aperture (input/output iris) -> controls Qe -> bandwidth.
-    # Default ~0.6*a_siw as a starting point; tune in CST to set the bandwidth.
-    w_ext_default = 0.6 * g.a_siw
-    params.append(("w_ext", _f(w_ext_default),
+    # Use the geometry's w_ext (Palace-optimized when USE_OPTIMIZED) so the GUI
+    # parameter matches the baked via positions.
+    params.append(("w_ext", _f(g.w_ext),
                    "EXTERNAL iris gap (input/output) -> Qe -> bandwidth [mm]"))
 
     s.append("\n' ---- parameters (editable in the GUI) -----------------------------\n")
@@ -117,12 +123,12 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
 
     s.append("\n' ---- substrate + ground planes ------------------------------------\n")
     s.append(brick("substrate", mat,
-                   (_f(xmin), _f(xmax)), (_f(ymin), _f(ymax)), ("0", "h_sub")))
+                   (xmin_e, xmax_e), (_f(ymin), _f(ymax)), ("0", "h_sub")))
     s.append(brick("gnd_bottom", "PEC",
-                   (_f(xmin), _f(xmax)), (_f(ymin), _f(ymax)), ("-t_cu", "0")))
+                   (xmin_e, xmax_e), (_f(ymin), _f(ymax)), ("-t_cu", "0")))
     # Top SIW plate covers the cavity section only (tapers/feeds are traces).
     s.append(brick("siw_top", "PEC",
-                   ("0", _f(L_inner)), (_f(ymin), _f(ymax)),
+                   ("0", Li), (_f(ymin), _f(ymax)),
                    ("h_sub", "h_sub+t_cu")))
 
     # ---- vias -----------------------------------------------------------
@@ -143,7 +149,9 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     # narrows the bandwidth. The Y positions reference the w_ext parameter so
     # the gap is tunable directly in CST.
     s.append("\n' ---- external coupling irises (gap = w_ext, controls Qe/BW) -------\n")
-    n_ext = int((half - 0.6 * g.a_siw / 2.0) / spec.p_via) + 1
+    # vias per face = total ext iris vias / (2 faces * 2 signs); matches
+    # siw_geometry so the .bas never places a via past the side wall.
+    n_ext = len(g.ext_iris_vias) // 4
     faces = {"in": "0", "out": _f(L_inner)}
     for fname, xexpr in faces.items():
         for k in range(n_ext):
@@ -162,14 +170,21 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
 
     # ---- tapers + feed traces (extruded point-list polygons) -----------
     s.append("\n' ---- microstrip feeds + tapers (extruded copper traces) -----------\n")
+    # Coordinates are VBA expressions referencing the feed parameters W_ms,
+    # L_taper, L_feed (LIVE in CST). The taper opens to +/-a_siw/2 (numeric,
+    # locked to the via walls). hp = half-width string, ht = a_siw/2 numeric.
+    hp = "W_ms/2"
+    ht = _f(half)
     traces = {
-        "taper_in": [(-Lt, +W / 2), (0.0, +half), (0.0, -half), (-Lt, -W / 2)],
-        "feed_in": [(-Lt - Lf, +W / 2), (-Lt, +W / 2),
-                    (-Lt, -W / 2), (-Lt - Lf, -W / 2)],
-        "taper_out": [(L_inner + Lt, +W / 2), (L_inner, +half),
-                      (L_inner, -half), (L_inner + Lt, -W / 2)],
-        "feed_out": [(L_inner + Lt + Lf, +W / 2), (L_inner + Lt, +W / 2),
-                     (L_inner + Lt, -W / 2), (L_inner + Lt + Lf, -W / 2)],
+        "taper_in": [("-L_taper", hp), ("0", ht), ("0", f"-({ht})"),
+                     ("-L_taper", f"-({hp})")],
+        "feed_in": [("-(L_taper+L_feed)", hp), ("-L_taper", hp),
+                    ("-L_taper", f"-({hp})"), ("-(L_taper+L_feed)", f"-({hp})")],
+        "taper_out": [(f"{Li}+L_taper", hp), (Li, ht), (Li, f"-({ht})"),
+                      (f"{Li}+L_taper", f"-({hp})")],
+        "feed_out": [(f"{Li}+L_taper+L_feed", hp), (f"{Li}+L_taper", hp),
+                     (f"{Li}+L_taper", f"-({hp})"),
+                     (f"{Li}+L_taper+L_feed", f"-({hp})")],
     }
     for name, pts in traces.items():
         body = ["With Extrude", ".Reset", f'.Name "{name}"',
@@ -178,9 +193,9 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                 '.Twist "0"', '.Taper "0"',
                 '.Origin "0", "0", "h_sub"',
                 '.Uvector "1", "0", "0"', '.Vvector "0", "1", "0"',
-                f'.Point "{_f(pts[0][0])}", "{_f(pts[0][1])}"']
+                f'.Point "{pts[0][0]}", "{pts[0][1]}"']
         for (x, y) in pts[1:]:
-            body.append(f'.LineTo "{_f(x)}", "{_f(y)}"')
+            body.append(f'.LineTo "{x}", "{y}"')
         body += [".Create", "End With"]
         s.append(_hist(f"define extrude: component1:{name}", body))
 
@@ -205,12 +220,12 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     # Microstrip waveguide ports on the x faces (standard sizing: ~8W x ~6h).
     wp = min(8.0 * W, ymax - ymin)
     s.append("\n' ---- waveguide ports ----------------------------------------------\n")
-    for n, (xface, orient) in enumerate([(xmin, "xmin"), (xmax, "xmax")], start=1):
+    for n, (xface_e, orient) in enumerate([(xmin_e, "xmin"), (xmax_e, "xmax")], start=1):
         s.append(_hist(f"define port{n}", [
             "With Port", ".Reset", f'.PortNumber "{n}"',
             '.NumberOfModes "1"', '.Coordinates "Free"',
             f'.Orientation "{orient}"', '.PortOnBound "True"',
-            f'.Xrange "{_f(xface)}", "{_f(xface)}"',
+            f'.Xrange "{xface_e}", "{xface_e}"',
             f'.Yrange "{_f(-wp/2)}", "{_f(wp/2)}"',
             '.Zrange "-t_cu", "h_sub*5"',
             ".Create", "End With",

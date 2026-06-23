@@ -7,8 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "csxcad",
     "cython>=3.2.5",
+    "gmsh>=4.15.2",
     "h5py>=3.16.0",
     "matplotlib>=3.10.9",
+    "meshio>=5.3.5",
     "numpy>=2.4.6",
     "openems",
     "python-docx>=1.2.0",

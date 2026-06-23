@@ -57,10 +57,12 @@ def plot_layout(g: Geometry, path: str = "layout.png") -> None:
         ax.text((x0 + x1) / 2 * MM, 0, f"cav {i+1}", ha="center", va="center",
                 fontsize=9, color="#2a5d8f", zorder=3)
 
-    # Vias as circles
+    # Vias as circles (main filter walls dark; external iris vias highlighted)
     r = g.spec.d_via / 2 * MM
     for (x, y) in g.vias:
         ax.add_patch(Circle((x * MM, y * MM), r, fc="#444", ec="none", zorder=2))
+    for (x, y) in g.ext_iris_vias:
+        ax.add_patch(Circle((x * MM, y * MM), r, fc="#b00", ec="none", zorder=3))
 
     # Dimension annotations
     L_inner = g.L_inner * MM
@@ -70,6 +72,12 @@ def plot_layout(g: Geometry, path: str = "layout.png") -> None:
         x_wall = i * g.L_cav * MM
         _dim_v(ax, x_wall, -w / 2 * MM, w / 2 * MM,
                f"w{i}{i+1}={w*MM:.1f}", color="#b00", off=0)
+    # external iris gap (input/output) -> Qe -> bandwidth
+    if g.w_ext > 0.0:
+        we = g.w_ext * MM
+        for x_face in (0.0, g.L_inner * MM):
+            _dim_v(ax, x_face, -we / 2, we / 2, f"w_ext={we:.1f}",
+                   color="#b00", off=0)
 
     ax.set_xlabel("x [mm]")
     ax.set_ylabel("y [mm]")
