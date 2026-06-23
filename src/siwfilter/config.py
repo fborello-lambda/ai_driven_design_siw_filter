@@ -16,8 +16,24 @@ from dataclasses import dataclass, field
 # compare.py reads the .s2p that synthesis.py / openems_sim.py wrote, and
 # siw_geometry.py reads the calibration cache that calibrate.py wrote.
 # ---------------------------------------------------------------------------
-_ROOT = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_DIR = os.path.join(_ROOT, "output")
+def _find_project_root() -> str:
+    """Walk up from this module until the directory holding ``pyproject.toml``.
+
+    The package lives in ``src/siwfilter/`` but all I/O (``output/``, the data
+    folders ``docs``/``cst_data``) is relative to the repo root,
+    so paths must resolve there regardless of the current working directory.
+    """
+    d = os.path.dirname(os.path.abspath(__file__))
+    while d != os.path.dirname(d):
+        if os.path.exists(os.path.join(d, "pyproject.toml")):
+            return d
+        d = os.path.dirname(d)
+    # Fallback: two levels up from src/siwfilter/.
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+PROJECT_ROOT = _find_project_root()
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
 
 
 def _out(subdir: str, name: str) -> str:
@@ -25,6 +41,15 @@ def _out(subdir: str, name: str) -> str:
     d = os.path.join(OUTPUT_DIR, subdir)
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, name)
+
+
+def data_path(*parts: str) -> str:
+    """Absolute path to a repo data file, e.g. ``data_path("docs", "x.txt")``.
+
+    Resolves under the project root so input data (CST exports, report folders)
+    is found no matter where the process was launched from.
+    """
+    return os.path.join(PROJECT_ROOT, *parts)
 
 
 def out_img(name: str) -> str:

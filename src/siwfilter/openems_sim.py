@@ -31,8 +31,8 @@ from CSXCAD import ContinuousStructure
 from openEMS import openEMS
 from openEMS.physical_constants import C0 as OEMS_C0
 
-from config import SPEC, EPS0, FilterSpec, out_s2p, out_img
-from siw_geometry import Geometry, build_geometry
+from .config import SPEC, EPS0, FilterSpec, out_s2p, out_img
+from .siw_geometry import Geometry, build_geometry
 
 UNIT = 1e-3   # geometry passed to openEMS in millimetres
 

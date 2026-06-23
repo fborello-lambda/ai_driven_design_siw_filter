@@ -94,10 +94,20 @@ If `uv add csxcad/openems` fails: check (a) the two `export` vars are set in thi
 
 ---
 
-## 4. Module structure to build
+## 4. Module structure
 
-Create these in the project root. Keep ALL tunable numbers in `config.py`; other modules
-import from it. Prefer pure functions + a `if __name__ == "__main__"` demo in each.
+> **2026-06-21 — repo restructured into an installed package.** The modules below
+> now live in `src/siwfilter/` (importable package, console script `siw`), not the
+> project root. Imports between them are package-relative (`from .config import …`).
+> `config.py` resolves `PROJECT_ROOT` by walking up to `pyproject.toml`, so `output/`
+> and the data folders stay at the repo root. Run modules with
+> `uv run python -m siwfilter.<module>`, or the whole pipeline with `siw`
+> (`siw --list` shows light vs heavy/opt-in EM stages; see `cli.py` and `README.md`).
+> The ad-hoc `_finalize.py` / `_cst_v2.py` / `make_report.py` were merged into
+> `siwfilter/report.py`.
+
+Keep ALL tunable numbers in `config.py`; other modules import from it. Prefer pure
+functions + a `if __name__ == "__main__"` demo in each.
 
 ```
 config.py        # dataclass(es) with f0, BW/FBW, N, ripple, substrate (eps_r,tan_d,h),
@@ -133,7 +143,7 @@ compare.py       # Overlay target.s2p vs openems.s2p (and later CST export) with
 calibrate.py     # (Important, see sec 6) k-vs-iris-width and Qe-vs-taper sweeps in openEMS.
 ```
 
-Run modules with `uv run python <module>.py`.
+Run modules with `uv run python -m siwfilter.<module>` (or the orchestrator `siw`).
 
 ---
 

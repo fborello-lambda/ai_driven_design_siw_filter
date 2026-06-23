@@ -18,8 +18,8 @@ import time
 
 import numpy as np
 
-from config import out_data, out_img
-from palace_driven import build_mesh
+from .config import out_data, out_img
+from .palace_driven import build_mesh
 
 PALACE = "/home/fd/opt/palace/bin/palace"
 F0 = 2.87

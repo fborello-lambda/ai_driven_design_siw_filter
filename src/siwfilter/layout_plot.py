@@ -17,8 +17,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Polygon, Rectangle
 
-from config import SPEC, FilterSpec, out_img, out_data
-from siw_geometry import Geometry, build_geometry
+from .config import SPEC, FilterSpec, out_img, out_data
+from .siw_geometry import Geometry, build_geometry
 
 MM = 1e3  # metres -> mm for plotting/CSV
 

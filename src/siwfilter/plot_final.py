@@ -5,7 +5,7 @@ Run: uv run python plot_final.py
 import numpy as np, matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from config import out_data, out_img
+from .config import out_data, out_img
 
 p = np.genfromtxt(out_data("postpro/siw_final/port-S.csv"), delimiter=",",
                   names=True, deletechars="", replace_space="")

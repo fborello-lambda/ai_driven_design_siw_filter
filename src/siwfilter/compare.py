@@ -23,9 +23,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import skrf
 
-from config import out_s2p, out_img
+from .config import out_s2p, out_img, PROJECT_ROOT
 
-PROJ = os.path.dirname(os.path.abspath(__file__))
+PROJ = PROJECT_ROOT
 
 
 def _parse_cst_txt(path: str) -> dict[str, tuple[np.ndarray, np.ndarray]]:
@@ -86,7 +86,7 @@ def _metrics(label: str, f: np.ndarray, s11_db: np.ndarray,
 
 def compare(cst_path: str | None, target_path: str,
             oems_path: str | None = None, out: str = "compare.png") -> None:
-    from config import SPEC
+    from .config import SPEC
     f0, f1, f2 = SPEC.f0, SPEC.f1, SPEC.f2
 
     # ---- load data ------------------------------------------------------

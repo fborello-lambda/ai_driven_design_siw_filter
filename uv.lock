@@ -829,7 +829,7 @@ wheels = [
 [[package]]
 name = "siw-filter"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "csxcad" },
     { name = "cython" },

@@ -35,9 +35,9 @@ import numpy as np
 from CSXCAD import ContinuousStructure
 from openEMS import openEMS
 
-from config import SPEC, FilterSpec, out_data, out_img
-from siw_geometry import Geometry, build_geometry, _dedupe_vias
-import openems_sim as oe
+from .config import SPEC, FilterSpec, out_data, out_img
+from .siw_geometry import Geometry, build_geometry, _dedupe_vias
+from . import openems_sim as oe
 
 # Absolute path: openEMS.Run() chdir's into the sim directory, so a relative
 # path would otherwise be written there instead of the project output dir.

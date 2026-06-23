@@ -19,8 +19,8 @@ from __future__ import annotations
 import sys
 import gmsh
 
-from config import SPEC, out_data
-from siw_geometry import build_geometry
+from .config import SPEC, out_data
+from .siw_geometry import build_geometry
 
 
 def build_mesh(iris_mm: float | None = None, mesh_max: float = 2.0,

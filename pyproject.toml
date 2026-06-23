@@ -1,7 +1,7 @@
 [project]
 name = "siw-filter"
 version = "0.1.0"
-description = "Add your description here"
+description = "Parametric SIW bandpass filter: synthesis, geometry, CST/openEMS/Palace, report."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -18,6 +18,16 @@ dependencies = [
     "scipy>=1.17.1",
     "setuptools>=82.0.1",
 ]
+
+[project.scripts]
+siw = "siwfilter.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.uv]
 no-build-isolation-package = ["csxcad", "openems"]

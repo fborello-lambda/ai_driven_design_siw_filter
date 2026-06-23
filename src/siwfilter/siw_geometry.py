@@ -25,8 +25,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from config import C0, EPS0, MU0, SPEC, FilterSpec, out_data
-from synthesis import synthesize, SynthesisResult
+from .config import C0, EPS0, MU0, SPEC, FilterSpec, out_data
+from .synthesis import synthesize, SynthesisResult
 
 _CACHE = out_data("calibration.json")
 
@@ -243,7 +243,7 @@ def build_geometry(spec: FilterSpec = SPEC,
     )
 
     # Override the analytical first pass with the Palace-optimized final design.
-    from config import USE_OPTIMIZED, OPTIMIZED_DESIGN
+    from .config import USE_OPTIMIZED, OPTIMIZED_DESIGN
     if USE_OPTIMIZED:
         od = OPTIMIZED_DESIGN
         g.L_cav = od["L_cav_mm"] * 1e-3

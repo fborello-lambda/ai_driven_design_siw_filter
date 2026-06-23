@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from config import SPEC, FilterSpec, out_s2p, out_img
+from .config import SPEC, FilterSpec, out_s2p, out_img
 
 
 # ---------------------------------------------------------------------------

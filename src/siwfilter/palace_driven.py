@@ -30,8 +30,8 @@ import argparse
 import gmsh
 import numpy as np
 
-from config import SPEC, out_data
-from siw_geometry import build_geometry
+from .config import SPEC, out_data
+from .siw_geometry import build_geometry
 
 MM = 1e3
 
@@ -51,7 +51,7 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     # ---- tuning overrides: reset dimensions then rebuild via/taper primitives ----
     _ovr = (l_cav_mm, w_iris_mm, w_ext_mm, w_ms_mm, l_taper_mm, l_feed_mm, l_cavs_mm)
     if any(v is not None for v in _ovr):
-        from siw_geometry import _build_primitives
+        from .siw_geometry import _build_primitives
         if l_cavs_mm is not None:
             g.L_cavs = [v * 1e-3 for v in l_cavs_mm]
         if l_cav_mm is not None:

@@ -13,9 +13,9 @@ import numpy as np
 from CSXCAD import ContinuousStructure
 from openEMS import openEMS
 from openEMS.physical_constants import C0 as OEMS_C0
-from config import SPEC
-from siw_geometry import build_geometry
-import openems_sim as oe
+from .config import SPEC
+from .siw_geometry import build_geometry
+from . import openems_sim as oe
 
 UNIT = 1e-3
 def _m(x): return x * 1e3

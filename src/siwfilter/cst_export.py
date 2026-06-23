@@ -15,8 +15,8 @@ Run:  uv run python cst_export.py
 
 from __future__ import annotations
 
-from config import SPEC, FilterSpec, out_bas
-from siw_geometry import Geometry, build_geometry
+from .config import SPEC, FilterSpec, out_bas
+from .siw_geometry import Geometry, build_geometry
 
 MM = 1e3  # metres -> mm (CST units set to mm)
 
