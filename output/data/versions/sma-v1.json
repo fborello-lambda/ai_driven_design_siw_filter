@@ -1,0 +1,18 @@
+{
+  "tag": "sma-v1",
+  "date": "2026-08-07",
+  "description": "First SMA coax-launch comparison run. Uses the OPTIMIZED_DESIGN params (config.py): L_cav=34.4mm, w_iris=13.0mm, w_ext=16.0mm, W_ms=2.26mm (empirically widened, NOT the true 50-ohm synthesis value ~1.66mm), L_taper=15.46mm. Substrate RO4350B_0.76mm (eps_r=3.66, tan_d=0.0037). SMA stub: standard RG-401/SMA size, pin r=0.82mm, PTFE r=2.73mm, eps_r=2.08, ground-clip segment 1.5mm at the board edge (fixed ring-topology bug from v0 attempts).",
+  "result": {
+    "no_connector_worst_s11_2.80_2.94GHz_dB": -18.6,
+    "sma_launch_worst_s11_2.80_2.94GHz_dB": -0.2,
+    "finding": "Idealized microstrip wave port self-normalizes to the trace's own (wrong, ~41 ohm not 50 ohm) impedance, hiding the mismatch. A real 50-ohm coax launch reveals near-total reflection across the whole swept band. Actual microstrip Z0 for W_ms=2.26mm/h=0.76mm/eps_r=3.66 computes to ~41 ohm (Hammerstad), not 50 ohm -- W_ms was tuned against the self-normalizing port artifact, not true 50-ohm."
+  },
+  "files": {
+    "plot": "output/imgs/versions/sma-v1.png",
+    "data": "output/data/versions/sma-v1.npz (keys: sma_cmp_without_f/s11/s21, sma_cmp_with_f/s11/s21)"
+  },
+  "next_step_candidates": [
+    "Revert W_ms to true 50-ohm synthesis value (~1.66mm) and re-tune L_cav/w_iris/w_ext/L_taper against the SMA-launch model (not the self-normalizing microstrip port, to avoid re-discovering the same artifact).",
+    "Optionally push fc_target above the current 0.7*f0 (toward ~0.72-0.75*f0) for a modest a_eff reduction if a smaller footprint is wanted, understood as a separate goal from the impedance fix (a_eff shrinks -> L_cav must grow to hold f0, near-square tradeoff, limited net area win)."
+  ]
+}
