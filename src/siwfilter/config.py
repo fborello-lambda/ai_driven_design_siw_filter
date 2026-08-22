@@ -71,6 +71,61 @@ def out_data(name: str) -> str:
     """output/data/<name> — caches, CSVs, JSON (calibration, via coords)."""
     return _out("data", name)
 
+
+def find_palace() -> str:
+    """Locate the Palace binary once, instead of every Palace-driving module
+    hardcoding its own copy of the path (a real problem this project hit --
+    see HANDOFF.md's environment-setup section: every palace_opt*.py file
+    and scripts/*.py had its own hardcoded ``PALACE = "/home/fd/opt/palace/
+    bin/palace"``, breaking on every new machine).
+
+    Resolution order: $PALACE_BIN env var -> `palace` on $PATH -> the
+    conventional `~/opt/palace/bin/palace` install location.
+    """
+    env = os.environ.get("PALACE_BIN")
+    if env and os.path.isfile(env):
+        return env
+    import shutil
+    which = shutil.which("palace")
+    if which:
+        return which
+    home = os.path.expanduser("~/opt/palace/bin/palace")
+    if os.path.isfile(home):
+        return home
+    raise FileNotFoundError(
+        "Palace binary not found. Set $PALACE_BIN, put `palace` on $PATH, "
+        "or symlink it at ~/opt/palace/bin/palace (see HANDOFF.md).")
+
+
+def has_gpu() -> bool:
+    """True if an NVIDIA GPU is actually usable on this machine.
+
+    Not every user has one (and Palace itself may be built without CUDA), so
+    every GPU-preferring default resolves through here rather than assuming --
+    otherwise a "default GPU" flag is a hard crash on a CPU-only box.
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("nvidia-smi"):
+        return False
+    try:
+        cp = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+                            capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return cp.returncode == 0 and bool(cp.stdout.strip())
+
+
+def default_device(prefer_gpu: bool = False) -> str:
+    """Resolve a device string, degrading to CPU when no GPU is present.
+
+    ``prefer_gpu`` is for the cheap eigenmode calibration step, which is
+    genuinely faster on GPU and small enough to fit; everything else should
+    ask for CPU explicitly. See optimize.py's module docstring for why the
+    big driven+SMA solves don't default to GPU.
+    """
+    return "GPU" if (prefer_gpu and has_gpu()) else "CPU"
+
 # ---------------------------------------------------------------------------
 # Physical constants
 # ---------------------------------------------------------------------------

@@ -28,9 +28,9 @@ siw --only synth layout  # just these, in order
 siw --stage palace-opt   # one heavy stage
 ```
 
-Light stages take seconds. Heavy ones (`calibrate`, `qe`, `openems`, `palace-eig`,
-`palace-driven`, `palace-opt`) run EM solves and are opt-in. Any module also runs
-standalone: `uv run python -m siwfilter.<module>`.
+Light stages take seconds. Heavy ones (`palace-eig`, `palace-driven`, `palace-opt`)
+run EM solves and are opt-in. Any module also runs standalone:
+`uv run python -m siwfilter.<module>`.
 
 ## Layout
 
@@ -39,7 +39,6 @@ standalone: `uv run python -m siwfilter.<module>`.
 | `src/siwfilter/` | the package — all design modules + `cli.py` (`siw`) |
 | `config.py` | spec, substrate presets, output paths |
 | `synthesis.py` → `siw_geometry.py` → `layout_plot.py` → `cst_export.py` | design chain |
-| `openems_sim.py`, `calibrate.py`, `qe_calibrate.py` | openEMS FDTD + calibration |
 | `palace_geometry.py`, `palace_driven.py`, `palace_opt.py` | Palace FEM + optimizer |
 | `compare.py`, `report.py` | figures + IEEE PDF |
 | `output/` | generated artifacts (imgs / s2p / bas / data) |

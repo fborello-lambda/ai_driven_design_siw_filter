@@ -13,23 +13,34 @@ Two tiers of stages:
     report    -> report.py        : comparison figures + IEEE PDF
 
   Heavy (opt-in — EM solves, minutes to hours):
-    calibrate    -> calibrate.py      : openEMS iris-width <-> k calibration
-    qe           -> qe_calibrate.py   : openEMS taper -> external Qe
-    openems      -> openems_sim.py    : full openEMS FDTD of the filter
     palace-eig   -> palace_geometry.py: Palace eigenmode (2-cavity k)
     palace-driven-> palace_driven.py  : Palace driven full-filter solve
     palace-opt   -> palace_opt.py     : autonomous coordinate-descent tuner
+
+Plus AI-driven design subcommands (see HANDOFF.md), all Palace/Topology-based:
+
+    compare-baselines           : regenerate the 3 standard artifacts for the
+                                   already-landed N=3 cascade / N=2 dual-mode
+                                   designs, as a regression check
+    design --topology ...       : full Bayesian search for a new design
+    layout --topology ...       : fast layout-only sanity check (no solve)
+    sweep  --topology ...       : wideband sweep of an existing design
 
 Examples:
     siw                              # light pipeline (synth..report)
     siw --only synth geometry layout # just those stages, in that order
     siw --stage palace-opt           # run one heavy stage
     siw --list                       # show all stages
+    siw compare-baselines
+    siw design --topology dualmode --evals 18
+    siw layout --topology dualmode --params a=57.21,w_iris=15.26,x_iris=28.68,y_wall=8.62,w_ext=16.31
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import runpy
 import sys
 import time
@@ -43,14 +54,37 @@ LIGHT = [
     ("report", "siwfilter.report"),
 ]
 HEAVY = [
-    ("calibrate", "siwfilter.calibrate"),
-    ("qe", "siwfilter.qe_calibrate"),
-    ("openems", "siwfilter.openems_sim"),
     ("palace-eig", "siwfilter.palace_geometry"),
     ("palace-driven", "siwfilter.palace_driven"),
     ("palace-opt", "siwfilter.palace_opt"),
 ]
 STAGES = dict(LIGHT + HEAVY)
+
+# Landed baseline designs (see docs/dualmode_cavity/README.md,
+# docs/sma_connector/README.md) -- used by `siw compare-baselines`.
+BASELINES = {
+    "N=3 cascade": {
+        "topology": "cascade",
+        "N": 3,
+        "params": {"l_cav1": 32.81, "l_cav2": 33.86, "w_iris": 13.0,
+                   "w_ext": 16.5, "l_taper": 15.73, "w_ms": 1.664},
+    },
+    "N=2 dualmode (1.5/3.0mm)": {
+        "topology": "dualmode",
+        "N": 2,
+        "params": {"a": 57.212, "w_iris": 15.261, "x_iris": 28.678,
+                  "y_wall": 8.619, "w_ext": 16.311},
+    },
+}
+
+
+_DEVICE_HELP = (
+    "Solver device. auto (default): GPU when this machine has one AND the topology has a "
+    "GPU-validated mesh preset, else CPU -- so the same command works on a GPU-less box. "
+    "GPU runs single-rank (-np forced to 1) with MFEM's pooled allocator disabled; measured "
+    "~1.24x faster than CPU -np 4 on a GTX 1660 SUPER for dualmode, with S-params matching "
+    "to <1e-9 dB. CPU: multi-rank domain decomposition, works for every topology."
+)
 
 
 def _run(name: str, module: str) -> None:
@@ -58,6 +92,192 @@ def _run(name: str, module: str) -> None:
     t0 = time.time()
     runpy.run_module(module, run_name="__main__")
     print(f"[{name}] done in {time.time() - t0:.1f} s")
+
+
+def _parse_params(s: str) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for pair in s.split(","):
+        if not pair.strip():
+            continue
+        k, v = pair.split("=")
+        out[k.strip()] = float(v)
+    return out
+
+
+def _make_spec(args):
+    from .config import SPEC, FilterSpec
+    N = args.N if args.N is not None else (2 if getattr(args, "topology", None) == "dualmode" else SPEC.N)
+    return FilterSpec(
+        f0=args.f0 if args.f0 is not None else SPEC.f0,
+        FBW=args.fbw if args.fbw is not None else SPEC.FBW,
+        N=N,
+        ripple_db=args.ripple if args.ripple is not None else SPEC.ripple_db,
+        substrate_name=args.substrate if args.substrate is not None else SPEC.substrate_name,
+        d_via=SPEC.d_via, p_via=SPEC.p_via,
+    )
+
+
+def _add_spec_args(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument("--f0", type=float, default=None, help="center frequency [Hz], default from config.SPEC")
+    ap.add_argument("--N", type=int, default=None, help="filter order / pole count")
+    ap.add_argument("--fbw", type=float, default=None, help="fractional bandwidth")
+    ap.add_argument("--ripple", type=float, default=None, help="Chebyshev ripple [dB]")
+    ap.add_argument("--substrate", default=None, help="substrate key from config.SUBSTRATES")
+
+
+def _spec_kwargs(spec) -> dict:
+    return {"f0": spec.f0, "FBW": spec.FBW, "N": spec.N, "ripple_db": spec.ripple_db,
+           "substrate_name": spec.substrate_name, "d_via": spec.d_via, "p_via": spec.p_via}
+
+
+def _render_worker(payload_path: str) -> int:
+    """Runs in its own subprocess (see _artifacts): gmsh's offscreen FLTK
+    renderer segfaults (not a catchable Python exception) if a second
+    render_png session runs in the same process after a first one -- hit
+    for real when compare-baselines looped both topologies in-process.
+    Isolating each render in a fresh interpreter sidesteps that entirely,
+    the same way every Palace solve in this codebase is already isolated."""
+    from .config import FilterSpec
+    from .topologies import REGISTRY
+    payload = json.load(open(payload_path))
+    spec = FilterSpec(**payload["spec"])
+    topo = REGISTRY[payload["topology"]]
+    topo.build_mesh(spec, payload["out_name"], render_png=payload["render_path"],
+                    show=False, **payload["params"])
+    return 0
+
+
+def _artifacts(topology, spec, params: dict, prefix: str, r: dict | None = None):
+    """The black-box pipeline's 3 standard artifacts: top view, 3D render,
+    S21/S11 comparison (see HANDOFF.md). Returns the 3 output paths."""
+    import subprocess
+    import tempfile
+    from .config import out_img
+    from .optimize import plot_comparison
+
+    layout_path = out_img(f"{prefix}_layout2d.png")
+    topology.plot_layout_2d(spec, layout_path, **params)
+
+    render_path = out_img(f"{prefix}_render.png")
+    payload = {"topology": topology.name, "spec": _spec_kwargs(spec), "params": params,
+              "out_name": f"{prefix}_render_tmp.msh", "render_path": render_path}
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        json.dump(payload, fh)
+        payload_path = fh.name
+    cmd = [sys.executable, "-m", "siwfilter.cli", "_render-worker", payload_path]
+    # gmsh's FLTK renderer needs a display even for offscreen rendering; wrap
+    # with a virtual one when there isn't a real one already (headless boxes
+    # like this session's -- see `sudo apt-get install xvfb`).
+    import shutil
+    if not os.environ.get("DISPLAY") and shutil.which("xvfb-run"):
+        cmd = ["xvfb-run", "-a"] + cmd
+    try:
+        cp = subprocess.run(cmd, capture_output=True, text=True)
+        if cp.returncode != 0:
+            print(f"(3D render skipped: exit {cp.returncode}\n{cp.stderr[-2000:]})")
+            render_path = None
+    finally:
+        os.remove(payload_path)
+
+    compare_path = None
+    if r is not None and r.get("ok"):
+        compare_path = out_img(f"{prefix}_response.png")
+        plot_comparison({prefix: r}, spec, compare_path)
+    return layout_path, render_path, compare_path
+
+
+def cmd_compare_baselines(args) -> int:
+    from .config import SPEC
+    from .optimize import evaluate, plot_comparison
+
+    designs: dict[str, dict] = {}
+    for label, cfg in BASELINES.items():
+        from .config import FilterSpec
+        from .topologies import REGISTRY
+        spec = FilterSpec(N=cfg["N"], substrate_name=SPEC.substrate_name)
+        topo = REGISTRY[cfg["topology"]]
+        print(f"\n=== {label} ({cfg['topology']}, N={cfg['N']}) ===")
+        r = evaluate(topo, spec, cfg["params"], fine=True, tag_prefix="baseline",
+                    device=args.device, np_ranks=args.np)
+        designs[label] = r
+        board = topo.board_length_mm(spec, **cfg["params"])
+        if r.get("ok"):
+            print(f"  fc={r['fc']:.3f}GHz  IL={r['il']:.2f}dB  BW={r['bw']:.0f}MHz  "
+                 f"S11w={r['s11w']:.2f}dB  board={board:.1f}mm")
+            _artifacts(topo, spec, cfg["params"], label.replace(" ", "_").replace("/", "-"), r)
+        else:
+            print(f"  FAILED: {r.get('err')}")
+
+    from .config import out_img
+    plot_comparison(designs, SPEC, out_img("compare_baselines.png"))
+    return 0
+
+
+def cmd_design(args) -> int:
+    from .topologies import REGISTRY
+    from .optimize import optimize
+
+    topo = REGISTRY[args.topology]
+    spec = _make_spec(args)
+    if args.calibrate:
+        cal = topo.calibrate(spec, device=args.calibrate_device) if topo.name == "dualmode" \
+            else topo.calibrate(spec)
+        print(f"calibrate(): {cal}" if cal is not None else "calibrate(): not implemented for this topology")
+
+    fine_sweep = None
+    if args.fine_sweep is not None:
+        f0, f1, step_hz = args.fine_sweep
+        fine_sweep = (f0 / 1e9, f1 / 1e9, step_hz / 1e9)
+    result = optimize(topo, spec, budget=args.evals, device=args.device, np_ranks=args.np,
+                      fine_sweep=fine_sweep)
+    print(f"\nBest design: {result['params']}")
+    from .optimize import evaluate
+    r = evaluate(topo, spec, result["params"], fine=True, tag_prefix="designfinal",
+                device=args.device, np_ranks=args.np)
+    _artifacts(topo, spec, result["params"], f"design_{args.topology}", r)
+    return 0
+
+
+def cmd_layout(args) -> int:
+    from .topologies import REGISTRY
+    topo = REGISTRY[args.topology]
+    spec = _make_spec(args)
+    params = _parse_params(args.params) if args.params else {
+        k: v[0] for k, v in topo.param_space(spec).items()}
+    r = None
+    if args.render is not None:
+        _artifacts(topo, spec, params, f"layout_{args.topology}")
+    else:
+        from .config import out_img
+        path = out_img(f"layout_{args.topology}_2d.png")
+        topo.plot_layout_2d(spec, path, **params)
+    print(f"params: {params}")
+    return 0
+
+
+def cmd_sweep(args) -> int:
+    from .topologies import REGISTRY
+    from .optimize import run_driven, plot_comparison, _mesh_preset
+    from .config import out_img
+
+    topo = REGISTRY[args.topology]
+    spec = _make_spec(args)
+    if args.params_file:
+        data = json.load(open(args.params_file))
+        params = data.get("params", data)
+    else:
+        params = _parse_params(args.params)
+
+    mmax, mmin, hair = _mesh_preset(topo.name, args.device)
+    r = run_driven(topo, spec, params, f"sweep_{args.topology}",
+                   args.fmin, args.fmax, args.step, mmax, mmin, hair,
+                   device=args.device, np_ranks=args.np)
+    if not r.get("ok"):
+        print(f"FAILED: {r.get('err')}")
+        return 1
+    print(f"fc={r['fc']:.3f}GHz IL={r['il']:.2f}dB BW={r['bw']:.0f}MHz S11w={r['s11w']:.2f}dB")
+    plot_comparison({f"{args.topology} sweep": r}, spec, out_img(f"sweep_{args.topology}.png"))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,7 +289,65 @@ def main(argv: list[str] | None = None) -> int:
                     help="run a single stage (repeatable); allows heavy stages")
     ap.add_argument("--only", nargs="+", default=None, metavar="NAME",
                     help="run exactly these stages, in the given order")
+
+    sub = ap.add_subparsers(dest="cmd")
+
+    p_cmp = sub.add_parser("compare-baselines", help="regenerate artifacts for the landed baseline designs")
+    p_cmp.add_argument("--device", default="auto", choices=["auto", "CPU", "GPU"],
+                       help=_DEVICE_HELP)
+    p_cmp.add_argument("--np", type=int, default=4, help="MPI ranks (CPU only; GPU always uses 1)")
+    p_cmp.set_defaults(func=cmd_compare_baselines)
+
+    p_des = sub.add_parser("design", help="Bayesian search for a new design")
+    p_des.add_argument("--topology", required=True, choices=["cascade", "dualmode"])
+    _add_spec_args(p_des)
+    p_des.add_argument("--evals", type=int, default=18)
+    p_des.add_argument("--fine-sweep", type=float, nargs=3, default=None,
+                       metavar=("FMIN_HZ", "FMAX_HZ", "STEP_HZ"),
+                       help="override the fine-confirm frequency sweep, e.g. 2.5e9 3.0e9 1e7")
+    p_des.add_argument("--calibrate", action="store_true", help="run the cheap eigenmode pre-pass first")
+    p_des.add_argument("--calibrate-device", default=None, choices=["CPU", "GPU"],
+                       help="device for the --calibrate eigenmode pre-pass. Default: auto -- GPU "
+                            "when one is present (small closed-cavity mesh, confirmed faster and "
+                            "fits; see DualModeTopology.calibrate), CPU otherwise. Independent of "
+                            "--device, which governs the much larger driven+SMA search where GPU "
+                            "has been confirmed not to fit on a 6GB card.")
+    p_des.add_argument("--device", default="auto", choices=["auto", "CPU", "GPU"],
+                       help=_DEVICE_HELP)
+    p_des.add_argument("--np", type=int, default=4, help="MPI ranks (CPU only; GPU always uses 1)")
+    p_des.set_defaults(func=cmd_design)
+
+    p_lay = sub.add_parser("layout", help="fast layout-only sanity check (no solve)")
+    p_lay.add_argument("--topology", required=True, choices=["cascade", "dualmode"])
+    _add_spec_args(p_lay)
+    p_lay.add_argument("--params", default=None, help="k=v,k=v,... (mm); default = param_space init values")
+    p_lay.add_argument("--render", nargs="?", const=True, default=None,
+                       help="also write the 3D shaded render")
+    p_lay.set_defaults(func=cmd_layout)
+
+    p_swp = sub.add_parser("sweep", help="wideband sweep of an existing design")
+    p_swp.add_argument("--topology", required=True, choices=["cascade", "dualmode"])
+    _add_spec_args(p_swp)
+    p_swp.add_argument("--params", default=None, help="k=v,k=v,... (mm)")
+    p_swp.add_argument("--params-file", default=None, help="JSON file with {'params': {...}}")
+    p_swp.add_argument("--fmin", type=float, default=0.5, help="GHz")
+    p_swp.add_argument("--fmax", type=float, default=6.0, help="GHz")
+    p_swp.add_argument("--step", type=float, default=0.05, help="GHz")
+    p_swp.add_argument("--device", default="auto", choices=["auto", "CPU", "GPU"],
+                       help=_DEVICE_HELP)
+    p_swp.add_argument("--np", type=int, default=4)
+    p_swp.set_defaults(func=cmd_sweep)
+
+    # Internal only (see _artifacts/_render_worker): isolates one gmsh
+    # render_png call per subprocess, not meant to be invoked directly.
+    p_rw = sub.add_parser("_render-worker")
+    p_rw.add_argument("payload_path")
+    p_rw.set_defaults(func=lambda a: _render_worker(a.payload_path))
+
     args = ap.parse_args(argv)
+
+    if getattr(args, "cmd", None) is not None:
+        return args.func(args)
 
     if args.list:
         print("Light (default pipeline):")
@@ -78,6 +356,8 @@ def main(argv: list[str] | None = None) -> int:
         print("Heavy (opt-in via --stage / --only):")
         for n, m in HEAVY:
             print(f"  {n:<14} {m}")
+        print("AI-driven design subcommands: compare-baselines, design, layout, sweep "
+              "(see `siw <subcommand> --help`)")
         return 0
 
     if args.only is not None:

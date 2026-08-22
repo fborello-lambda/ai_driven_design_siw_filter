@@ -31,7 +31,7 @@ import math
 import gmsh
 import numpy as np
 
-from .config import SPEC, out_data
+from .config import SPEC, FilterSpec, out_data
 from .siw_geometry import build_geometry
 
 MM = 1e3
@@ -51,7 +51,8 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
                with_sma: bool = False, sma_len_mm: float = 6.0,
                sma_rin_mm: float = 0.35, sma_rout_mm: float = 1.164,
                sma_eps_r: float = 2.08, sma_tand: float = 4.0e-4,
-               preview: bool = False, render_png: str | None = None) -> dict:
+               preview: bool = False, render_png: str | None = None,
+               spec: FilterSpec | None = None) -> dict:
     """
     with_sma=True replaces the bare microstrip WavePort at each feed end with a
     coax launch (pin r=sma_rin_mm, PTFE r=sma_rout_mm, eps_r=2.08 -> ~50 ohm by
@@ -85,7 +86,8 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     self-normalizes to whatever the local trace impedance is, so it can't
     reveal a true 50-ohm mismatch).
     """
-    g = build_geometry(SPEC)
+    spec = spec or SPEC
+    g = build_geometry(spec)
     # ---- tuning overrides: reset dimensions then rebuild via/taper primitives ----
     _ovr = (l_cav_mm, w_iris_mm, w_ext_mm, w_ms_mm, l_taper_mm, l_feed_mm, l_cavs_mm)
     if any(v is not None for v in _ovr):
@@ -110,8 +112,8 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     Lt = g.L_taper * MM
     Lf = g.L_feed * MM
     W = g.W_ms * MM
-    h = SPEC.substrate.h * MM
-    r = SPEC.d_via / 2.0 * MM
+    h = spec.substrate.h * MM
+    r = spec.d_via / 2.0 * MM
     Xf = Lt + Lf                      # feed+taper length each side
     X0, X1 = -Xf, Li + Xf
     Xc0, Xc1 = X0 - sma_len_mm, X1 + sma_len_mm   # SMA coax port planes
