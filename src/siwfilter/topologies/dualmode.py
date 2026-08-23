@@ -32,6 +32,24 @@ _PARAMS: dict[str, ParamRange] = {
     "w_ext":  (16.31, 14.1, 17.6),
 }
 
+# Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA jack -- the real, sourceable part
+# this design now targets. Pin radius is the datasheet 0.76mm diameter / 2,
+# modelled at its TRUE size: the historical 0.35mm backoff existed only to
+# dodge the PEC-misclassification bug since fixed in
+# palace_dualmode_driven.build_mesh (see docs/sma_connector/README.md). rout
+# follows the same Z0=50ohm PTFE coax relation as before (rout/rin = 3.326).
+# gnd_stitch models the connector's 4 discrete ground legs at +-2.62mm and the
+# top-side pour they solder to, rather than the idealised continuous ring.
+TAOGLAS_SMA: dict[str, float | bool | int] = {
+    "sma_rin_mm": 0.38,
+    "sma_rout_mm": 1.2639,
+    "sma_eps_r": 2.08,
+    "sma_tand": 4.0e-4,
+    "gnd_stitch": True,
+    "n_gnd_stitch": 2,
+    "gnd_stitch_offset_mm": 2.62,
+}
+
 
 class DualModeTopology:
     name = "dualmode"
@@ -48,6 +66,8 @@ class DualModeTopology:
         y_wall = p.pop("y_wall", 3.0)
         w_ext = p.pop("w_ext", None)
         p.setdefault("with_sma", True)
+        for k, v in TAOGLAS_SMA.items():   # caller can still override any of these
+            p.setdefault(k, v)
         res = _build_mesh(a_mm=a, w_iris_mm=w_iris, x_iris_mm=x_iris, y_wall_mm=y_wall,
                           w_ext_mm=w_ext, out_name=out_name, **p)
         if "mesh" not in res:

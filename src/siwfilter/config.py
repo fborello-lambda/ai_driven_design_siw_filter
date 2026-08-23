@@ -183,6 +183,78 @@ def get_substrate(name: str | None = None) -> Substrate:
     return Substrate(name=key, **SUBSTRATES[key])
 
 
+# ---------------------------------------------------------------------------
+# Fabrication capabilities + the via sizes chosen against them.
+#
+# Same role as SUBSTRATES: the board house's limits are a real constraint on
+# every geometry decision, so they live here instead of being re-derived (or
+# forgotten) at each call site.
+#
+# NOTE: transcribed from JLCPCB's published standard capabilities, checked
+# 2026-08-22. Board houses revise these -- re-verify against their current
+# capabilities page before committing a design to fab. Values are the
+# STANDARD process (no advanced/extra-cost options).
+# ---------------------------------------------------------------------------
+FAB_RULES = {
+    "JLCPCB_2layer": dict(
+        min_via_drill=0.30,        # mm, finished hole
+        min_annular_ring=0.13,     # mm, pad radius beyond the hole
+        min_hole_to_hole=0.50,     # mm, hole EDGE to hole edge
+        min_trace_width=0.127,     # mm
+        min_trace_space=0.127,     # mm
+        max_aspect_ratio=10.0,     # board thickness : drill diameter
+        # Drills JLCPCB lists as standard -- staying on these avoids surcharges.
+        preferred_drills=(0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0),
+    ),
+}
+DEFAULT_FAB = "JLCPCB_2layer"
+
+# Via sizes this project actually uses, kept next to the rules they satisfy.
+#   siw_fence  : the cavity wall. 1.5/3.0mm is NOT arbitrary -- 1.0/2.0mm was
+#                searched three separate times under three scoring methods and
+#                never matched it (docs/dualmode_cavity/README.md). Do not
+#                shrink it for fab reasons alone; it would invalidate the
+#                landed design and force a full re-optimisation.
+#   gnd_stitch : connector ground legs. Deliberately much smaller than the
+#                fence -- a stitching via wants to be a cheap standard drill so
+#                several fit per pad (more parallel vias = lower ground-return
+#                inductance at the launch).
+VIA_PRESETS = {
+    "siw_fence":  dict(d_mm=1.5, p_mm=3.0),
+    "gnd_stitch": dict(d_mm=0.6, p_mm=1.2),
+}
+
+
+def get_fab(name: str | None = None) -> dict:
+    """Resolve a fab-capability preset by key."""
+    key = name or DEFAULT_FAB
+    if key not in FAB_RULES:
+        raise KeyError(f"Unknown fab profile {key!r}; choose from {list(FAB_RULES)}")
+    return dict(FAB_RULES[key])
+
+
+def check_via_drc(d_mm: float, p_mm: float, h_mm: float,
+                  fab: str | None = None) -> dict[str, tuple[bool, str]]:
+    """Check one via size/pitch against a fab profile.
+
+    Returns {rule: (ok, detail)} in the same shape as siw_geometry's design-rule
+    checks, so failures are reported rather than silently shipped.
+    """
+    f = get_fab(fab)
+    edge = p_mm - d_mm
+    ar = h_mm / d_mm if d_mm else float("inf")
+    return {
+        "drill >= min":      (d_mm >= f["min_via_drill"],
+                              f"d={d_mm:.2f}mm, min={f['min_via_drill']:.2f}mm"),
+        "hole-to-hole":      (edge >= f["min_hole_to_hole"],
+                              f"edge-edge={edge:.2f}mm, min={f['min_hole_to_hole']:.2f}mm"),
+        "aspect ratio":      (ar <= f["max_aspect_ratio"],
+                              f"h/d={ar:.2f}:1, max={f['max_aspect_ratio']:.0f}:1"),
+        "standard drill":    (any(abs(d_mm - s) < 1e-6 for s in f["preferred_drills"]),
+                              f"d={d_mm:.2f}mm, standard={list(f['preferred_drills'])}"),
+    }
+
+
 @dataclass(frozen=True)
 class FilterSpec:
     """Complete parametric specification of the SIW bandpass filter."""

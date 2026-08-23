@@ -56,15 +56,45 @@ pipeline itself is untouched. Getting this right took a few rounds:
   clean TEM, Z=50.0Ω on an unclipped ring) before and after.
 - **Oversized pin (fixed, see v1 above).** Not a code bug — a genuine
   physical mismatch from using full cable-size dimensions on a thin board.
-- **A razor-thin meshing instability (worked around, not root-caused).**
+- **A razor-thin "meshing instability" — ROOT-CAUSED AND FIXED (2026-08-22).**
   Bisecting pin radius found a sharp cliff between rin=0.375 mm (clean) and
   rin=0.379 mm (extra spurious PEC faces appear, near-total reflection
-  again) — a ~4 micron window. The originally sourced connector dimension
-  (0.381 mm, see below) sits right on this cliff. Current default (0.35 mm)
-  is verified clear of it. **If you change the pin size again, re-run an
-  isolated bare-line check first** (fast, ~1-2 min) rather than assuming a
-  small change is safe — the mapping from dimension to result isn't
-  perfectly smooth in this geometry construction.
+  again) — a ~4 micron window. It was originally worked around by backing the
+  default off to 0.35 mm.
+
+  It was never a meshing/tolerance effect: it is a **face-classification bug**
+  in `build_mesh()`. The end-cap test was
+
+  ```python
+  rad = math.hypot(cy, cz - h)                      # centroid dist. from pin axis
+  if (_near(cx, X0) or _near(cx, X1)) and rad < sma_rin_mm * 1.05:
+      on_sma_cap = True                              # -> PEC
+  ```
+
+  Clipping the PTFE cylinder to z>=0 for the ground contact removes its lower
+  part, which drags the **annulus end-face centroid** up toward the pin axis
+  (to rad ~0.396 mm). The threshold `sma_rin_mm * 1.05` grows with the pin, so
+  it crosses that value at **rin ~0.3773 mm** and swallows the annulus — i.e.
+  the coax *dielectric* cross-section gets tagged PEC, **shorting the launch**.
+  Hence the "near-total reflection": measured S21 = -79.5 dB, S11 = -0.01 dB.
+
+  Fixed by disambiguating on face EXTENT rather than centroid alone (the real
+  cap disk spans ~rin, the PTFE annulus spans ~rout):
+
+  ```python
+  and yext <= sma_rin_mm * 1.5
+  ```
+
+  Verified after the fix: PEC face count is a constant 128 across
+  rin = 0.350-0.410 mm (was 128 -> 130 at the cliff), and rin=0.380 mm now
+  gives S21 = -1.890 dB / S11 = -9.60 dB, matching rin=0.375 mm
+  (-1.890 / -9.58) to within max|dS21| = 0.018 dB, max|dS11| = 0.99 dB —
+  smooth physical variation, no discontinuity.
+
+  Consequences: the real Taoglas EMPCB.SMAFSTJ.B.HT pin (0.38 mm radius) can
+  be modelled at its true size, and the historical 0.35 mm backoff for the
+  Cinch part is no longer required. Applied to both `palace_driven.py` and
+  `palace_dualmode_driven.py`.
 
 Connector dimensions are meant to track a real, sourceable part: initially
 Cinch/Johnson Components 142-0701-881 (DigiKey #210495, SMA jack, board-edge
@@ -127,6 +157,44 @@ hours; run detached, see the module docstring), then
   (old+connector / new,no-connector / new+connector).
 - `output/data/versions/sma-v1.json` — machine-readable manifest of the v1
   finding (params, numbers, what changed).
+
+## Taoglas EMPCB.SMAFSTJ.B.HT — the real, sourceable connector
+
+Replaces the idealised continuous-ring model with the actual part. Pin is
+modelled at its TRUE datasheet size (0.76mm dia -> r=0.38mm): the historical
+0.35mm backoff existed only to dodge the classification bug fixed above.
+
+![footprint](taoglas_footprint.png)
+
+![3D launch](sma_3d_launch.png)
+
+![cross-section](sma_cross_section.png)
+
+Geometry, and which numbers are sourced vs derived:
+
+| Quantity | Value | Source |
+|---|---|---|
+| Pin radius | 0.38 mm | datasheet (0.76mm dia) |
+| Ground-leg offset | +-2.62 mm | datasheet footprint |
+| PTFE outer radius | 1.2639 mm | **DERIVED** — Z0=50ohm, eps_r=2.08 (rout/rin=3.326). Substitute if the datasheet gives a real dielectric OD. |
+| GND pad x-extent | ~3.4 mm from board edge | **INFERRED** to cover 3 stitch vias — not read off the datasheet drawing |
+| Stitch vias | 3/pad, d=0.6mm, 1.2mm pitch (12 total) | design choice within JLCPCB rules (`config.VIA_PRESETS`) |
+| Coax stub length | 6 mm | model-only (port standoff), not a physical dimension |
+
+Two corrections made while building this, both worth remembering:
+
+- **Discrete pads, not a pour.** The first cut ran continuous ground copper
+  down the whole feed at 0.3mm clearance. That turns the 50-ohm microstrip
+  into a grounded coplanar line and detunes the very match this model exists
+  to evaluate. The datasheet footprint is discrete pads, which also keeps the
+  feed a true microstrip — the coplanar perturbation is now confined to the
+  launch.
+- **Stitch vias are not fence vias.** They initially reused `d_via`=1.5mm (the
+  SIW cavity wall size, ~5x a realistic stitching via), which wasted pad area
+  and capped the count. At 0.6mm they give 12 vias instead of 8 AND improve
+  trace clearance from 0.84mm (1.1x h) to 1.24mm (1.6x h).
+
+Figures regenerate via `scripts/figures/plot_{taoglas_footprint,sma_3d,sma_cross_section}.py`.
 
 ## Open items / next
 

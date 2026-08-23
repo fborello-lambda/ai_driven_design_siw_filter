@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 
@@ -107,6 +108,23 @@ GPU_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     # shipping an unvalidated mesh.
 }
 GPU_ENV = {"MFEM_MEMORY": "cuda"}
+
+# Largest mesh this GPU actually completes a driven solve on. Measured on the
+# 6GB card: 164.5k / 166.4k / 174.6k tets finish the full sweep; 178.4k and
+# 180.0k OOM at the error estimator. The boundary is therefore 174.6k..178.4k,
+# and 176k sits inside that gap.
+#
+# This is a PREDICTION so we skip GPU rather than discover the failure: a
+# doomed attempt still costs 40-140s of meshing+assembly before it dies, and
+# the ceiling falls inside this project's search boxes, so a naive GPU-first
+# policy pays that toll on a large fraction of evals.
+#
+# Set it from MEASUREMENTS ON BOTH SIDES. A first cut of 168k was derived from
+# the OOM points alone and silently excluded the 174.6k case that demonstrably
+# runs -- which sent the nominal design to CPU for no reason, the exact waste
+# this constant exists to prevent. The runtime fallback below still catches
+# anything that slips through.
+GPU_MAX_TETS = 176_000
 
 
 def resolve_device(device: str, topology_name: str) -> str:
@@ -234,43 +252,77 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
                                   h_air_factor=h_air_factor, **params)
     except Exception as e:
         return {"ok": False, "err": f"mesh:{e}"}
-    if res["ports"] != (1, 1):
-        return {"ok": False, "err": f"bad ports {res['ports']}"}
+    # Require each port to have at least one face -- NOT exactly one. A coax
+    # launch gives a single annulus, but a bare microstrip port legitimately
+    # spans two faces (the substrate cross-section and the air above it), so
+    # an exact ==(1,1) test silently rejects every with_sma=False run.
+    n_in, n_out = res["ports"]
+    if n_in < 1 or n_out < 1:
+        return {"ok": False, "err": f"bad ports {res['ports']} (a port has no faces)"}
 
-    cfg = _driven_config(mesh, res, spec, tag, fmin, fmax, step, device)
-    cfgp = out_data(f"{tag}.json")
-    json.dump(cfg, open(cfgp, "w"), indent=2)
-    if serialize:
-        _wait_for_free_palace()
+    if device == "GPU" and res.get("tets", 0) > GPU_MAX_TETS:
+        # Predicted not to fit -- go straight to CPU instead of burning a
+        # doomed GPU attempt first (see GPU_MAX_TETS).
+        print(f"[{tag}] {res['tets']} tets > GPU_MAX_TETS={GPU_MAX_TETS} -> CPU directly",
+              flush=True)
+        device, np_ranks = "CPU", CPU_NP
+
+    # Palace emits samples from fmin while <= fmax, i.e. FLOOR of the span in
+    # steps, plus one. round() here over-counted by one whenever the span was
+    # not an exact multiple of the step (fine sweep: 64.575 steps -> round 65
+    # -> expected 66 vs the 65 actually produced), which flagged a complete
+    # sweep as truncated and sent it for a pointless re-solve. The 1e-9 guards
+    # a span that IS an exact multiple landing just under it in floating point.
+    n_expected = int(np.floor((fmax - fmin) / step + 1e-9)) + 1
     palace = find_palace()
-    env = dict(os.environ, PATH=f"{os.path.dirname(palace)}:{os.environ['PATH']}")
-    if device == "GPU":
-        # See GPU_ENV: disables MFEM's pooled (Umpire) device allocator, whose
-        # fixed ~4GiB block request is what exhausts a 6GB card on its own.
-        env.update(GPU_ENV)
-    logp = out_data(f"{tag}.log")
-    subprocess.run([palace, "-np", str(np_ranks), os.path.basename(cfgp)],
-                   cwd=out_data(""), env=env, stdout=open(logp, "w"),
-                   stderr=subprocess.STDOUT, check=False)
 
+    def _solve(dev: str, ranks: int):
+        """One Palace invocation. Returns (arrays | None, err | None)."""
+        cfg = _driven_config(mesh, res, spec, tag, fmin, fmax, step, dev)
+        cfgp = out_data(f"{tag}.json")
+        json.dump(cfg, open(cfgp, "w"), indent=2)
+        if serialize:
+            _wait_for_free_palace()
+        env = dict(os.environ, PATH=f"{os.path.dirname(palace)}:{os.environ['PATH']}")
+        if dev == "GPU":
+            # See GPU_ENV: disables MFEM's pooled (Umpire) device allocator,
+            # whose fixed ~4GiB block request exhausts a 6GB card on its own.
+            env.update(GPU_ENV)
+        logp = out_data(f"{tag}.log")
+        # Stale results from a previous attempt would look like a success.
+        shutil.rmtree(out_data(f"postpro/{tag}"), ignore_errors=True)
+        subprocess.run([palace, "-np", str(ranks), os.path.basename(cfgp)],
+                       cwd=out_data(""), env=env, stdout=open(logp, "w"),
+                       stderr=subprocess.STDOUT, check=False)
+        csvp = out_data(f"postpro/{tag}/port-S.csv")
+        if not os.path.exists(csvp):
+            return None, "no csv"
+        dd = np.genfromtxt(csvp, delimiter=",", names=True, deletechars="", replace_space="")
+        nmm = dd.dtype.names
+        ff = np.atleast_1d(dd[nmm[0]])
+        # Palace writes port-S.csv incrementally, one row per frequency point,
+        # so a run that dies partway (GPU OOM at the error estimator is how
+        # this actually happens) leaves a VALID-LOOKING but truncated file.
+        # Without this the design would be silently scored on part of its band.
+        if len(ff) < n_expected:
+            return None, f"incomplete sweep: {len(ff)}/{n_expected} points (see {logp})"
+        return (ff, np.atleast_1d(dd[nmm[1]]), np.atleast_1d(dd[nmm[3]])), None
+
+    got, err = _solve(device, np_ranks)
+    if got is None and device == "GPU":
+        # The GPU memory ceiling falls INSIDE this project's search boxes: the
+        # same sweep succeeds for a small cavity and OOMs for a large one, so a
+        # GPU-only run silently loses whichever design points happen to be big
+        # (observed live -- most evals of a dualmode+stitching retune died this
+        # way while two small-cavity ones survived). Falling back per-eval keeps
+        # GPU's speed where it fits without dropping points where it doesn't.
+        print(f"[{tag}] GPU attempt failed ({err}) -> retrying on CPU", flush=True)
+        got, err = _solve("CPU", CPU_NP)
+        device = "CPU"
+    if got is None:
+        return {"ok": False, "err": err, "tag": tag}
+    f, s11_db, s21_db = got
     csv = out_data(f"postpro/{tag}/port-S.csv")
-    if not os.path.exists(csv):
-        return {"ok": False, "err": "no csv", "tag": tag}
-    d = np.genfromtxt(csv, delimiter=",", names=True, deletechars="", replace_space="")
-    nm = d.dtype.names
-    f = np.atleast_1d(d[nm[0]])
-    s11_db = np.atleast_1d(d[nm[1]])
-    s21_db = np.atleast_1d(d[nm[3]])
-
-    # Palace writes port-S.csv incrementally, one row per frequency point, so a
-    # run that dies partway (GPU OOM at the error estimator is the way this
-    # actually happens here) leaves a VALID-LOOKING but truncated file. Without
-    # this check the design would be silently scored on a fraction of its band.
-    n_expected = int(round((fmax - fmin) / step)) + 1
-    if len(f) < n_expected:
-        return {"ok": False, "tag": tag,
-                "err": f"incomplete sweep: {len(f)}/{n_expected} frequency points "
-                       f"(see {logp})"}
 
     ip = int(np.argmax(s21_db)); fc = float(f[ip]); il = float(s21_db[ip])
     inb = s21_db >= il - 3.0
@@ -284,7 +336,8 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
         os.remove(out_data(mesh))
     except OSError:
         pass
-    return {"ok": True, "f": f, "s11_db": s11_db, "s21_db": s21_db, "fc": fc, "il": il,
+    return {"ok": True, "device": device,
+           "f": f, "s11_db": s11_db, "s21_db": s21_db, "fc": fc, "il": il,
            "bw": bw, "s11w": s11w, "il_band": il_band, "tag": tag, "csv": csv}
 
 
@@ -393,19 +446,27 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18, n_initial: 
             best_p, best = p, r
 
     print(f"\n=== GP SEARCH DONE after {n} evals === best(coarse)={best['score']:.3f} {best_p}")
+
+    def _report(kind: str, r: dict) -> str:
+        # A failed confirm must not take the whole run down with it: the
+        # search results are the expensive part and are only persisted below.
+        if not r.get("ok"):
+            return f"=== {kind}: FAILED ({r.get('err')}) ==="
+        return (f"=== {kind}: fc={r['fc']:.3f} s11w={r['s11w']:.2f} "
+                f"bw={r['bw']:.0f} il={r['il']:.2f} score={r['score']:.3f} ===")
+
     fine = evaluate(topology, spec, best_p, fine=True, tag_prefix=f"opt{topology.name}",
                     device=device, np_ranks=np_ranks, fine_sweep_ghz=fine_sweep)
-    print(f"=== FINE confirm: fc={fine.get('fc'):.3f} s11w={fine.get('s11w'):.2f} "
-          f"bw={fine.get('bw'):.0f} il={fine.get('il'):.2f} score={fine['score']:.3f} ===")
+    print(_report("FINE confirm", fine), flush=True)
 
     # Fab-tolerance check: round to 0.1mm (real PCB fab resolution), re-confirm.
     rounded_p = {k: round(v, 1) for k, v in best_p.items()}
     fab = evaluate(topology, spec, rounded_p, fine=True, tag_prefix=f"opt{topology.name}fab",
                    device=device, np_ranks=np_ranks, fine_sweep_ghz=fine_sweep)
-    print(f"=== FAB-TOLERANCE (0.1mm) confirm: params={rounded_p} "
-          f"s11w={fab.get('s11w'):.2f} score={fab.get('score'):.3f} ===")
+    print(_report(f"FAB-TOLERANCE (0.1mm) {rounded_p}", fab), flush=True)
 
-    result = {"params": best_p, "metrics": {k: v for k, v in fine.items() if k not in ("csv",)},
+    result = {"params": best_p, "coarse_score": best.get("score"),
+              "metrics": {k: v for k, v in fine.items() if k not in ("csv",)},
               "fab_tolerance": {"params": rounded_p,
                                 "metrics": {k: v for k, v in fab.items() if k not in ("csv",)}}}
     json.dump(result, open(best_json, "w"), indent=2, default=lambda o: o.tolist()
@@ -413,32 +474,57 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18, n_initial: 
     return result
 
 
-def plot_comparison(designs: dict[str, dict], spec: FilterSpec, out_path: str) -> str:
+def plot_comparison(designs: dict[str, dict], spec: FilterSpec, out_path: str,
+                    ideal_orders: tuple[int, ...] = (2, 3)) -> str:
     """S21-top/S11-bottom comparison of N designs -- the black-box pipeline's
     3rd standard artifact (docs/dualmode_cavity/results_all_variants.png's
-    layout, generalized from 4 hardcoded designs to any dict of them)."""
+    layout, generalized from 4 hardcoded designs to any dict of them).
+
+    ``ideal_orders`` overlays the lossless Chebyshev target for those filter
+    orders (dashed black/grey). That is the reference the optimizer actually
+    scores against, so having it on the same axes shows how much of the gap to
+    ideal is real loss versus a genuine shape error. Pass () to omit.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, (ax21, ax11) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    fig, (ax21, ax11) = plt.subplots(2, 1, figsize=(11, 8.5), sharex=True)
     colors = plt.cm.tab10.colors
+    fmin = fmax = None
     for i, (label, r) in enumerate(designs.items()):
         if not r.get("ok"):
             continue
         c = colors[i % len(colors)]
         ax21.plot(r["f"], r["s21_db"], "-", color=c, lw=1.6, label=label)
         ax11.plot(r["f"], r["s11_db"], "-", color=c, lw=1.6, label=label)
+        lo, hi = float(np.min(r["f"])), float(np.max(r["f"]))
+        fmin = lo if fmin is None else min(fmin, lo)
+        fmax = hi if fmax is None else max(fmax, hi)
+
+    if ideal_orders and fmin is not None:
+        f_id = np.linspace(fmin, fmax, 601)
+        for k, N in enumerate(ideal_orders):
+            ideal_spec = FilterSpec(f0=spec.f0, FBW=spec.FBW, N=N,
+                                    ripple_db=spec.ripple_db,
+                                    substrate_name=spec.substrate_name)
+            s11_i, s21_i = ideal_target_db(ideal_spec, f_id)
+            style = dict(color="k" if k == 0 else "0.45", ls="--", lw=1.3, alpha=.85)
+            lbl = f"ideal N={N} Chebyshev ({spec.FBW*100:.0f}% FBW, {spec.ripple_db}dB)"
+            ax21.plot(f_id, s21_i, label=lbl, **style)
+            ax11.plot(f_id, s11_i, **style)
+
     b0, b1 = _band_ghz(spec)
     for ax in (ax21, ax11):
         ax.axvspan(b0, b1, color="green", alpha=0.08)
         ax.grid(alpha=.3)
-    ax11.axhline(-16, color="grey", ls="--", lw=.8)
+    ax11.axhline(-16, color="grey", ls=":", lw=.9)
     ax21.set_ylabel("|S21| (dB)"); ax21.set_ylim(-40, 2)
     ax11.set_ylabel("|S11| (dB)"); ax11.set_ylim(-40, 2)
     ax11.set_xlabel("Frequency (GHz)")
-    ax21.legend(loc="lower right", fontsize=8)
-    fig.suptitle(f"Design comparison @ f0={spec.f0/1e9:.3f} GHz")
+    ax21.legend(loc="lower right", fontsize=7.5)
+    fig.suptitle(f"Design comparison @ f0={spec.f0/1e9:.3f} GHz "
+                 f"(green = design passband, dotted = -16 dB target)")
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
     plt.close(fig)

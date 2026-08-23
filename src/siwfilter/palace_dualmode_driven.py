@@ -34,7 +34,7 @@ import math
 import gmsh
 import numpy as np
 
-from .config import SPEC, out_data, out_img
+from .config import SPEC, VIA_PRESETS, out_data, out_img
 from .siw_geometry import microstrip_width_50ohm, microstrip_eps_eff, microstrip_guided_wavelength
 from .palace_dualmode import A_SIW_MM, D_VIA_MM, P_VIA_MM
 
@@ -117,9 +117,15 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                with_sma: bool = True, sma_len_mm: float = 6.0,
                sma_rin_mm: float = 0.35, sma_rout_mm: float = 1.164,
                sma_eps_r: float = 2.08, sma_tand: float = 4.0e-4,
+               gnd_stitch: bool = False, n_gnd_stitch: int = 3,
+               gnd_stitch_offset_mm: float = 2.62,
+               gnd_stitch_pitch_mm: float = VIA_PRESETS["gnd_stitch"]["p_mm"],
+               gnd_clearance_mm: float = 0.3,
+               gnd_via_d_mm: float = VIA_PRESETS["gnd_stitch"]["d_mm"],
                mesh_max: float = 1.5, mesh_min: float = 0.4,
                out_name: str = "dualmode_driven.msh",
                preview: bool = False, render_png: str | None = None,
+               render_hide_air: bool = True,
                show: bool = True, rot_xyz: tuple[float, float, float] = (55, 0, 20)) -> dict:
     W, Lt, Lf = _dims(a_mm, w_ms_mm, l_taper_mm, l_feed_mm)
     Xf = Lt + Lf
@@ -165,6 +171,64 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     trace_in = (2, trace_surface(X0, -Lt, 0.0))
     trace_out = (2, trace_surface(X1, Li + Lt, Li))
 
+    # ---- connector ground: top-side pour + stitching vias ----
+    # The Taoglas EMPCB.SMAFSTJ.B.HT grounds through 4 discrete legs at the
+    # board edge (+-2.62mm either side of the centre signal pad), not the
+    # continuous ring the bare coax stub models. Without top-side copper in
+    # the feed span there is nothing for those legs to land on, and the
+    # return path has to detour to the bottom plane -- so this adds real
+    # coplanar ground beside the trace plus vias tying it down, which is what
+    # the fabricated board will actually have. Off by default: it changes the
+    # feed environment, so every design tuned against the old model stays
+    # reproducible until explicitly re-tuned with it.
+    gnd_polys: list[np.ndarray] = []
+    gnd_surfs: list[tuple[int, int]] = []
+    gnd_via_centres: list[tuple[float, float]] = []
+    if gnd_stitch:
+        # DISCRETE PADS, not a continuous pour. The datasheet footprint has two
+        # ground pads per face flanking the centre signal pad -- and modelling
+        # it as a full-length pour is not just less faithful, it is wrong: the
+        # stitch vias at +-2.62mm (r=0.75 -> inner edge 1.87mm) cap the usable
+        # clearance at ~1.04mm = 1.37*h, close enough to turn the 50-ohm
+        # microstrip into a grounded coplanar line and detune the very match
+        # this connector model exists to study. Localised pads keep the feed a
+        # true microstrip and confine the coplanar perturbation to the ~few mm
+        # right at the launch, which is what the real board does.
+        # Stitching vias get their OWN diameter: the SIW fence uses d_via_mm
+        # (1.5mm here, sized for the cavity wall), which is far larger than a
+        # real stitching via (~0.3mm drill / 0.6mm finished on JLCPCB). Reusing
+        # the fence size wasted pad area and capped the via count -- smaller
+        # barrels let several fit per pad, which is the point: more parallel
+        # vias = lower ground-return inductance at the launch.
+        rg = gnd_via_d_mm / 2.0
+        pad_margin = 0.25                      # copper beyond the via barrel
+        y_lo = gnd_stitch_offset_mm - rg - pad_margin
+        y_hi = gnd_stitch_offset_mm + rg + pad_margin
+        n_st = max(0, n_gnd_stitch)
+        for x_edge, sign in ((X0, +1.0), (X1, -1.0)):
+            x_first = x_edge + sign * (rg + pad_margin)
+            x_last = x_first + sign * max(0, n_st - 1) * gnd_stitch_pitch_mm
+            xa, xb = sorted([x_edge, x_last + sign * (rg + pad_margin)])
+            for sgn in (+1.0, -1.0):
+                ys = sorted([sgn * y_lo, sgn * y_hi])
+                if min(abs(ys[0]), abs(ys[1])) <= W / 2.0 + gnd_clearance_mm:
+                    continue          # would encroach on the trace clearance
+                if max(abs(ys[0]), abs(ys[1])) > ym:
+                    continue          # off the board
+                poly = np.array([(xa, ys[0]), (xb, ys[0]), (xb, ys[1]), (xa, ys[1])])
+                gnd_polys.append(poly)
+                pts = [occ.addPoint(px, py, h) for px, py in poly]
+                ln = [occ.addLine(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
+                gnd_surfs.append((2, occ.addPlaneSurface([occ.addCurveLoop(ln)])))
+            for k in range(n_st):
+                xv = x_first + sign * k * gnd_stitch_pitch_mm
+                for sgn in (+1.0, -1.0):
+                    yv = sgn * gnd_stitch_offset_mm
+                    if abs(yv) - rg <= W / 2.0 + gnd_clearance_mm or abs(yv) > ym - rg:
+                        continue
+                    gnd_via_centres.append((xv, yv))
+        cyls += [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, rg)) for x, y in gnd_via_centres]
+
     # ---- SMA coax launch stubs (same construction as palace_driven.py) ----
     ptfe_vols: list[tuple[int, int]] = []
     sma_caps: list[tuple[int, int]] = []
@@ -197,10 +261,10 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     occ.synchronize()
     sub_tags = [(dd, t) for (dd, t) in cut_out if dd == 3]
     occ.fragment(sub_tags + ptfe_vols + [air_in, air_out],
-                 [trace_in, trace_out] + sma_caps)
+                 [trace_in, trace_out] + sma_caps + gnd_surfs)
     occ.synchronize()
 
-    via_centres = final
+    via_centres = final + gnd_via_centres
 
     diel_clean, air_vols, sma_diel = [], [], []
     for dim, tag in gmsh.model.getEntities(3):
@@ -220,7 +284,9 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     def _outline(x_in, x_taper, x_siw):
         return np.array([(x_in, +W / 2), (x_taper, +W / 2), (x_siw, +half),
                          (x_siw, -half), (x_taper, -W / 2), (x_in, -W / 2)])
-    trace_polys = [_outline(X0, -Lt, 0.0), _outline(X1, Li + Lt, Li)]
+    # Ground pour counts as copper for face classification, exactly like the
+    # trace -- both are PEC sheets at z=h, just electrically distinct nets.
+    trace_polys = [_outline(X0, -Lt, 0.0), _outline(X1, Li + Lt, Li)] + gnd_polys
 
     def _in_poly(px, py, poly) -> bool:
         n = len(poly); inside = False; j = n - 1
@@ -254,7 +320,21 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                 elif _near(yext, sma_rout_mm, 0.3):
                     on_sma_shell = True
             rad = math.hypot(cy, cz - h)
-            if (_near(cx, X0) or _near(cx, X1)) and rad < sma_rin_mm * 1.05:
+            # The centroid-radius test alone is NOT sufficient: clipping the
+            # PTFE bottom (z>=0 ground contact) pulls the annulus end-face's
+            # centroid up toward the pin axis, to rad~0.396mm. Since the
+            # threshold scales with sma_rin_mm, it crosses that value at
+            # rin~0.3773mm and the coax DIELECTRIC cross-section gets tagged
+            # PEC -- shorting the coax, giving near-total reflection
+            # (S21~-80dB). That is the "razor-thin meshing instability"
+            # documented in docs/sma_connector/README.md (found there by
+            # bisection at 0.375/0.379 and only avoided, never explained);
+            # it is a classification bug, not a meshing tolerance, and it
+            # blocks the real Taoglas EMPCB.SMAFSTJ.B.HT pin (0.38mm).
+            # Disambiguate by EXTENT, which is unambiguous: the real cap disk
+            # spans ~rin, the PTFE annulus spans ~rout.
+            if ((_near(cx, X0) or _near(cx, X1)) and rad < sma_rin_mm * 1.05
+                    and yext <= sma_rin_mm * 1.5):
                 on_sma_cap = True
 
         if _near(cz, 0.0):
@@ -294,6 +374,13 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         return {"preview": True}
 
     if render_png:
+        if render_hide_air:
+            # The air boxes over the feeds enclose the trace, ground pour and
+            # stitching vias, so a shaded render is just a blue slab and the
+            # footprint can't be checked. Hiding them (render-only; the mesh
+            # itself is untouched) exposes the copper at z=h.
+            for t in air_vols:
+                gmsh.model.setVisibility([(3, t)], 0, recursive=True)
         gmsh.option.setNumber("Mesh.MeshSizeMin", mesh_min)
         gmsh.option.setNumber("Mesh.MeshSizeMax", mesh_max)
         gmsh.model.mesh.generate(2)

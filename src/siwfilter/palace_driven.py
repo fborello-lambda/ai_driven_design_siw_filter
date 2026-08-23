@@ -277,7 +277,13 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
                 elif _near(yext, sma_rout_mm, 0.3):
                     on_sma_shell = True
             rad = math.hypot(cy, cz - h)
-            if (_near(cx, X0) or _near(cx, X1)) and rad < sma_rin_mm * 1.05:
+            # See palace_dualmode_driven.py for the full root-cause note: the
+            # centroid-radius test alone misclassifies the clipped PTFE
+            # annulus end-face as the pin cap once sma_rin_mm > ~0.3773mm,
+            # tagging the coax dielectric PEC and shorting the launch. Gate it
+            # on EXTENT too (cap spans ~rin, annulus spans ~rout).
+            if ((_near(cx, X0) or _near(cx, X1)) and rad < sma_rin_mm * 1.05
+                    and yext <= sma_rin_mm * 1.5):
                 on_sma_cap = True
 
         if _near(cz, 0.0):                                    # bottom ground

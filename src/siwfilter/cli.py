@@ -19,6 +19,9 @@ Two tiers of stages:
 
 Plus AI-driven design subcommands (see HANDOFF.md), all Palace/Topology-based:
 
+    compare                     : standing comparison of every landed design vs
+                                   the ideal Chebyshev target; cached, so a new
+                                   run can be placed against them cheaply
     compare-baselines           : regenerate the 3 standard artifacts for the
                                    already-landed N=3 cascade / N=2 dual-mode
                                    designs, as a regression check
@@ -31,7 +34,8 @@ Examples:
     siw --only synth geometry layout # just those stages, in that order
     siw --stage palace-opt           # run one heavy stage
     siw --list                       # show all stages
-    siw compare-baselines
+    siw compare                      # cached comparison table + figure
+    siw compare --add-run output/data/opt_dualmode_best.json
     siw design --topology dualmode --evals 18
     siw layout --topology dualmode --params a=57.21,w_iris=15.26,x_iris=28.68,y_wall=8.62,w_ext=16.31
 """
@@ -255,6 +259,13 @@ def cmd_layout(args) -> int:
     return 0
 
 
+def cmd_compare(args) -> int:
+    from .comparison import run
+    run(refresh=args.refresh, add_run=args.add_run, device=args.device,
+        out_name=args.out)
+    return 0
+
+
 def cmd_sweep(args) -> int:
     from .topologies import REGISTRY
     from .optimize import run_driven, plot_comparison, _mesh_preset
@@ -325,6 +336,19 @@ def main(argv: list[str] | None = None) -> int:
                        help="also write the 3D shaded render")
     p_lay.set_defaults(func=cmd_layout)
 
+    p_cmpq = sub.add_parser("compare",
+                            help="standing comparison of every landed design + the ideal "
+                                 "Chebyshev target (cached; use --refresh to recompute)")
+    p_cmpq.add_argument("--refresh", action="store_true",
+                        help="recompute every reference case instead of using the cache")
+    p_cmpq.add_argument("--add-run", default=None, metavar="BEST_JSON",
+                        help="also plot a new design, from a `siw design` best-JSON "
+                             "(optionally carrying 'topology'/'N'/'label' keys)")
+    p_cmpq.add_argument("--out", default="final_comparison.png", help="figure filename")
+    p_cmpq.add_argument("--device", default="auto", choices=["auto", "CPU", "GPU"],
+                        help=_DEVICE_HELP)
+    p_cmpq.set_defaults(func=cmd_compare)
+
     p_swp = sub.add_parser("sweep", help="wideband sweep of an existing design")
     p_swp.add_argument("--topology", required=True, choices=["cascade", "dualmode"])
     _add_spec_args(p_swp)
@@ -356,8 +380,8 @@ def main(argv: list[str] | None = None) -> int:
         print("Heavy (opt-in via --stage / --only):")
         for n, m in HEAVY:
             print(f"  {n:<14} {m}")
-        print("AI-driven design subcommands: compare-baselines, design, layout, sweep "
-              "(see `siw <subcommand> --help`)")
+        print("AI-driven design subcommands: compare, compare-baselines, design, layout, "
+              "sweep (see `siw <subcommand> --help`)")
         return 0
 
     if args.only is not None:
