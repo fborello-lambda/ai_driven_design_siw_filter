@@ -390,7 +390,8 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
     return r
 
 
-def optimize(topology: Topology, spec: FilterSpec, budget: int = 18, n_initial: int = 10,
+def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
+            n_initial: int | None = None,
             fine_sweep: tuple[float, float, float] | None = None,
             device: str = "auto", np_ranks: int = CPU_NP,
             log_name: str | None = None, best_json_name: str | None = None) -> dict:
@@ -408,6 +409,16 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18, n_initial: 
     free = {k: v for k, v in space_dict.items() if v[1] < v[2]}
     order = list(free.keys())
     space = [Real(lo, hi, name=k) for k, (_init, lo, hi) in free.items()]
+    # Random-sampling phase before the GP starts exploiting. A FIXED default
+    # (this was 10) silently turns a small budget into near-pure random
+    # search: at budget=12 only 2 evals were GP-guided, and the "best" design
+    # of such a run is just the luckiest random draw. Scale it with the budget
+    # instead, keeping enough seeds to fit a surrogate over this dimensionality.
+    if n_initial is None:
+        n_initial = max(len(order) + 1, min(10, budget // 2))
+    print(f"search: {budget} evals over {len(order)}D "
+          f"({n_initial} random seed points, {budget - n_initial} GP-guided)",
+          flush=True)
     opt = Optimizer(space, base_estimator="GP", acq_func="gp_hedge",
                     n_initial_points=n_initial, random_state=0)
 

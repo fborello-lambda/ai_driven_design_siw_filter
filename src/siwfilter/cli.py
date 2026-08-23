@@ -82,6 +82,15 @@ BASELINES = {
 }
 
 
+def _topology_choices():
+    # Driven from the registry so a newly registered geometry is usable
+    # immediately, instead of silently missing from --topology.
+    from .topologies import REGISTRY
+    return sorted(REGISTRY)
+
+
+_TOPOLOGY_CHOICES = _topology_choices()
+
 _DEVICE_HELP = (
     "Solver device. auto (default): GPU when this machine has one AND the topology has a "
     "GPU-validated mesh preset, else CPU -- so the same command works on a GPU-less box. "
@@ -310,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     p_cmp.set_defaults(func=cmd_compare_baselines)
 
     p_des = sub.add_parser("design", help="Bayesian search for a new design")
-    p_des.add_argument("--topology", required=True, choices=["cascade", "dualmode"])
+    p_des.add_argument("--topology", required=True, choices=_TOPOLOGY_CHOICES)
     _add_spec_args(p_des)
     p_des.add_argument("--evals", type=int, default=18)
     p_des.add_argument("--fine-sweep", type=float, nargs=3, default=None,
@@ -329,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
     p_des.set_defaults(func=cmd_design)
 
     p_lay = sub.add_parser("layout", help="fast layout-only sanity check (no solve)")
-    p_lay.add_argument("--topology", required=True, choices=["cascade", "dualmode"])
+    p_lay.add_argument("--topology", required=True, choices=_TOPOLOGY_CHOICES)
     _add_spec_args(p_lay)
     p_lay.add_argument("--params", default=None, help="k=v,k=v,... (mm); default = param_space init values")
     p_lay.add_argument("--render", nargs="?", const=True, default=None,
@@ -350,7 +359,7 @@ def main(argv: list[str] | None = None) -> int:
     p_cmpq.set_defaults(func=cmd_compare)
 
     p_swp = sub.add_parser("sweep", help="wideband sweep of an existing design")
-    p_swp.add_argument("--topology", required=True, choices=["cascade", "dualmode"])
+    p_swp.add_argument("--topology", required=True, choices=_TOPOLOGY_CHOICES)
     _add_spec_args(p_swp)
     p_swp.add_argument("--params", default=None, help="k=v,k=v,... (mm)")
     p_swp.add_argument("--params-file", default=None, help="JSON file with {'params': {...}}")
