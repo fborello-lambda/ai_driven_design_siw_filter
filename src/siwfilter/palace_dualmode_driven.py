@@ -109,6 +109,7 @@ def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall
 
 
 def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float | None = None,
+               geometry: str | None = None,
                y_wall_mm: float = 3.0,
                d_via_mm: float = D_VIA_MM, p_via_mm: float = P_VIA_MM,
                h_mm: float | None = None, w_ext_mm: float | None = None,
@@ -139,19 +140,46 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     X0, X1 = -Xf, Li + Xf
     Xc0, Xc1 = X0 - sma_len_mm, X1 + sma_len_mm
     ym = half + 3.0
+    ym_lo = -ym            # board spans y in [ym_lo, ym_hi]; symmetric by default
     Hair = h_air_factor * (h_mm if h_mm is not None else SPEC.substrate.h * MM)
     h = h_mm if h_mm is not None else SPEC.substrate.h * MM
 
-    final, x_iris = _via_layout(a_mm, w_iris_mm, x_iris_mm, we, d_via_mm, p_via_mm, y_wall_mm)
+    if geometry is None:
+        final, x_iris = _via_layout(a_mm, w_iris_mm, x_iris_mm, we, d_via_mm,
+                                    p_via_mm, y_wall_mm)
+    else:
+        # Alternative cavity shapes (see geometries.py) differ ONLY in via
+        # placement, so they reuse every bit of machinery below.
+        from .geometries import LAYOUTS
+        final, _info = LAYOUTS[geometry](a_mm=a_mm, w_iris_mm=w_iris_mm,
+                                         x_iris_mm=x_iris_mm, w_ext_mm=we,
+                                         d_via_mm=d_via_mm, p_via_mm=p_via_mm,
+                                         y_wall_mm=y_wall_mm)
+        x_iris = _info.get("x_iris", a_mm / 2.0)
+        # Shrink the board onto the actual cavity instead of assuming a full
+        # a_mm square. Without this a half-mode cavity keeps a full-height
+        # board and its whole point -- a smaller, cheaper board -- disappears.
+        # The feed sits on y=0, so that line must stay inside the board even
+        # when the cavity is entirely on one side of it (half/quarter mode).
+        vy = [p[1] for p in final]; vx = [p[0] for p in final]
+        margin = 3.0
+        ym_lo = min(0.0, min(vy)) - margin
+        ym = max(0.0, max(vy)) + margin       # ym is now the UPPER edge
+        Li = max(vx)
+        X0, X1 = -Xf, Li + Xf
+        Xc0, Xc1 = X0 - sma_len_mm, X1 + sma_len_mm
+        half = (ym - ym_lo) / 2.0             # taper flares to the board half-width
+
+    y_span = ym - ym_lo
 
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 1 if show else 0)
     gmsh.model.add("dualmode_driven")
     occ = gmsh.model.occ
 
-    sub = (3, occ.addBox(X0, -ym, 0.0, X1 - X0, 2 * ym, h))
-    air_in = (3, occ.addBox(X0, -ym, h, Xf, 2 * ym, Hair))
-    air_out = (3, occ.addBox(Li, -ym, h, Xf, 2 * ym, Hair))
+    sub = (3, occ.addBox(X0, ym_lo, 0.0, X1 - X0, y_span, h))
+    air_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, Hair))
+    air_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, Hair))
 
     cyls = [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, r)) for x, y in final]
 
@@ -213,7 +241,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                 ys = sorted([sgn * y_lo, sgn * y_hi])
                 if min(abs(ys[0]), abs(ys[1])) <= W / 2.0 + gnd_clearance_mm:
                     continue          # would encroach on the trace clearance
-                if max(abs(ys[0]), abs(ys[1])) > ym:
+                if max(ys) > ym or min(ys) < ym_lo:
                     continue          # off the board
                 poly = np.array([(xa, ys[0]), (xb, ys[0]), (xb, ys[1]), (xa, ys[1])])
                 gnd_polys.append(poly)
@@ -224,7 +252,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                 xv = x_first + sign * k * gnd_stitch_pitch_mm
                 for sgn in (+1.0, -1.0):
                     yv = sgn * gnd_stitch_offset_mm
-                    if abs(yv) - rg <= W / 2.0 + gnd_clearance_mm or abs(yv) > ym - rg:
+                    if (abs(yv) - rg <= W / 2.0 + gnd_clearance_mm
+                            or yv + rg > ym or yv - rg < ym_lo):
                         continue
                     gnd_via_centres.append((xv, yv))
         cyls += [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, rg)) for x, y in gnd_via_centres]
@@ -427,7 +456,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         print(f"\n--- dual-mode driven mesh, in-line ports (Li={Li}mm, "
               f"w_iris={w_iris_mm}mm, x_iris={x_iris:.2f}mm, y_wall={y_wall_mm}mm, "
               f"w_ext={we:.3f}mm) ---")
-        print(f"  box x[{X0:.1f},{X1:.1f}] y[{-ym:.1f},{ym:.1f}] z[0,{h:.2f}]")
+        print(f"  box x[{X0:.1f},{X1:.1f}] y[{ym_lo:.1f},{ym:.1f}] z[0,{h:.2f}]")
         print(f"  vias={len(final)} diel_vols={len(diel_clean)} air_vols={len(air_vols)}")
         print(f"  faces: pec={len(pec)} port_in={len(wave_in)} port_out={len(wave_out)} "
               f"absorbing={len(absorbing)}")
