@@ -4,7 +4,7 @@ replacing palace_opt.py / palace_opt_sma.py / palace_opt_dualmode.py (each a
 boilerplate, one per topology -- see HANDOFF.md's "Architecture" section for
 the full rationale).
 
-Methodology (v16, already validated in palace_opt_dualmode.py this session):
+Methodology (v17; v16 was validated in palace_opt_dualmode.py this session):
   1. Ideal (lossless) target response for ANY N via synthesis.chebyshev_g /
      coupling_matrix / sparams_from_matrix -- these were already fully
      general, not N=2-specific; this retires palace_opt_dualmode.py's
@@ -13,8 +13,18 @@ Methodology (v16, already validated in palace_opt_dualmode.py this session):
      simulated |S11|,|S21| against the ideal response (S21 peak-normalized
      before fitting, so real substrate-loss-limited insertion loss never
      enters the shape error) + a mild direct-IL term + a board-length term
-     (new: biases every search toward the cheaper/smaller design among
-     electrically-similar fits) + a bandwidth backstop.
+     (biases every search toward the cheaper/smaller design among
+     electrically-similar fits) + centre-frequency and bandwidth terms.
+     See score() for what each term is for; v17 changed three things:
+       - |S11| is CLIPPED at S11_FLOOR_DB before the RMSE. Unclipped, the
+         term was dominated by how exactly a design lands the ideal's
+         reflection nulls (which go to -inf in dB) rather than by whether it
+         is well matched.
+       - an EXPLICIT centre-frequency term (with a deadband for mesh
+         uncertainty); previously frequency error was only implicit.
+       - the bandwidth term is two-sided; it used to be a one-sided hinge
+         that said nothing about a too-narrow passband.
+     Band edges are interpolated (band_edges()), not snapped to sweep points.
   3. Fine-mesh, wide-frequency confirm of the coarse winner.
   4. Fab-tolerance check: round the winner to 0.1mm, re-confirm.
 
@@ -188,6 +198,47 @@ def _band_ghz(spec: FilterSpec) -> tuple[float, float]:
     return spec.f1 / 1e9, spec.f2 / 1e9
 
 
+def band_edges(f: np.ndarray, s21_db: np.ndarray) -> dict:
+    """-3dB band edges, LINEARLY INTERPOLATED between sweep points.
+
+    Taking the edges as the outermost sampled points above the threshold
+    quantizes both bandwidth and centre frequency to the sweep step -- 20 MHz
+    on the coarse sweep, which is a seventh of the whole 143 MHz target
+    bandwidth. That granularity is far too coarse to optimize against: every
+    design in a wide neighbourhood reports the identical bw, so the objective
+    is flat where it should be informative. Interpolating the two crossings
+    recovers sub-step resolution from the same data.
+
+    Edges are the FIRST and LAST crossings over the window, not a walk outward
+    from the peak: a dual-mode response is double-humped, and walking from the
+    taller hump would stop at the dip between the poles and report half the
+    passband.
+
+    `fc_3db` (band centre) is what the score uses, not the argmax peak: on a
+    double-humped response argmax picks whichever pole happens to be taller,
+    which can sit an entire ripple-width off the true centre.
+    """
+    thr = float(s21_db.max()) - 3.0
+    idx = np.flatnonzero(s21_db >= thr)
+    if idx.size == 0:
+        return {"bw": 0.0, "fc_3db": float(f[int(np.argmax(s21_db))]),
+                "f_lo": 0.0, "f_hi": 0.0, "band_truncated": True}
+
+    def _cross(i, j):
+        """f where s21 crosses thr on the segment i->j."""
+        y0, y1 = float(s21_db[i]), float(s21_db[j])
+        if y1 == y0:
+            return float(f[j])
+        return float(f[i] + (f[j] - f[i]) * (thr - y0) / (y1 - y0))
+
+    i0, i1 = int(idx[0]), int(idx[-1])
+    trunc = (i0 == 0) or (i1 == len(f) - 1)
+    f_lo = _cross(i0 - 1, i0) if i0 > 0 else float(f[0])
+    f_hi = _cross(i1 + 1, i1) if i1 < len(f) - 1 else float(f[-1])
+    return {"bw": (f_hi - f_lo) * 1000.0, "fc_3db": 0.5 * (f_lo + f_hi),
+            "f_lo": f_lo, "f_hi": f_hi, "band_truncated": trunc}
+
+
 def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
                    fmin: float, fmax: float, step: float, device: str) -> dict:
     """Build the Palace Driven-problem config for any topology's build_mesh()
@@ -325,12 +376,11 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
     csv = out_data(f"postpro/{tag}/port-S.csv")
 
     ip = int(np.argmax(s21_db)); fc = float(f[ip]); il = float(s21_db[ip])
-    inb = s21_db >= il - 3.0
-    bw = float((f[inb].max() - f[inb].min()) * 1000) if inb.any() else 0.0
     b0, b1 = _band_ghz(spec)
     band = (f >= b0) & (f <= b1)
     s11w = float(s11_db[band].max()) if band.any() else 0.0
     il_band = float(s21_db[band].min()) if band.any() else -99.0
+    edges = band_edges(f, s21_db)
 
     try:
         os.remove(out_data(mesh))
@@ -338,14 +388,50 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
         pass
     return {"ok": True, "device": device,
            "f": f, "s11_db": s11_db, "s21_db": s21_db, "fc": fc, "il": il,
-           "bw": bw, "s11w": s11w, "il_band": il_band, "tag": tag, "csv": csv}
+           "s11w": s11w, "il_band": il_band, "tag": tag, "csv": csv, **edges}
+
+
+#: Below this, a return loss is "matched enough" and further improvement is
+#: not worth optimizer budget. The ideal Chebyshev |S11| plunges to -inf at
+#: its reflection zeros (-35.8 dB at the sampled points for N=2/0.1dB/5%), so
+#: an UNCLIPPED dB-domain RMSE is dominated by how precisely a design lands
+#: those nulls -- a well-matched filter can carry a large error purely for
+#: putting its zeros a few MHz off. Clipping BOTH curves to the same floor
+#: makes the term measure what we actually care about: how much of the band
+#: fails to reach a real, fabricable return loss.
+S11_FLOOR_DB = -25.0
+
+
+#: No fc penalty inside this deadband. fc is NOT mesh-converged in this
+#: project -- the same design shifts 20-27 MHz between mesh densities (open
+#: task #17). Penalizing linearly from zero would spend GP budget chasing
+#: mesh noise; a deadband charges only for error the mesh study cannot
+#: explain away. Shrink this once #17 pins the convergence down.
+FC_DEADBAND_MHZ = 15.0
 
 
 def score(spec: FilterSpec, r: dict, board_length_mm: float,
-         bw_max_fbw: float = 0.10, w_board: float = 0.01) -> float:
-    """v16 curve-fit score + a new small board-length term (HANDOFF.md:
-    "genuinely new behavior, present in none of the three files it
-    replaces")."""
+         w_board: float = 0.01,
+         s11_floor_db: float = S11_FLOOR_DB, w_fc: float = 0.05,
+         w_bw: float = 3.0, fc_deadband_mhz: float = FC_DEADBAND_MHZ) -> float:
+    """v17 objective. Terms, and why each exists:
+
+      s11_rmse    fit to the ideal Chebyshev |S11|, both curves clipped at
+                  s11_floor_db (see S11_FLOOR_DB)
+      s21_rmse    SHAPE fit only, both peak-normalized -- real dielectric loss
+                  must not be charged here, it is charged once below
+      il          direct insertion-loss term
+      fc          NEW: |fc_3db - f0| outside a deadband. Previously frequency
+                  error was only implicit (a detuned design fits the fixed
+                  window badly), which is weak and confounded with shape
+                  error: every geometry so far lands 2.89-2.93 GHz against a
+                  2.87 target and nothing in the objective said so directly.
+      bw          NEW: two-sided. The old term was a one-sided hinge that
+                  charged for being too WIDE and nothing for being too narrow,
+                  so an over-coupled design at 2x the target bandwidth was
+                  barely discouraged and an under-coupled one not at all.
+      board       mild size preference among electrically-similar fits
+    """
     if not r.get("ok"):
         return 1e9
     fw0, fw1 = _fit_window_ghz(spec)
@@ -353,13 +439,23 @@ def score(spec: FilterSpec, r: dict, board_length_mm: float,
     if fit.sum() < 3:
         return 99.0
     s11_ideal, s21_ideal = ideal_target_db(spec, r["f"][fit])
-    s11_rmse = float(np.sqrt(np.mean((r["s11_db"][fit] - s11_ideal) ** 2)))
+    # Clip both, not just the ideal: clipping only the target would penalize a
+    # design for being BETTER matched than the floor.
+    s11_rmse = float(np.sqrt(np.mean(
+        (np.maximum(r["s11_db"][fit], s11_floor_db)
+         - np.maximum(s11_ideal, s11_floor_db)) ** 2)))
     s21_shape = r["s21_db"][fit] - r["s21_db"][fit].max()
     s21_ideal_shape = s21_ideal - s21_ideal.max()
     s21_rmse = float(np.sqrt(np.mean((s21_shape - s21_ideal_shape) ** 2)))
-    bw_max = bw_max_fbw * (spec.f0 / 1e9) * 1000.0
+    f0_mhz = spec.f0 / 1e6
+    fc_mhz = r.get("fc_3db", r["fc"]) * 1000.0
+    fc_err = max(0.0, abs(fc_mhz - f0_mhz) - fc_deadband_mhz)
+
+    bw_target = spec.FBW * f0_mhz
+    bw_err = abs(r["bw"] - bw_target) / bw_target if bw_target > 0 else 0.0
+
     return (1.0 * s11_rmse + 0.5 * s21_rmse + 0.15 * abs(r["il"])
-           + 5.0 * max(0.0, r["bw"] - bw_max) / 100.0
+           + w_fc * fc_err + w_bw * bw_err
            + w_board * board_length_mm)
 
 
@@ -429,9 +525,11 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
         new = not os.path.exists(log_path)
         with open(log_path, "a") as fh:
             if new:
-                fh.write("eval," + ",".join(order) + ",fc,il,bw,s11w,board_mm,score\n")
+                fh.write("eval," + ",".join(order) +
+                         ",fc,fc_3db,il,bw,s11w,board_mm,score\n")
             fh.write(f"{n}," + ",".join(f"{p[k]:.3f}" for k in order) +
-                     f",{r.get('fc', 0):.4f},{r.get('il', 0):.2f},{r.get('bw', 0):.0f},"
+                     f",{r.get('fc', 0):.4f},{r.get('fc_3db', 0):.4f},"
+                     f"{r.get('il', 0):.2f},{r.get('bw', 0):.1f},"
                      f"{r.get('s11w', 0):.2f},{r.get('board_length_mm', 0):.1f},"
                      f"{r.get('score', 1e9):.4f}\n")
 

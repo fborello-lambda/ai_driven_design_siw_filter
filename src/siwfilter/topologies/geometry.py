@@ -30,27 +30,44 @@ from .base import MeshResult, ParamRange
 from .dualmode import TAOGLAS_SMA
 
 # name -> (param_space, extra build kwargs)
+#
+# Boxes WIDENED after the first 18-eval round: the winners of both completed
+# geometries sat hard against a bound, which means the box was the binding
+# constraint and the reported optimum was an artefact of where it was drawn.
+# Every widened bound below is annotated with what pinned it.
+#
+# w_ext is the feed aperture; it must stay clear of the cavity wall
+# (corner_cut's end wall spans w_ext/2 -> a/2, so w_ext -> a removes the wall
+# entirely). 26mm against a >= 57 leaves >= 2.5mm of wall at the worst corner.
 _SPACES: dict[str, dict[str, ParamRange]] = {
-    # a scaled 3.00 -> 2.87 GHz; w_iris is the corner-cut depth = the coupling knob
+    # a scaled 3.00 -> 2.87 GHz; w_iris is the corner-cut depth = the coupling
+    # knob. NO y_wall: corner_cut() ignores that argument entirely (verified --
+    # the via list is byte-identical for y_wall 4 vs 10), so searching it spent
+    # a whole GP dimension on a parameter that cannot change the result, which
+    # is also why the first round's top six had scattered y_wall at near-equal
+    # scores. 3D instead of 4D.
     "corner_cut": {
-        "a":      (59.8, 57.0, 63.0),
-        "w_iris": (12.0, 7.0, 18.0),
-        "w_ext":  (16.3, 13.0, 19.0),
-        "y_wall": (8.6, 6.0, 12.0),
+        "a":      (58.9, 56.0, 63.0),
+        "w_iris": (7.0, 3.0, 20.0),      # was (7,18); winner pinned at the 7 floor.
+                                         # Below p_via the cut saturates, so 3 = p is
+                                         # the real floor.
+        "w_ext":  (19.0, 13.0, 26.0),    # was (13,19); winner pinned at the 19 ceiling
     },
     # cavity size already lands the midpoint on 2.85 GHz; the arms set the split
     "circular_cross": {
-        "a":      (63.8, 61.0, 67.0),
-        "w_iris": (8.0, 3.0, 14.0),      # cross arm along x
-        "y_wall": (5.0, 2.0, 12.0),      # cross arm along y
-        "w_ext":  (16.3, 12.0, 20.0),
+        "a":      (64.4, 61.0, 67.0),
+        "w_iris": (13.0, 3.0, 25.0),     # was (3,14); winner at 13.06, near the ceiling
+        "y_wall": (11.3, 2.0, 25.0),     # was (2,12); winner at 11.35, near the ceiling
+        "w_ext":  (19.8, 12.0, 30.0),    # was (12,20); winner pinned at the 20 ceiling
     },
     # resonated ~40% high, so both diagonals scale up together
     "rhombic": {
         "a":      (80.0, 74.0, 86.0),
         "w_iris": (10.0, 4.0, 18.0),
         "y_wall": (37.6, 32.0, 44.0),    # transverse half-diagonal
-        "w_ext":  (16.3, 12.0, 20.0),
+        # widened pre-emptively to match the other two: both pinned their w_ext
+        # ceiling, and there is no reason rhombic's external coupling wants less.
+        "w_ext":  (16.3, 12.0, 30.0),
     },
 }
 

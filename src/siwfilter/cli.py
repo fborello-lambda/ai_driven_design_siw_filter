@@ -215,8 +215,8 @@ def cmd_compare_baselines(args) -> int:
         designs[label] = r
         board = topo.board_length_mm(spec, **cfg["params"])
         if r.get("ok"):
-            print(f"  fc={r['fc']:.3f}GHz  IL={r['il']:.2f}dB  BW={r['bw']:.0f}MHz  "
-                 f"S11w={r['s11w']:.2f}dB  board={board:.1f}mm")
+            print(f"  fc={r.get('fc_3db', r['fc']):.3f}GHz  IL={r['il']:.2f}dB  "
+                 f"BW={r['bw']:.0f}MHz  S11w={r['s11w']:.2f}dB  board={board:.1f}mm")
             _artifacts(topo, spec, cfg["params"], label.replace(" ", "_").replace("/", "-"), r)
         else:
             print(f"  FAILED: {r.get('err')}")
@@ -295,7 +295,8 @@ def cmd_sweep(args) -> int:
     if not r.get("ok"):
         print(f"FAILED: {r.get('err')}")
         return 1
-    print(f"fc={r['fc']:.3f}GHz IL={r['il']:.2f}dB BW={r['bw']:.0f}MHz S11w={r['s11w']:.2f}dB")
+    print(f"fc={r.get('fc_3db', r['fc']):.3f}GHz IL={r['il']:.2f}dB "
+          f"BW={r['bw']:.0f}MHz S11w={r['s11w']:.2f}dB")
     plot_comparison({f"{args.topology} sweep": r}, spec, out_img(f"sweep_{args.topology}.png"))
     return 0
 
