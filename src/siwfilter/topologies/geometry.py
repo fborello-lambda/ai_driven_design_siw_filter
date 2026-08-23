@@ -38,7 +38,16 @@ from .dualmode import TAOGLAS_SMA
 #
 # w_ext is the feed aperture; it must stay clear of the cavity wall
 # (corner_cut's end wall spans w_ext/2 -> a/2, so w_ext -> a removes the wall
-# entirely). 26mm against a >= 57 leaves >= 2.5mm of wall at the worst corner.
+# entirely), so its ceiling stays well under a.
+#
+# Round-3 correction: the w_ext floors, not the ceilings, are what bind under
+# v17. v16 drove w_ext UP because its unclipped S11 term rewarded landing the
+# reflection nulls, which a broad over-coupled response does easily -- so the
+# round-2 widening (upward) was in the wrong direction. The first honest
+# untruncated measurement puts the warm start at 437 MHz, 3.0x the 143.5 MHz
+# target, and external coupling is what sets that. Scaling to target needs
+# w_ext ~ 11-13 (BW ~ w^3 gives 13.1, BW ~ w^2 gives 10.9), i.e. AT or BELOW
+# the old 13 floor. Floors dropped to 7-8 so the optimum is interior.
 _SPACES: dict[str, dict[str, ParamRange]] = {
     # a scaled 3.00 -> 2.87 GHz; w_iris is the corner-cut depth = the coupling
     # knob. NO y_wall: corner_cut() ignores that argument entirely (verified --
@@ -51,23 +60,21 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "w_iris": (7.0, 3.0, 20.0),      # was (7,18); winner pinned at the 7 floor.
                                          # Below p_via the cut saturates, so 3 = p is
                                          # the real floor.
-        "w_ext":  (19.0, 13.0, 26.0),    # was (13,19); winner pinned at the 19 ceiling
+        "w_ext":  (13.0, 7.0, 24.0),     # floor dropped 13 -> 7, see note above
     },
     # cavity size already lands the midpoint on 2.85 GHz; the arms set the split
     "circular_cross": {
         "a":      (64.4, 61.0, 67.0),
         "w_iris": (13.0, 3.0, 25.0),     # was (3,14); winner at 13.06, near the ceiling
         "y_wall": (11.3, 2.0, 25.0),     # was (2,12); winner at 11.35, near the ceiling
-        "w_ext":  (19.8, 12.0, 30.0),    # was (12,20); winner pinned at the 20 ceiling
+        "w_ext":  (14.0, 8.0, 24.0),     # floor dropped 12 -> 8, see note above
     },
     # resonated ~40% high, so both diagonals scale up together
     "rhombic": {
         "a":      (80.0, 74.0, 86.0),
         "w_iris": (10.0, 4.0, 18.0),
         "y_wall": (37.6, 32.0, 44.0),    # transverse half-diagonal
-        # widened pre-emptively to match the other two: both pinned their w_ext
-        # ceiling, and there is no reason rhombic's external coupling wants less.
-        "w_ext":  (16.3, 12.0, 30.0),
+        "w_ext":  (14.0, 8.0, 24.0),     # floor dropped 12 -> 8, see note above
     },
 }
 

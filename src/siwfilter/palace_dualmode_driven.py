@@ -35,6 +35,7 @@ import gmsh
 import numpy as np
 
 from .config import SPEC, VIA_PRESETS, out_data, out_img
+from .geometries import min_via_centre_sep
 from .siw_geometry import microstrip_width_50ohm, microstrip_eps_eff, microstrip_guided_wavelength
 from .palace_dualmode import A_SIW_MM, D_VIA_MM, P_VIA_MM
 
@@ -100,12 +101,116 @@ def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall
         for o in _segment_vias(w_iris_mm / 2.0, half - y_wall_mm, p):
             vias.append((x_iris, o)); vias.append((x_iris, -o))
 
+    # Fab-rule spacing, not 0.9*d: the old threshold sat BELOW one via
+    # diameter and so permitted physically overlapping barrels. See
+    # geometries._dedupe for the measurement that turned this up.
+    lim2 = min_via_centre_sep(2.0 * r) ** 2
     final: list[tuple[float, float]] = []
     for x, y in vias:
-        if all((x - kx) ** 2 + (y - ky) ** 2 >= (0.9 * 2 * r) ** 2
-               for kx, ky in final):
+        if all((x - kx) ** 2 + (y - ky) ** 2 >= lim2 for kx, ky in final):
             final.append((x, y))
     return final, x_iris
+
+
+#: Does this geometry's feed face present a FLAT wall for the taper to flare
+#: onto? The Deslandes taper transforms the 50-ohm microstrip up to the full
+#: waveguide width, which presupposes a wall of that width at the aperture.
+#:
+#:   dualmode / corner_cut  square cavity, flat end walls -> flare
+#:   circular_cross         the fence is a CURVE; at the feed axis it is
+#:                          tangent, so there is no wall to flare onto
+#:   rhombic                the feed lands on a VERTEX, likewise
+#:
+#: For the latter two the trace stays at the true 50-ohm width through the
+#: aperture. The aperture (w_ext) remains the coupling knob either way.
+TAPER_TO_WALL: dict[str, bool] = {
+    "corner_cut": True,
+    "circular_cross": False,
+    "rhombic": False,
+    "halfmode": True,
+    "quartermode": True,
+}
+
+
+def face_ty(geometry, vias, xf: float, W: float, half: float,
+            ym: float, ym_lo: float) -> tuple[float, float]:
+    """Taper flare extent at the end face x=xf: (y_lo, y_hi).
+
+    PER FACE, not one global pair -- the two faces need not have the same
+    wall extent. corner_cut truncates the +x/+y corner, so its OUTPUT wall
+    stops 8.6mm short of its input wall; flaring both to the global maximum
+    put 8.6mm of taper copper over open substrate where the wall had been
+    removed. The flare is supposed to land ON the wall it feeds.
+
+    A flare also only makes sense against a FLAT wall (see TAPER_TO_WALL):
+    for a curve or a vertex the trace stays at the 50-ohm width W.
+    """
+    if geometry is None:
+        return -half, half
+    if not TAPER_TO_WALL.get(geometry, True):
+        return -W / 2.0, W / 2.0              # no flare: straight 50-ohm feed
+    ys = [q[1] for q in vias if abs(q[0] - xf) < 1e-6]
+    if not ys:                                # no flat wall on this face
+        return -W / 2.0, W / 2.0
+    lo = min(0.0, min(ys)) if min(ys) >= 0.0 else min(ys)
+    return max(lo, ym_lo + 0.5), min(max(ys), ym - 0.5)
+
+
+def feed_trace_poly(x_in: float, x_taper: float, x_siw: float,
+                    W: float, ty_lo: float, ty_hi: float) -> np.ndarray:
+    """Deslandes feed outline: constant 50-ohm width W from the port to
+    x_taper, then a linear flare to the FULL cavity wall width at x_siw.
+
+    Pure geometry, shared by the mesh builder and every 2D drawing for the
+    same reason _via_layout is -- a drawing that recomputes the shape
+    silently drifts from what is actually simulated. (It did: a first pass
+    at the geometry comparison drew the feed as a constant-width line, which
+    made it look as though the design had no taper at all.)
+    """
+    return np.array([(x_in, +W / 2), (x_taper, +W / 2), (x_siw, ty_hi),
+                     (x_siw, ty_lo), (x_taper, -W / 2), (x_in, -W / 2)])
+
+
+def gnd_stitch_layout(X0: float, X1: float, W: float, ym: float, ym_lo: float,
+                      n_gnd_stitch: int = 3,
+                      gnd_stitch_offset_mm: float = 2.62,
+                      gnd_stitch_pitch_mm: float = VIA_PRESETS["gnd_stitch"]["p_mm"],
+                      gnd_via_d_mm: float = VIA_PRESETS["gnd_stitch"]["d_mm"],
+                      gnd_clearance_mm: float = 0.3,
+                      ) -> tuple[list[np.ndarray], list[tuple[float, float]]]:
+    """Connector ground pads + stitching via centres (Taoglas footprint).
+
+    Returns (pad_polys, via_centres). Pure geometry, shared with the drawing
+    code -- see feed_trace_poly.
+    """
+    rg = gnd_via_d_mm / 2.0
+    pad_margin = 0.25                      # copper beyond the via barrel
+    y_lo = gnd_stitch_offset_mm - rg - pad_margin
+    y_hi = gnd_stitch_offset_mm + rg + pad_margin
+    n_st = max(0, n_gnd_stitch)
+    polys: list[np.ndarray] = []
+    centres: list[tuple[float, float]] = []
+    for x_edge, sign in ((X0, +1.0), (X1, -1.0)):
+        x_first = x_edge + sign * (rg + pad_margin)
+        x_last = x_first + sign * max(0, n_st - 1) * gnd_stitch_pitch_mm
+        xa, xb = sorted([x_edge, x_last + sign * (rg + pad_margin)])
+        for sgn in (+1.0, -1.0):
+            ys = sorted([sgn * y_lo, sgn * y_hi])
+            if min(abs(ys[0]), abs(ys[1])) <= W / 2.0 + gnd_clearance_mm:
+                continue          # would encroach on the trace clearance
+            if max(ys) > ym or min(ys) < ym_lo:
+                continue          # off the board
+            polys.append(np.array([(xa, ys[0]), (xb, ys[0]),
+                                   (xb, ys[1]), (xa, ys[1])]))
+        for k in range(n_st):
+            xv = x_first + sign * k * gnd_stitch_pitch_mm
+            for sgn in (+1.0, -1.0):
+                yv = sgn * gnd_stitch_offset_mm
+                if (abs(yv) - rg <= W / 2.0 + gnd_clearance_mm
+                        or yv + rg > ym or yv - rg < ym_lo):
+                    continue
+                centres.append((xv, yv))
+    return polys, centres
 
 
 def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float | None = None,
@@ -185,14 +290,28 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     # symmetric flare would put half the trace OUTSIDE the shrunken substrate
     # -- which produces dangling faces and an MFEM STable3D abort, not a
     # graceful error. Flare to the cavity's real extent instead.
-    if geometry is None:
-        ty_lo, ty_hi = -half, half
-    else:
-        _vy = [p[1] for p in final]
-        ty_lo = min(0.0, min(_vy)) if min(_vy) >= 0.0 else min(_vy)
-        ty_hi = max(_vy)
-        ty_lo = max(ty_lo, ym_lo + 0.5)      # stay inside the board
-        ty_hi = min(ty_hi, ym - 0.5)
+    #
+    # PER END FACE, not one global pair. The two faces need not have the same
+    # wall extent: corner_cut truncates the +x/+y corner, so its OUTPUT wall
+    # stops 8.6mm short of its input wall. Flaring both to the global max put
+    # 8.6mm of taper copper over open substrate where the via wall had been
+    # removed -- the flare is supposed to land ON the wall it feeds, and there
+    # was nothing under it. (Spotted from the 2D board view.)
+    # A flare only makes sense against a FLAT wall: the Deslandes taper
+    # transforms the 50-ohm microstrip into the waveguide's full transverse
+    # width, so it needs a wall of that width to land on. circular_cross and
+    # rhombic present a curve and a vertex at the feed axis -- there is no
+    # flat wall there, and flaring to the shape's global extent aims the
+    # copper at open substrate. Those feed through the aperture at the true
+    # 50-ohm width instead (TAPER_TO_WALL below).
+    def _face_ty(xf: float) -> tuple[float, float]:
+        return face_ty(geometry, final, xf, W, half, ym, ym_lo)
+
+    ty_in_lo, ty_in_hi = _face_ty(0.0)
+    ty_out_lo, ty_out_hi = _face_ty(Li)
+    # kept for the top-metal window and any caller reading a single extent
+    ty_lo = min(ty_in_lo, ty_out_lo)
+    ty_hi = max(ty_in_hi, ty_out_hi)
 
     # Top-metal window. For a normal cavity the ground plane spans the whole
     # board, but a fractional-mode (half/quarter) cavity must NOT have metal
@@ -226,15 +345,15 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     # trace_surface. The via-fence gap (we) is independent and narrower,
     # sitting within this flared footprint (copper overhangs the solid part
     # of the wall). ----
-    def trace_surface(x_in: float, x_taper: float, x_siw: float) -> int:
-        pts = [(x_in, +W / 2), (x_taper, +W / 2), (x_siw, ty_hi),
-               (x_siw, ty_lo), (x_taper, -W / 2), (x_in, -W / 2)]
+    def trace_surface(x_in: float, x_taper: float, x_siw: float,
+                      tlo: float, thi: float) -> int:
+        pts = list(feed_trace_poly(x_in, x_taper, x_siw, W, tlo, thi))
         tags = [occ.addPoint(px, py, h) for px, py in pts]
         lines = [occ.addLine(tags[i], tags[(i + 1) % len(tags)]) for i in range(len(tags))]
         return occ.addPlaneSurface([occ.addCurveLoop(lines)])
 
-    trace_in = (2, trace_surface(X0, -Lt, 0.0))
-    trace_out = (2, trace_surface(X1, Li + Lt, Li))
+    trace_in = (2, trace_surface(X0, -Lt, 0.0, ty_in_lo, ty_in_hi))
+    trace_out = (2, trace_surface(X1, Li + Lt, Li, ty_out_lo, ty_out_hi))
 
     # ---- connector ground: top-side pour + stitching vias ----
     # The Taoglas EMPCB.SMAFSTJ.B.HT grounds through 4 discrete legs at the
@@ -347,12 +466,12 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     if sma_diel:
         gmsh.model.addPhysicalGroup(3, sma_diel, tag=3, name="sma_ptfe")
 
-    def _outline(x_in, x_taper, x_siw):
-        return np.array([(x_in, +W / 2), (x_taper, +W / 2), (x_siw, ty_hi),
-                         (x_siw, ty_lo), (x_taper, -W / 2), (x_in, -W / 2)])
+    def _outline(x_in, x_taper, x_siw, tlo, thi):
+        return feed_trace_poly(x_in, x_taper, x_siw, W, tlo, thi)
     # Ground pour counts as copper for face classification, exactly like the
     # trace -- both are PEC sheets at z=h, just electrically distinct nets.
-    trace_polys = [_outline(X0, -Lt, 0.0), _outline(X1, Li + Lt, Li)] + gnd_polys
+    trace_polys = [_outline(X0, -Lt, 0.0, ty_in_lo, ty_in_hi),
+                   _outline(X1, Li + Lt, Li, ty_out_lo, ty_out_hi)] + gnd_polys
 
     def _in_poly(px, py, poly) -> bool:
         n = len(poly); inside = False; j = n - 1

@@ -44,6 +44,8 @@ import math
 
 import numpy as np
 
+from .config import FAB_RULES
+
 
 def _segment(lo: float, hi: float, p: float) -> np.ndarray:
     """Evenly spaced positions spanning EXACTLY [lo, hi], pitch ~p.
@@ -57,10 +59,30 @@ def _segment(lo: float, hi: float, p: float) -> np.ndarray:
     return np.linspace(lo, hi, n + 1)
 
 
+def min_via_centre_sep(d_mm: float, fab: str = "JLCPCB_2layer") -> float:
+    """Smallest centre-to-centre spacing the fab allows for d_mm vias."""
+    return d_mm + FAB_RULES[fab]["min_hole_to_hole"]
+
+
 def _dedupe(vias, r: float):
+    """Drop vias closer than the fab's minimum hole-to-hole spacing.
+
+    The threshold used to be 0.9*d -- BELOW one via diameter, so it happily
+    emitted pairs whose copper physically overlapped, and anything between
+    0.9*d and d+0.5 was unbuildable on JLCPCB. Measured over corner_cut's
+    search box, 36% of designs violated the 0.5mm hole-to-hole rule and the
+    worst case was 1.353mm centre-to-centre for 1.5mm vias -- overlapping
+    barrels. Found by eye in the 2D board view, which is exactly what that
+    drawing is for.
+
+    Merging rather than erroring is the right response: a via fence with two
+    coincident vias merged is still a continuous fence, so the electrical
+    intent survives while the layout becomes manufacturable.
+    """
+    lim2 = min_via_centre_sep(2.0 * r) ** 2
     out: list[tuple[float, float]] = []
     for x, y in vias:
-        if all((x - kx) ** 2 + (y - ky) ** 2 >= (0.9 * 2 * r) ** 2 for kx, ky in out):
+        if all((x - kx) ** 2 + (y - ky) ** 2 >= lim2 for kx, ky in out):
             out.append((float(x), float(y)))
     return out
 

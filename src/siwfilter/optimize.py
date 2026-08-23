@@ -112,6 +112,30 @@ CPU_NP = 4
 # Benchmark before assuming; --device is exposed on every CLI subcommand.
 GPU_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "dualmode": (1.5, 0.25, 3.0),
+    # The alternative cavity shapes go through the SAME builder as dualmode
+    # (only the via layout differs), but they are NOT the same size -- their
+    # cavities are wider and their boards longer, and dualmode's GPU preset
+    # puts them at 176k/187k/222k tets, i.e. at or over GPU_MAX_TETS. Adding
+    # them with dualmode's preset therefore bought nothing: every eval hit
+    # the "> GPU_MAX_TETS -> CPU directly" path and ran at CPU speed anyway
+    # (verified in a live run before this was measured).
+    #
+    # Measured at each box's UPPER bounds -- the largest board each search can
+    # ask for, which is what has to fit:
+    #
+    #   mesh_max/min/h_air     corner_cut  circular_cross  rhombic
+    #   1.5 / 0.25 / 3.0          176k         187k         222k   over
+    #   2.0 / 0.30 / 2.5          146k         159k         182k   rhombic over
+    #   2.5 / 0.35 / 2.0          132k         147k         168k   all fit
+    #
+    # mesh_min 0.35 still puts ~4 cells across a 1.5mm via barrel. This is a
+    # genuine coarsening of the SEARCH mesh, accepted deliberately: the fine
+    # confirm re-runs the winner on the dense (1.2/0.2/6.0) mesh, so the
+    # coarse mesh only has to RANK designs, not measure them. Treat coarse fc
+    # as indicative -- it is already only good to ~25 MHz (task #17).
+    "corner_cut": (2.5, 0.35, 2.0),
+    "circular_cross": (2.5, 0.35, 2.0),
+    "rhombic": (2.5, 0.35, 2.0),
     # cascade's GPU-viable mesh is NOT yet established -- its CPU preset is
     # already much coarser and its DOF count far higher (196 vias vs 78). Fall
     # back to the CPU preset and let it fail loudly rather than silently
@@ -475,7 +499,16 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
             fine_sweep_ghz: tuple[float, float, float] | None = None) -> dict:
     device = resolve_device(device, topology.name)
     fw0, fw1 = _fit_window_ghz(spec)
-    mmax, mmin, hair = _mesh_preset(topology.name, device)
+    # Coarse search runs the GPU mesh (fast, and validated for every dual-mode
+    # derived topology); the fine CONFIRM always uses the denser CPU-grade
+    # mesh, whichever device it lands on. Confirming the winner on the same
+    # coarse mesh that selected it would just re-report the search's own
+    # numbers -- the confirm exists to check the design survives a better
+    # discretization. run_driven still tries GPU for it and falls back to CPU
+    # on OOM or a tet count over GPU_MAX_TETS, so the denser mesh costs
+    # correctness nothing.
+    mmax, mmin, hair = (_cpu_mesh_preset(topology.name) if fine
+                        else _mesh_preset(topology.name, device))
     if fine:
         if fine_sweep_ghz is not None:
             fmin, fmax, step = fine_sweep_ghz
