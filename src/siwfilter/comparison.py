@@ -31,7 +31,7 @@ import os
 import numpy as np
 
 from .config import FilterSpec, SPEC, out_data, out_img
-from .optimize import _mesh_preset, plot_comparison, run_driven
+from .optimize import _mesh_preset, band_edges, plot_comparison, run_driven
 from .topologies import REGISTRY
 
 # One grid for every case: wide enough to show the skirts, fine enough (10 MHz)
@@ -48,15 +48,37 @@ OLD_SMA = {"sma_rin_mm": 0.35, "sma_rout_mm": 1.164, "gnd_stitch": False}
 REAL_SMA = {"sma_rin_mm": 0.38, "sma_rout_mm": 1.2639}
 
 
-def _retuned_dualmode() -> dict:
-    """Best dual-mode design from the last `siw design` run, preferring the
-    fab-rounded variant (it is what would actually be built, and it confirmed
-    no worse than the unrounded optimum). Falls back to the landed design."""
-    p = out_data("opt_dualmode_best.json")
+def _best_params(topology: str, fallback: dict | None = None) -> dict | None:
+    """Best design from the last `siw design --topology <topology>` run,
+    preferring the fab-rounded variant (it is what would actually be built,
+    and it has confirmed no worse than the unrounded optimum).
+
+    Returns None when that topology has never been optimized, so cases() can
+    leave it out rather than silently comparing an un-optimized geometry
+    against tuned ones -- which would read as a fair fight and is not.
+    """
+    p = out_data(f"opt_{topology}_best.json")
     if not os.path.exists(p):
-        return dict(LANDED_DM)
+        return dict(fallback) if fallback is not None else None
     d = json.load(open(p))
-    return d.get("fab_tolerance", {}).get("params") or d.get("params") or dict(LANDED_DM)
+    got = d.get("fab_tolerance", {}).get("params") or d.get("params")
+    if got:
+        return dict(got)
+    return dict(fallback) if fallback is not None else None
+
+
+def _retuned_dualmode() -> dict:
+    return _best_params("dualmode", LANDED_DM)
+
+
+#: Alternative cavity shapes, in the order they should appear. Each is included
+#: only once optimized (see _best_params). Their numbering continues the five
+#: reference cases so the legend reads as one ranked list.
+GEOMETRY_CASES = [
+    ("corner_cut",     "6. corner-cut cavity, real SMA"),
+    ("circular_cross", "7. circular + cross, real SMA"),
+    ("rhombic",        "8. rhombic cavity, real SMA"),
+]
 
 
 def cases() -> dict[str, dict]:
@@ -65,7 +87,7 @@ def cases() -> dict[str, dict]:
     spec2 = FilterSpec(N=2)
     spec3 = FilterSpec(N=3, substrate_name=SPEC.substrate_name)
     retuned = _retuned_dualmode()
-    return {
+    out = {
         "n2_ideal_port": dict(label="1. N=2, no SMA (ideal port)", topo=dm, spec=spec2,
                               params={**retuned, "with_sma": False, "gnd_stitch": False}),
         "n2_old_sma":    dict(label="2. N=2, old SMA (r=0.35)", topo=dm, spec=spec2,
@@ -77,6 +99,15 @@ def cases() -> dict[str, dict]:
         "n3_baseline":   dict(label="5. baseline N=3, old SMA", topo=casc, spec=spec3,
                               params={**CASCADE_V2, "sma_rin_mm": 0.35, "sma_rout_mm": 1.164}),
     }
+    # The alternative cavity shapes all carry the real Taoglas SMA by default
+    # (GeometryTopology._kw), so they need no extra connector params -- that is
+    # what makes them directly comparable to case 3.
+    for name, label in GEOMETRY_CASES:
+        p = _best_params(name)
+        if p is not None:
+            out[f"geom_{name}"] = dict(label=label, topo=REGISTRY[name],
+                                       spec=spec2, params=p)
+    return out
 
 
 def _cache_path(tag: str) -> str:
@@ -111,16 +142,25 @@ def compute_case(tag: str, case: dict, device: str = "auto") -> dict:
 def metrics(r: dict, spec: FilterSpec, topo, params: dict) -> dict:
     f, s11, s21 = r["f"], r["s11_db"], r["s21_db"]
     ip = int(np.argmax(s21))
-    inb3 = s21 >= s21[ip] - 3.0
     band = (f >= spec.f1 / 1e9) & (f <= spec.f2 / 1e9)
     geom = {k: v for k, v in params.items() if isinstance(v, (int, float))}
-    return {
-        "fc_ghz": float(f[ip]),
+    # Same interpolated -3dB edges the optimizer scores against, so the table
+    # and the objective cannot disagree about a design's bandwidth or centre.
+    e = band_edges(f, s21)
+    out = {
+        "fc_ghz": e["fc_3db"],
         "il_db": float(s21[ip]),
-        "bw_mhz": float((f[inb3].max() - f[inb3].min()) * 1000) if inb3.any() else 0.0,
+        "bw_mhz": e["bw"],
         "s11_inband_db": float(s11[band].max()) if band.any() else 0.0,
         "board_mm": float(topo.board_length_mm(spec, **geom)),
     }
+    # Area is the honest size metric for the "make it smaller" goal -- these
+    # geometries differ mainly in WIDTH, which length alone hides. Only the
+    # alternative shapes implement it so far.
+    area = getattr(topo, "board_area_mm2", None)
+    if area is not None:
+        out["board_mm2"] = float(area(spec, **geom))
+    return out
 
 
 def run(refresh: bool = False, add_run: str | None = None,
@@ -159,11 +199,15 @@ def run(refresh: bool = False, add_run: str | None = None,
         return {}
 
     path = plot_comparison(designs, FilterSpec(N=2), out_img(out_name))
-    hdr = f"{'design':<34}{'fc GHz':>9}{'IL dB':>8}{'BW MHz':>8}{'S11 dB':>9}{'board mm':>10}"
+    hdr = (f"{'design':<34}{'fc GHz':>9}{'IL dB':>8}{'BW MHz':>8}{'S11 dB':>9}"
+           f"{'board mm':>10}{'area cm2':>10}")
     print("\n" + hdr); print("-" * len(hdr))
     for label, m in rows:
+        # area is blank for the two reference topologies, which do not
+        # implement board_area_mm2 -- printing 0.0 would read as "zero area".
+        area = f"{m['board_mm2'] / 100.0:>10.1f}" if "board_mm2" in m else f"{'-':>10}"
         print(f"{label:<34}{m['fc_ghz']:>9.3f}{m['il_db']:>8.2f}{m['bw_mhz']:>8.0f}"
-              f"{m['s11_inband_db']:>9.2f}{m['board_mm']:>10.1f}")
+              f"{m['s11_inband_db']:>9.2f}{m['board_mm']:>10.1f}{area}")
     print(f"\ntarget f0 = {SPEC.f0/1e9:.3f} GHz, FBW = {SPEC.FBW*100:.0f}%, "
           f"ripple = {SPEC.ripple_db} dB")
     print("NOTE: fc is not fully mesh-converged (20-27 MHz shifts between mesh "
