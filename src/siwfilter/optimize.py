@@ -181,8 +181,28 @@ def resolve_device(device: str, topology_name: str) -> str:
     return "CPU"
 
 
+def _env_mesh_override() -> tuple[float, float, float] | None:
+    """SIW_COARSE_MESH="max,min,h_air" overrides the GPU coarse-search preset.
+
+    Exists so an automated speed-vs-fidelity study can hand its verdict to the
+    run that follows it without editing source between the two.
+    """
+    raw = os.environ.get("SIW_COARSE_MESH")
+    if not raw:
+        return None
+    try:
+        mm, mn, hh = (float(v) for v in raw.split(","))
+    except ValueError:
+        print(f"WARNING: ignoring malformed SIW_COARSE_MESH={raw!r}")
+        return None
+    return mm, mn, hh
+
+
 def _mesh_preset(topology_name: str, device: str = "CPU") -> tuple[float, float, float]:
     if device == "GPU":
+        ov = _env_mesh_override()
+        if ov is not None:
+            return ov
         if topology_name in GPU_MESH_PRESETS:
             return GPU_MESH_PRESETS[topology_name]
         print(f"WARNING: no GPU-validated mesh preset for topology '{topology_name}'. "
@@ -263,8 +283,36 @@ def band_edges(f: np.ndarray, s21_db: np.ndarray) -> dict:
             "f_lo": f_lo, "f_hi": f_hi, "band_truncated": trunc}
 
 
+#: Krylov solve tolerance for the COARSE search. Palace/MFEM is compiled in
+#: FP64 (single precision would need a rebuild), so the runtime knob for
+#: "cheaper but less exact" is the linear-solver tolerance, not the float
+#: width. Looser tol = fewer GMRES iterations = less time per frequency point.
+#:
+#: It does NOT buy memory: GPU footprint is set by DOF count, so a looser
+#: tolerance cannot make a finer mesh fit under GPU_MAX_TETS. Time only.
+#:
+#: Measured on corner_cut, same mesh throughout, GPU, 31-point sweep -- the
+#: deviation columns are against the 1e-8 solve:
+#:
+#:   tol     time     max|dS11|   max|dS21|   score
+#:   1e-8   266.9s      ref         ref      13.141
+#:   1e-6   241.4s    5.0e-4 dB   4.5e-5 dB  13.141
+#:   1e-5   226.1s    3.7e-3 dB   1.8e-3 dB  13.141
+#:   1e-4   216.3s    3.6e-2 dB   1.1e-2 dB  13.143
+#:
+#: So tolerance is nearly free accuracy-wise (1e-4 moves the score by 0.002,
+#: two orders below the 0.03-0.8 spacing between competing designs) but also
+#: buys little: only 1.23x even at 1e-4, because the cost is dominated by
+#: meshing/assembly and the 31 frequency points, not by Krylov iterations.
+#: 1e-5 takes nearly all the available gain (1.18x) and keeps an order of
+#: magnitude more margin than 1e-4.
+COARSE_TOL = 1e-5
+FINE_TOL = 1e-8
+
+
 def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
-                   fmin: float, fmax: float, step: float, device: str) -> dict:
+                   fmin: float, fmax: float, step: float, device: str,
+                   tol: float = FINE_TOL) -> dict:
     """Build the Palace Driven-problem config for any topology's build_mesh()
     result -- generic over with_sma True/False (3rd material + WavePort
     voltage paths only appear when res['sma'] is set)."""
@@ -276,9 +324,9 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
         {"Attributes": [2], "Permeability": 1.0, "Permittivity": 1.0, "LossTan": 0.0},
     ]
     port_in = {"Index": 1, "Attributes": [11], "Mode": 1, "Excitation": 1,
-               "Offset": 0.0, "MaxIts": 40, "KSPTol": 1e-8, "EigenTol": 1e-6}
+               "Offset": 0.0, "MaxIts": 40, "KSPTol": tol, "EigenTol": 1e-6}
     port_out = {"Index": 2, "Attributes": [12], "Mode": 1,
-                "Offset": 0.0, "MaxIts": 40, "KSPTol": 1e-8, "EigenTol": 1e-6}
+                "Offset": 0.0, "MaxIts": 40, "KSPTol": tol, "EigenTol": 1e-6}
     if sma:
         materials.append({"Attributes": [3], "Permeability": 1.0,
                           "Permittivity": sma["eps_r"], "LossTan": sma["tand"]})
@@ -294,7 +342,8 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
         "Solver": {"Order": 1, "Device": device,
                    "Driven": {"Samples": [{"Type": "Linear", "MinFreq": fmin,
                                            "MaxFreq": fmax, "FreqStep": step}]},
-                   "Linear": {"Type": "Default", "KSPType": "GMRES", "Tol": 1e-8, "MaxIts": 300}},
+                   "Linear": {"Type": "Default", "KSPType": "GMRES",
+                              "Tol": tol, "MaxIts": 300}},
     }
 
 
@@ -308,7 +357,7 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
                fmin: float, fmax: float, step: float,
                mesh_max: float, mesh_min: float, h_air_factor: float,
                device: str = "auto", np_ranks: int = CPU_NP,
-               serialize: bool = True) -> dict:
+               serialize: bool = True, tol: float = FINE_TOL) -> dict:
     """Build the mesh + run one Palace Driven solve, return {ok, f, s11_db,
     s21_db, fc, il, bw, s11w, il_band, tag} (dB arrays over the swept band)."""
     device = resolve_device(device, topology.name)
@@ -353,7 +402,7 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
 
     def _solve(dev: str, ranks: int):
         """One Palace invocation. Returns (arrays | None, err | None)."""
-        cfg = _driven_config(mesh, res, spec, tag, fmin, fmax, step, dev)
+        cfg = _driven_config(mesh, res, spec, tag, fmin, fmax, step, dev, tol)
         cfgp = out_data(f"{tag}.json")
         json.dump(cfg, open(cfgp, "w"), indent=2)
         if serialize:
@@ -509,6 +558,7 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
     # correctness nothing.
     mmax, mmin, hair = (_cpu_mesh_preset(topology.name) if fine
                         else _mesh_preset(topology.name, device))
+    tol = FINE_TOL if fine else COARSE_TOL
     if fine:
         if fine_sweep_ghz is not None:
             fmin, fmax, step = fine_sweep_ghz
@@ -528,7 +578,7 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
     tag = (f"{tag_prefix}F_" if fine else f"{tag_prefix}_") + "_".join(
         f"{k}{v:.2f}" for k, v in sorted(params.items()))
     r = run_driven(topology, spec, params, tag, fmin, fmax, step, mmax, mmin, hair,
-                   device=device, np_ranks=np_ranks)
+                   device=device, np_ranks=np_ranks, tol=tol)
     board_len = topology.board_length_mm(spec, **params)
     r["score"] = score(spec, r, board_len)
     r["board_length_mm"] = board_len
