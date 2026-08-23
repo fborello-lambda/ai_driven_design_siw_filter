@@ -77,13 +77,26 @@ def _arc(cx, cy, radius, a0, a1, p, r):
 # 1. Half-mode: the landed cavity cut along y=0, upper half kept.
 # ---------------------------------------------------------------------------
 def halfmode(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
-             y_wall_mm=3.0, **_):
-    """Square cavity bisected by its E-plane symmetry: the y<0 half is gone
-    and that edge is left OPEN (no vias) -- the magnetic-wall boundary the
-    HMSIW technique exploits. Ports stay on the y=0 axis so the feed is on the
-    open edge, which is the standard HMSIW launch."""
+             y_wall_mm=3.0, w_cav_mm=None, **_):
+    """TWO half-mode TE101 cells in series, sharing a coupling iris.
+
+    IMPORTANT -- this is not a cut of the dual-mode cavity, and the first
+    attempt that was got a decisive negative result worth recording. HMSIW
+    works by cutting on a plane where E is MAXIMUM, which behaves as a
+    magnetic wall. The dual-mode cavity runs on TE102/TE201, whose field goes
+    as sin(2*pi*y/a): its centre plane is a NULL, i.e. an ELECTRIC wall.
+    Cutting there and leaving it open imposes the opposite boundary condition
+    to the one the mode wants, and the resonance is destroyed -- measured
+    S21 = -37.9 dB with no passband anywhere in 1.5-5 GHz.
+
+    TE101 is the mode whose centre plane IS a field maximum, so that is what
+    gets half-moded here: a_mm is the TOTAL length of the two cells, w_cav_mm
+    the transverse width of the (half) cavity, and the open edge is y=0. Two
+    cells give N=2, matching the dual-mode's order for a fair comparison.
+    """
     Li, r, p = a_mm, d_via_mm / 2.0, p_via_mm
-    top = a_mm / 2.0            # full width of the half-cavity (y: 0 .. top)
+    # transverse width of the half cell; a TE101 half-cell is ~a_cell/2 wide
+    top = w_cav_mm if w_cav_mm is not None else a_mm / 4.0
     vias = []
     # end walls x=0 and x=Li, only the kept half, with the external iris gap
     for o in _segment(w_ext_mm / 2.0, top, p):
@@ -154,8 +167,12 @@ def rhombic(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
         n = max(1, int(round(L / p)))
         for t in np.linspace(0.0, 1.0, n + 1):
             pt = p0 + t * seg
-            # skip vias inside the feed aperture at the on-axis vertices
-            if abs(pt[1]) < gap and abs(abs(pt[0] - cx) - Li / 2.0) < 1e-6:
+            # Open a real feed aperture of +-w_ext/2 at each on-axis vertex.
+            # An earlier version required the via to be EXACTLY at the vertex
+            # to be skipped, so the walls converged into the feed and closed
+            # it: the cavity still resonated (S11 dipped to -17.7dB at
+            # 2.45GHz) but nothing coupled out (S21 = -75dB).
+            if abs(pt[1]) < gap:
                 continue
             vias.append((float(pt[0]), float(pt[1])))
     # tuning vias on the transverse diagonal trim the mode split
@@ -169,19 +186,26 @@ def rhombic(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
 # 4. Quarter-mode: cut along BOTH symmetry planes.
 # ---------------------------------------------------------------------------
 def quartermode(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
-                y_wall_mm=3.0, **_):
-    """Both the y=0 and x=Li/2 symmetry planes cut, keeping one quadrant:
-    ~75% area reduction. Two open edges means noticeably more radiation, so
-    this is the exploratory end of the range -- expect worse IL/Q and judge it
-    on measured numbers, not on the area saving alone."""
-    Li, r, p = a_mm / 2.0, d_via_mm / 2.0, p_via_mm     # half the length too
-    top = a_mm / 2.0
+                y_wall_mm=3.0, w_cav_mm=None, **_):
+    """Two quarter-mode TE101 cells in series: each cell is cut on BOTH of its
+    field-maximum planes, so it keeps one quadrant of a TE101 cavity and
+    radiates from two open edges. The most aggressive in-plane option.
+
+    Built on TE101 for the same reason as halfmode() -- a quarter of the
+    DUAL-MODE cavity would be cutting on nulls, which does not resonate (see
+    that docstring). a_mm is the total length of the two cells; w_cav_mm the
+    transverse width. Expect worse IL and Q than half-mode: two open edges
+    radiate roughly twice as much, so judge it on the measured numbers rather
+    than on the area saving alone."""
+    Li, r, p = a_mm, d_via_mm / 2.0, p_via_mm
+    top = w_cav_mm if w_cav_mm is not None else a_mm / 4.0
     vias = []
+    # fed end walls at both ends, each with a coupling aperture at the open edge
     for o in _segment(w_ext_mm / 2.0, top, p):
-        vias.append((0.0, o))                            # fed end wall only
+        vias.append((0.0, o)); vias.append((Li, o))
     for xv in np.linspace(0.0, Li, max(1, round(Li / p)) + 1):
-        vias.append((xv, top))                           # one side wall
-    # the far end (x=Li) and the y=0 edge are both left open
+        vias.append((xv, top))                           # the one closed side wall
+    # y=0 stays open (magnetic wall); coupling iris between the two cells
     x_iris = x_iris_mm if x_iris_mm is not None else Li / 2.0
     if w_iris_mm is not None:
         for o in _segment(w_iris_mm / 2.0, top - y_wall_mm, p):
@@ -189,9 +213,49 @@ def quartermode(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     return _dedupe(vias, r), {"x_iris": x_iris, "top": top, "Li": Li}
 
 
+# ---------------------------------------------------------------------------
+# 5. Square cavity with a cut corner -- the classic dual-mode perturbation.
+# ---------------------------------------------------------------------------
+def corner_cut(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+               y_wall_mm=3.0, **_):
+    """Square cavity with one corner truncated by a diagonal via row.
+
+    The textbook way to couple a degenerate pair (Hong & Lancaster Ch.10): the
+    45-degree wall is asymmetric with respect to the two orthogonal mode
+    patterns, so it scatters energy between them. w_iris_mm sets how deep the
+    cut is, which is the coupling knob -- no separate internal iris needed.
+
+    Included as the low-risk member of the set: it stays closest to the
+    already-working dual-mode cavity, so it is the one most likely to resonate
+    where expected."""
+    Li, r, p = a_mm, d_via_mm / 2.0, p_via_mm
+    half = a_mm / 2.0
+    cut = max(p, w_iris_mm)          # diagonal cut depth measured along each wall
+    vias = []
+    # end walls with the feed apertures; the x=Li wall must ALSO stop short of
+    # the truncated corner, otherwise it fills back in the corner the diagonal
+    # is supposed to remove.
+    for o in _segment(w_ext_mm / 2.0, half, p):
+        vias.append((0.0, o)); vias.append((0.0, -o))
+        vias.append((Li, -o))
+        if o <= half - cut:
+            vias.append((Li, o))
+    # side walls, stopping short of the truncated corner (+x, +y)
+    for xv in _segment(0.0, Li, p):
+        if not (xv > Li - cut):
+            vias.append((xv, half))
+        vias.append((xv, -half))
+    # the 45-degree corner wall itself
+    n = max(1, int(round(cut * math.sqrt(2) / p)))
+    for t in np.linspace(0.0, 1.0, n + 1):
+        vias.append((Li - cut * (1 - t), half - cut * t))
+    return _dedupe(vias, r), {"cut": cut, "half": half}
+
+
 LAYOUTS = {
     "halfmode": halfmode,
     "circular_cross": circular_cross,
     "rhombic": rhombic,
     "quartermode": quartermode,
+    "corner_cut": corner_cut,
 }

@@ -109,7 +109,7 @@ def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall
 
 
 def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float | None = None,
-               geometry: str | None = None,
+               geometry: str | None = None, w_cav_mm: float | None = None,
                y_wall_mm: float = 3.0,
                d_via_mm: float = D_VIA_MM, p_via_mm: float = P_VIA_MM,
                h_mm: float | None = None, w_ext_mm: float | None = None,
@@ -154,7 +154,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         final, _info = LAYOUTS[geometry](a_mm=a_mm, w_iris_mm=w_iris_mm,
                                          x_iris_mm=x_iris_mm, w_ext_mm=we,
                                          d_via_mm=d_via_mm, p_via_mm=p_via_mm,
-                                         y_wall_mm=y_wall_mm)
+                                         y_wall_mm=y_wall_mm, w_cav_mm=w_cav_mm)
         x_iris = _info.get("x_iris", a_mm / 2.0)
         # Shrink the board onto the actual cavity instead of assuming a full
         # a_mm square. Without this a half-mode cavity keeps a full-height
@@ -163,12 +163,49 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         # when the cavity is entirely on one side of it (half/quarter mode).
         vy = [p[1] for p in final]; vx = [p[0] for p in final]
         margin = 3.0
-        ym_lo = min(0.0, min(vy)) - margin
+        if min(vy) >= 0.0:
+            # Cavity sits entirely above the feed axis => y=0 is an OPEN edge
+            # (half/quarter mode). A real HMSIW board is physically CUT there:
+            # the substrate ends and the dielectric-air step is what sustains
+            # the mode. Extending substrate past it into the Absorbing outer
+            # face instead turns the open edge into a SINK -- measured S11 only
+            # -3.7dB with no resonance anywhere, i.e. the cavity never formed.
+            # Leave just enough substrate to carry the feed trace.
+            ym_lo = -(W / 2.0 + 0.3)
+        else:
+            ym_lo = min(vy) - margin
         ym = max(0.0, max(vy)) + margin       # ym is now the UPPER edge
         Li = max(vx)
         X0, X1 = -Xf, Li + Xf
         Xc0, Xc1 = X0 - sma_len_mm, X1 + sma_len_mm
         half = (ym - ym_lo) / 2.0             # taper flares to the board half-width
+
+    # Taper flare bounds. Symmetric geometries flare to +-half, but half- and
+    # quarter-mode cavities live entirely on one side of the feed axis, so a
+    # symmetric flare would put half the trace OUTSIDE the shrunken substrate
+    # -- which produces dangling faces and an MFEM STable3D abort, not a
+    # graceful error. Flare to the cavity's real extent instead.
+    if geometry is None:
+        ty_lo, ty_hi = -half, half
+    else:
+        _vy = [p[1] for p in final]
+        ty_lo = min(0.0, min(_vy)) if min(_vy) >= 0.0 else min(_vy)
+        ty_hi = max(_vy)
+        ty_lo = max(ty_lo, ym_lo + 0.5)      # stay inside the board
+        ty_hi = min(ty_hi, ym - 0.5)
+
+    # Top-metal window. For a normal cavity the ground plane spans the whole
+    # board, but a fractional-mode (half/quarter) cavity must NOT have metal
+    # past its open edge: substrate with PEC top AND bottom is a parallel-plate
+    # stub, and here it ran straight into the Absorbing outer face, so the
+    # cavity could never store energy (measured S11 only -7.7dB, S21 -84dB, no
+    # resonance). The open edge needs the top metal to stop with the cavity.
+    if geometry is None:
+        top_y_lo, top_y_hi = ym_lo, ym
+    else:
+        _vy2 = [p[1] for p in final]
+        top_y_lo = min(_vy2) - p_via_mm if min(_vy2) < 0 else 0.0
+        top_y_hi = max(_vy2) + p_via_mm
 
     y_span = ym - ym_lo
 
@@ -190,8 +227,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     # sitting within this flared footprint (copper overhangs the solid part
     # of the wall). ----
     def trace_surface(x_in: float, x_taper: float, x_siw: float) -> int:
-        pts = [(x_in, +W / 2), (x_taper, +W / 2), (x_siw, +half),
-               (x_siw, -half), (x_taper, -W / 2), (x_in, -W / 2)]
+        pts = [(x_in, +W / 2), (x_taper, +W / 2), (x_siw, ty_hi),
+               (x_siw, ty_lo), (x_taper, -W / 2), (x_in, -W / 2)]
         tags = [occ.addPoint(px, py, h) for px, py in pts]
         lines = [occ.addLine(tags[i], tags[(i + 1) % len(tags)]) for i in range(len(tags))]
         return occ.addPlaneSurface([occ.addCurveLoop(lines)])
@@ -311,8 +348,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         gmsh.model.addPhysicalGroup(3, sma_diel, tag=3, name="sma_ptfe")
 
     def _outline(x_in, x_taper, x_siw):
-        return np.array([(x_in, +W / 2), (x_taper, +W / 2), (x_siw, +half),
-                         (x_siw, -half), (x_taper, -W / 2), (x_in, -W / 2)])
+        return np.array([(x_in, +W / 2), (x_taper, +W / 2), (x_siw, ty_hi),
+                         (x_siw, ty_lo), (x_taper, -W / 2), (x_in, -W / 2)])
     # Ground pour counts as copper for face classification, exactly like the
     # trace -- both are PEC sheets at z=h, just electrically distinct nets.
     trace_polys = [_outline(X0, -Lt, 0.0), _outline(X1, Li + Lt, Li)] + gnd_polys
@@ -379,7 +416,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         elif not with_sma and _near(cx, X1) and xmax - xmin < 1e-3:
             wave_out.append(tag)
         elif _near(cz, h):
-            if 0.0 - 1e-6 <= cx <= Li + 1e-6:
+            if (0.0 - 1e-6 <= cx <= Li + 1e-6
+                    and top_y_lo - 1e-6 <= cy <= top_y_hi + 1e-6):
                 pec.append(tag)                               # cavity top ground
             elif any(_in_poly(cx, cy, poly) for poly in trace_polys):
                 pec.append(tag)                                # microstrip trace
