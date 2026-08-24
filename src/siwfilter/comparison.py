@@ -25,6 +25,7 @@ Run:  siw compare                      # cached, instant
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 
@@ -116,16 +117,41 @@ def _cache_path(tag: str) -> str:
     return os.path.join(d, f"{tag}.npz")
 
 
-def load_case(tag: str) -> dict | None:
+def _params_key(params: dict) -> str:
+    """Stable fingerprint of the geometry a cached curve belongs to."""
+    items = sorted((k, round(v, 6) if isinstance(v, float) else v)
+                   for k, v in params.items())
+    return hashlib.sha1(repr(items).encode()).hexdigest()[:16]
+
+
+def load_case(tag: str, params: dict | None = None) -> dict | None:
+    """Cached S-params for `tag`, but ONLY if they were computed for these
+    same parameters.
+
+    The cache is keyed by tag, and several tags (n2_real_sma, n2_ideal_port)
+    take their geometry from whatever the latest `siw design` run produced.
+    Re-tuning the dual-mode cavity therefore changes what those tags MEAN
+    while leaving the tag itself identical -- so a tag-only cache would
+    silently plot the pre-retune curves under the retuned design's label,
+    which is exactly the kind of error a comparison figure must not make.
+    """
     p = _cache_path(tag)
     if not os.path.exists(p):
         return None
     z = np.load(p)
+    if params is not None:
+        want = _params_key(params)
+        got = str(z["params_key"]) if "params_key" in z else None
+        if got != want:
+            print(f"  cache for {tag} is stale (geometry changed) -> recomputing",
+                  flush=True)
+            return None
     return {"ok": True, "f": z["f"], "s11_db": z["s11"], "s21_db": z["s21"]}
 
 
-def save_case(tag: str, r: dict) -> None:
-    np.savez(_cache_path(tag), f=r["f"], s11=r["s11_db"], s21=r["s21_db"])
+def save_case(tag: str, r: dict, params: dict | None = None) -> None:
+    np.savez(_cache_path(tag), f=r["f"], s11=r["s11_db"], s21=r["s21_db"],
+             params_key=_params_key(params or {}))
 
 
 def compute_case(tag: str, case: dict, device: str = "auto") -> dict:
@@ -135,7 +161,7 @@ def compute_case(tag: str, case: dict, device: str = "auto") -> dict:
     r = run_driven(topo, spec, case["params"], f"cmpq_{tag}", fmin, fmax, step,
                    mmax, mmin, hair, device=device)
     if r.get("ok"):
-        save_case(tag, r)
+        save_case(tag, r, case["params"])
     return r
 
 
@@ -167,7 +193,7 @@ def run(refresh: bool = False, add_run: str | None = None,
         device: str = "auto", out_name: str = "final_comparison.png") -> dict:
     designs, rows = {}, []
     for tag, case in cases().items():
-        r = None if refresh else load_case(tag)
+        r = None if refresh else load_case(tag, case["params"])
         if r is None:
             print(f"computing {case['label']} ...", flush=True)
             r = compute_case(tag, case, device=device)

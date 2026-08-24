@@ -574,7 +574,14 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
         # filter. 0.9 gives ~650 MHz, comfortably past a 2x-over-coupled design.
         # Costs ~1.6x the frequency points per eval; the alternative is
         # optimizing against an artefact.
-        fmin, fmax, step = fw0 - 0.9 * (fw1 - fw0), fw1 + 0.9 * (fw1 - fw0), 0.02
+        # SIW_COARSE_STEP lets the speed-vs-fidelity study hand its verdict to
+        # the run that follows. 0.03 measured 2.84x vs the dense mesh at
+        # rho=1.00 rank agreement -- the coarse sweep only has to rank.
+        try:
+            cstep = float(os.environ.get("SIW_COARSE_STEP", "") or 0.02)
+        except ValueError:
+            cstep = 0.02
+        fmin, fmax, step = fw0 - 0.9 * (fw1 - fw0), fw1 + 0.9 * (fw1 - fw0), cstep
     tag = (f"{tag_prefix}F_" if fine else f"{tag_prefix}_") + "_".join(
         f"{k}{v:.2f}" for k, v in sorted(params.items()))
     r = run_driven(topology, spec, params, tag, fmin, fmax, step, mmax, mmin, hair,
