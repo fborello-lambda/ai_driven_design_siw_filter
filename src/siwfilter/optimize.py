@@ -47,11 +47,12 @@ DualModeTopology.calibrate().
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import shutil
 import subprocess
-import time
 
 import numpy as np
 
@@ -347,10 +348,24 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
     }
 
 
-def _wait_for_free_palace():
-    while subprocess.run(["pgrep", "-f", "palace-x86_64.bin"],
-                         capture_output=True).returncode == 0:
-        time.sleep(10)
+@contextlib.contextmanager
+def _palace_lock():
+    """Real, atomic cross-process mutex around one Palace invocation.
+
+    A pgrep-based poll (what this replaced) is not a lock: two independent
+    processes can both observe "nothing running" in the same gap and launch
+    together, briefly sharing the one 6GB GPU -- exactly the situation an
+    ad-hoc wideband sanity sweep run alongside the main optimizer creates
+    (both call run_driven independently). fcntl.flock on a shared file is a
+    real kernel-level mutex: the second caller BLOCKS in the open syscall
+    until the first releases it, with no polling gap to race through."""
+    lock_path = out_data(".palace.lock")
+    with open(lock_path, "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
@@ -405,8 +420,6 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
         cfg = _driven_config(mesh, res, spec, tag, fmin, fmax, step, dev, tol)
         cfgp = out_data(f"{tag}.json")
         json.dump(cfg, open(cfgp, "w"), indent=2)
-        if serialize:
-            _wait_for_free_palace()
         env = dict(os.environ, PATH=f"{os.path.dirname(palace)}:{os.environ['PATH']}")
         if dev == "GPU":
             # See GPU_ENV: disables MFEM's pooled (Umpire) device allocator,
@@ -415,9 +428,23 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
         logp = out_data(f"{tag}.log")
         # Stale results from a previous attempt would look like a success.
         shutil.rmtree(out_data(f"postpro/{tag}"), ignore_errors=True)
-        subprocess.run([palace, "-np", str(ranks), os.path.basename(cfgp)],
-                       cwd=out_data(""), env=env, stdout=open(logp, "w"),
-                       stderr=subprocess.STDOUT, check=False)
+        # ATOMIC lock, not the pgrep poll: needed once a second, independent
+        # process (e.g. an ad-hoc wideband sanity sweep run alongside the main
+        # optimizer) can also call run_driven -- two pollers can both see
+        # "nothing running" in the same 10s gap and launch together, briefly
+        # sharing the one 6GB GPU. flock blocks in the open syscall with no
+        # such gap. Only guards the invocation itself; meshing/config-writing
+        # above still overlaps freely across processes, which is fine (gmsh
+        # is cheap and single-threaded per call).
+        if serialize:
+            with _palace_lock():
+                subprocess.run([palace, "-np", str(ranks), os.path.basename(cfgp)],
+                               cwd=out_data(""), env=env, stdout=open(logp, "w"),
+                               stderr=subprocess.STDOUT, check=False)
+        else:
+            subprocess.run([palace, "-np", str(ranks), os.path.basename(cfgp)],
+                           cwd=out_data(""), env=env, stdout=open(logp, "w"),
+                           stderr=subprocess.STDOUT, check=False)
         csvp = out_data(f"postpro/{tag}/port-S.csv")
         if not os.path.exists(csvp):
             return None, "no csv"
