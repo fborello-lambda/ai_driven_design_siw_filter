@@ -543,9 +543,124 @@ def _to_dict(order: list[str], x: list[float]) -> dict:
     return {k: round(float(v), 3) for k, v in zip(order, x)}
 
 
+#: Ultra-coarse mesh for the f0-only screen -- deliberately coarser than the
+#: coarse SEARCH mesh, not the same one. Meshing/assembly, not per-frequency
+#: solves, dominates an eval's cost here (measured: loosening solver tolerance
+#: 10,000x bought only 1.23x -- see COARSE_TOL's comment). A single-frequency
+#: solve on the coarse search mesh would therefore roughly DOUBLE the time for
+#: every design that passes screening, since meshing gets paid twice. Screening
+#: only pays for itself if it is cheap even when a design passes, which means
+#: its own, cheaper mesh.
+#: h_air_factor=3.0, NOT the original 1.5. Found by diagnosis, not guessed:
+#: the original preset measured the LANDED dual-mode design's own peak S21 at
+#: -2.79dB against a real (dense-mesh) -1.41dB -- a 1.38dB systematic error
+#: that would have rejected the best design this project has, on a meshing
+#: artefact. Isolated to h_air (too-thin air box interacting badly with the
+#: absorbing boundary, not mesh_max/mesh_min): raising it alone to 3.0 closed
+#: most of the gap (-2.01dB, only 0.60dB off). For reference, the coarse
+#: SEARCH mesh (2.5/0.35/2.0, h_air=2.0, already trusted all session on
+#: rho=1.00 rank correlation) measures -2.32dB on the SAME design -- i.e.
+#: this cheaper screen mesh is now MORE accurate than the mesh already being
+#: trusted to rank the real search, while costing ~126s vs ~185-230s.
+SCREEN_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
+    "dualmode": (3.5, 0.5, 3.0),
+    "corner_cut": (3.5, 0.5, 3.0),
+    "circular_cross": (3.5, 0.5, 3.0),
+    "rhombic": (3.5, 0.5, 3.0),
+}
+SCREEN_TOL = 1e-4          # pass/fail only -- see COARSE_TOL's accuracy table
+S11_SCREEN_DB = -10.0      # user-specified: reject anything worse than this
+#: S21 floor, in THIS SCREEN MESH'S OWN units -- not the dense-mesh dielectric
+#: floor scaled by a multiplier. That approach was tried first and abandoned:
+#: it assumes the screen mesh measures true IL, which it does not (see
+#: SCREEN_MESH_PRESETS). Calibrated instead against what the screen mesh
+#: itself reports for known designs: the landed dual-mode design (real IL
+#: -1.41dB) reads -2.01dB here; a deliberately broken design (via fence with
+#: no real coupling) reads -57 to -65dB. -6.0dB sits with several dB of
+#: margin above every real design measured this session and far below any
+#: catastrophic one -- loose enough that a genuinely working but imperfectly
+#: tuned design (this session's worst confirmed geometry, rhombic, real IL
+#: -5.04dB) is NOT rejected outright, since the point of tomorrow's
+#: structural search is to let the real optimizer refine imperfect starts,
+#: not to pre-judge them on one point.
+S21_SCREEN_FLOOR_DB = -6.0
+#: Screen over a short WINDOW around f0, not a single point at it. A single
+#: point failed on the very first test: the landed dual-mode design (S11
+#: -16dB, real peak IL -1.41dB) measured S21(f0)=-2.99dB and was WRONGLY
+#: rejected, because its two-pole response has a genuine dip near f0 between
+#: the TE102/TE201 poles, and f0 landed almost exactly in that dip. A design
+#: mid-search is also routinely 20-50MHz off-centre (that IS what the search
+#: is looking for), so a single point conflates "not centred yet" with "bad".
+#: Using the BEST point across a handful of samples in the fit window answers
+#: the question a screen should ask -- "is there a usable resonance anywhere
+#: near where we want one" -- without the false-reject risk. The window and
+#: point count come from the mesh being shared: solve cost is dominated by
+#: meshing/assembly (COARSE_TOL's finding), so 5 points cost barely more than 1.
+SCREEN_WINDOW_FBW_MULT = 1.5   # same half-width as _fit_window_ghz
+#: Frequency STEP, not a fixed point count. A first version used 5 points
+#: spread across the window (~80 MHz apart) and STILL failed the landed
+#: dual-mode design (best S21 in-window -2.79dB) -- a two-pole response can
+#: have both poles narrower than that spacing, so 5 points can straddle the
+#: whole passband without ever landing near a peak. 20 MHz matches the coarse
+#: search's own resolution; it is affordable because the screen mesh is far
+#: coarser than the search mesh, so solve cost stays small even with ~16-20
+#: points (see IL_HEADROOM's docstring for the "meshing dominates" finding
+#: that makes MORE points nearly free once you're already paying for one).
+SCREEN_STEP_GHZ = 0.02
+
+
+def dielectric_il_db(spec: FilterSpec) -> float:
+    """Theoretical midband insertion loss from DIELECTRIC loss alone (Hong &
+    Lancaster's coupled-resonator loss formula, IL_dB = 4.343*sum(g_i)/(FBW*Qu)
+    with Qu = 1/tan_d). Conductor/via/leakage loss is ignored, so this is an
+    OPTIMISTIC floor -- a real SIW design costs several times over (measured
+    this session: 2.65x-3.84x for the four working geometries).
+
+    NOT used to set the screen's threshold (S21_SCREEN_FLOOR_DB is calibrated
+    directly against the screen mesh's own readings instead -- see that
+    constant's docstring for why: the screen mesh does not measure true IL,
+    so scaling a true-IL-space number was the wrong space to threshold in).
+    Kept as a reference/reporting figure and for anyone re-deriving the floor
+    with a different substrate or filter order.
+    """
+    g = chebyshev_g(spec.N, spec.ripple_db)
+    return 4.343 * float(np.sum(g[1:spec.N + 1])) * spec.substrate.tan_d / spec.FBW
+
+
+def screen_at_f0(topology: Topology, spec: FilterSpec, params: dict, tag: str,
+                 device: str = "auto", np_ranks: int = CPU_NP) -> dict:
+    """Cheap, ultra-coarse-mesh pass/fail check over a short window around f0,
+    BEFORE spending a full coarse sweep on a design that cannot possibly work.
+
+    Reject if the BEST S11 anywhere in the window is worse than S11_SCREEN_DB,
+    OR the BEST S21 anywhere in the window is worse than the calibrated
+    dielectric-loss floor (IL_HEADROOM). "Best anywhere in a wide window"
+    deliberately gives a mistuned or double-humped design every chance to
+    show a usable point -- see SCREEN_POINTS for why a single point at
+    exactly f0 is the wrong check.
+    """
+    mmax, mmin, hair = SCREEN_MESH_PRESETS.get(
+        topology.name, _mesh_preset(topology.name, "GPU"))
+    fw0, fw1 = _fit_window_ghz(spec)
+    half = SCREEN_WINDOW_FBW_MULT * (fw1 - fw0) / 2.0
+    f0 = spec.f0 / 1e9
+    fmin, fmax = f0 - half, f0 + half
+    r = run_driven(topology, spec, params, tag, fmin, fmax, SCREEN_STEP_GHZ,
+                   mmax, mmin, hair,
+                   device=device, np_ranks=np_ranks, tol=SCREEN_TOL)
+    if not r.get("ok"):
+        return {"pass": False, "err": r.get("err"), "s11_best": None, "s21_best": None}
+    s11_best, s21_best = float(np.min(r["s11_db"])), float(np.max(r["s21_db"]))
+    il_thresh = S21_SCREEN_FLOOR_DB
+    ok = (s11_best <= S11_SCREEN_DB) and (s21_best >= il_thresh)
+    return {"pass": ok, "s11_best": s11_best, "s21_best": s21_best,
+           "il_thresh": il_thresh, "device": r.get("device")}
+
+
 def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = False,
             tag_prefix: str = "opt", device: str = "auto", np_ranks: int = CPU_NP,
-            fine_sweep_ghz: tuple[float, float, float] | None = None) -> dict:
+            fine_sweep_ghz: tuple[float, float, float] | None = None,
+            screen: bool = True) -> dict:
     device = resolve_device(device, topology.name)
     fw0, fw1 = _fit_window_ghz(spec)
     # Coarse search runs the GPU mesh (fast, and validated for every dual-mode
@@ -584,9 +699,22 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
         fmin, fmax, step = fw0 - 0.9 * (fw1 - fw0), fw1 + 0.9 * (fw1 - fw0), cstep
     tag = (f"{tag_prefix}F_" if fine else f"{tag_prefix}_") + "_".join(
         f"{k}{v:.2f}" for k, v in sorted(params.items()))
+    board_len = topology.board_length_mm(spec, **params)
+
+    # Screen only the COARSE search, never the fine confirm -- the confirm's
+    # whole purpose is to re-check a design the screen and the coarse search
+    # already approved, on a mesh dense enough that the screen's own coarser
+    # mesh would be the wrong tool for the job.
+    if screen and not fine:
+        s = screen_at_f0(topology, spec, params, f"scr_{tag}", device=device,
+                         np_ranks=np_ranks)
+        if not s["pass"]:
+            return {"ok": False, "err": f"screened out: {s.get('err') or s}",
+                   "screened": True, "score": 1e9, "board_length_mm": board_len,
+                   "s11_screen": s.get("s11_best"), "s21_screen": s.get("s21_best")}
+
     r = run_driven(topology, spec, params, tag, fmin, fmax, step, mmax, mmin, hair,
                    device=device, np_ranks=np_ranks, tol=tol)
-    board_len = topology.board_length_mm(spec, **params)
     r["score"] = score(spec, r, board_len)
     r["board_length_mm"] = board_len
     return r
@@ -641,6 +769,7 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
 
     warm = {**fixed, **{k: free[k][0] for k in order}}
     n = 0
+    n_screened = 0
     r = evaluate(topology, spec, warm, fine=False, tag_prefix=f"opt{topology.name}",
                 device=device, np_ranks=np_ranks)
     n += 1; log_row(n, warm, r)
@@ -656,11 +785,16 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
         n += 1; log_row(n, p, r)
         opt.tell(x, r["score"])
         tag = "*" if r["score"] < best["score"] - 1e-4 else " "
-        print(f"[{n}]{tag} {p} -> score={r['score']:.3f} (best {min(best['score'], r['score']):.3f})")
+        scr = " [screened]" if r.get("screened") else ""
+        print(f"[{n}]{tag} {p} -> score={r['score']:.3f} "
+              f"(best {min(best['score'], r['score']):.3f}){scr}")
+        if r.get("screened"):
+            n_screened += 1
         if r["score"] < best["score"] - 1e-4:
             best_p, best = p, r
 
-    print(f"\n=== GP SEARCH DONE after {n} evals === best(coarse)={best['score']:.3f} {best_p}")
+    print(f"\n=== GP SEARCH DONE after {n} evals ({n_screened} screened out before a "
+          f"full sweep) === best(coarse)={best['score']:.3f} {best_p}")
 
     def _report(kind: str, r: dict) -> str:
         # A failed confirm must not take the whole run down with it: the
