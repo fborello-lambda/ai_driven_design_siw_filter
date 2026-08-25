@@ -1,4 +1,4 @@
-# Structural-variant exploration: two rounds (2026-08-25)
+# Structural-variant exploration (2026-08-25, updated after deadline extension)
 
 Task #31, user request: don't just re-tune existing knobs (task #29 already did
 that) -- add genuinely **new structural parameters** to each geometry, verify
@@ -101,41 +101,87 @@ converged toward `y_wall` near its upper bound (40mm) and BW in the
 Bayesian search could not fix within the explored ranges, not a fluke of one
 run.
 
-**circular_cross_nvia** is the one genuinely new result: n_perturb=2 (extra
-vias at the cross-arm tips, as opposed to ring2's inner arc) passed phase A
-at two different w_ext values, unlike every other circular_cross variant.
-This shows the family isn't uniformly dead -- the specific perturbation
-mechanism matters, not just "circular_cross + some external tuning". Phase B
-result: *(pending -- see status note below)*.
+**circular_cross_nvia** looked like the one genuinely new result -- n_perturb=2
+passed phase A at two different w_ext values, unlike every other
+circular_cross variant. But phase B (a real 4D Bayesian coupling search with
+n_perturb=2 fixed) came back **completely empty**: all 8 evaluated points
+returned `fc=0` -- no resonance anywhere in the fit window, not just a bad
+score. The phase-A pass was a fragile coincidence at the exact
+parent-inherited cavity dimensions (a=67, w_iris=16, y_wall=24); moving any
+of those even slightly collapses the resonance entirely. The search's own
+warm-start point (the un-searched parent defaults) was the only thing that
+resonated at all, at **score=20.34** -- confirmed via FINE/FAB-TOLERANCE, and
+still far worse than both baselines.
 
-## Bottom line (interim, pending final nvia phase-B result)
+## Round-1+2 verdict: all 4 original structural variants fail
 
-Across both rounds, every structural variant that reached phase B (4 of 5
-completed at time of writing) scored **worse than both `corner_cut`'s own
-coupling-sweep best (11.65) and dual-mode (9.31)** -- often by 2x or more.
-None is a drop-in improvement over its own parent, let alone a genuine new
-top-4 candidate:
+| candidate | best confirmed score | vs corner_cut (11.65) | vs dual-mode (9.31) | failure mode |
+|---|---|---|---|---|
+| `corner_cut_2corner` | 15.44 | worse | worse | structural over-coupling, BW~505MHz regardless of w_ext |
+| `rhombic_2diag` | 23.66 (best of 3: 25.58/23.66/29.65) | worse | worse | over-wide BW (250-560MHz), y_wall pinned at range boundary |
+| `circular_cross_ring2` | -- (eliminated, 0/12) | n/a | n/a | inverse match/IL trade-off across the whole w_ext range |
+| `circular_cross_nvia` | 20.34 (parent defaults; search found nothing better) | worse | worse | phase-A pass was a fragile coincidence, collapses under any real coupling search |
 
-- `corner_cut_2corner`: 15.435 -- over-couples structurally, BW ~505MHz vs
-  spec's target width, independent of w_ext.
-- `rhombic_2diag` (×2 confirmed, ×1 pending): 25.58, 23.66 -- large,
-  over-wide bandwidth (up to 560MHz), y_wall pinned at its range boundary.
-- `circular_cross_ring2`: eliminated outright, inverse match/IL trade-off
-  across the whole w_ext range.
-- `circular_cross_nvia`: only phase-A-passing family member; phase-B result
-  pending.
+**None of the four beats its own parent, let alone dual-mode.** Each adds a
+coupling *path* (extra vias, inner ring, second corner cut, second diagonal
+iris) without fixing the underlying bandwidth/Q mismatch -- they mostly just
+relocate where the over-coupling happens. A literature search (see below)
+confirms this isn't a search-budget problem: no published dual-mode SIW
+design offers a shortcut around EM-tuning either.
 
-The honest read: the four new structural mechanisms tried this round (extra
-vias, inner ring, second corner cut, second diagonal iris) each add a
-coupling **path**, but none of them fixes the underlying bandwidth/Q
-mismatch that keeps these geometries away from dual-mode's tight, well-behaved
-response -- they mostly just relocate where the over-coupling happens. This
-argues the gap to dual-mode is more fundamental than any single added knob
-in this family of variants, consistent with task #29's taper-launch
-hypothesis for circular_cross/rhombic specifically, and with corner_cut's
-structural (not tunable) over-coupling for the 2-corner variant.
+## Literature search: no closed-form shortcut exists
 
-*(This document will be updated with `circular_cross_nvia`'s final phase-B
-score once that run completes, and a final ranked verdict on whether any of
-the 4 candidates warrants adoption over the existing top-3 non-dual-mode
-designs from task #29.)*
+Dispatched a search for published SIW dual-mode designs with more
+predictable perturbation-to-coupling equations, and for treatments of the
+taper/launch problem for a non-flat-wall cavity. Result: **no closed-form
+k(perturbation) equation exists in the accessible literature** -- every
+dual-mode SIW paper found (hexagonal source-load coupling, slot-line
+perturbation, interdigital mixed coupling) extracts k the same way this
+project does: simulate, split the degenerate pair, `k=(f2^2-f1^2)/(f2^2+f1^2)`.
+Two promising papers (the hexagonal-cavity source-load paper, PMC4032748;
+a 2024 combined magnetic-electric perturbation paper) were access-blocked
+(recaptcha / 403) beyond their abstracts. The taper/non-flat-wall launch
+question is unaddressed in every paper found -- likely because published
+designs use rectangular or hexagonal cavities with flat walls to feed into,
+sidestepping the problem this project's circular/rhombic cavities actually
+have. **Conclusion: pursuing a "more predictable" alternative topology is not
+worthwhile; the taper-launch fix remains the most concrete untested lever,
+precisely because the literature is silent on it, not because it's
+validated.**
+
+## New geometry: `circular_cross_taper` -- testing the launch-fix hypothesis directly
+
+Implemented in `geometries.py`: circular_cross with a short FLAT launch
+facet at each feed aperture (parameter `wf_mm`, the facet's extra half-height
+beyond the w_ext gap edge) replacing the tangent point the plain circular
+fence feeds through -- giving the Deslandes taper an actual wall to flare
+onto (`TAPER_TO_WALL["circular_cross_taper"] = True`). `wf_mm<=0` delegates
+straight to `circular_cross` (regression-verified byte-identical via list).
+A short horizontal via row closes the step between the flat facet and where
+the circular fence naturally resumes. DRC-clean (2.67mm min separation vs
+2.0mm required at wf_mm=8) and meshes cleanly (ports=(1,1), 142k-172k tets,
+under GPU_MAX_TETS) -- registered in `LAYOUTS`, `GPU_MESH_PRESETS`,
+`SCREEN_MESH_PRESETS`, and `_SPACES` (same coupling box as
+circular_cross_ring2/nvia).
+
+Phase-A screen at the parent's known coupling params (a=67, w_iris=16,
+y_wall=24, w_ext=20.7), sweeping `wf_mm`:
+
+| wf_mm | S11 | S21 | pass |
+|---|---|---|---|
+| 4.0  | **-12.68 dB** | -1.84 dB | yes |
+| 8.0  | -10.06 dB | -2.05 dB | yes |
+| 14.0 | -8.05 dB  | -2.46 dB | no |
+
+This is the first result across the entire structural exploration (both
+rounds) to **break circular_cross's hard ~-4dB match ceiling** -- confirming
+the coupling-sweep doc's taper-less-launch hypothesis was correct. The trend
+is non-monotonic and favors *smaller* facets (a bigger facet perturbs the
+circle's shape more, degrading the degenerate-mode balance) -- a finer sweep
+below wf_mm=4 is in progress to locate the actual optimum before committing
+phase-B budget.
+
+*(This document will be updated with the finer wf_mm sweep and
+circular_cross_taper's full phase-B score once available -- the same
+screen-vs-full-score gap documented for corner_cut_2corner means this
+phase-A win is encouraging but not yet a confirmed result.)*
