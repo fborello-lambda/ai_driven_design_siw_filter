@@ -126,6 +126,7 @@ def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall
 TAPER_TO_WALL: dict[str, bool] = {
     "corner_cut": True,
     "circular_cross": False,
+    "circular_cross_taper": True,  # adds a flat facet at the feed -- see geometries.py
     "rhombic": False,
     "halfmode": True,
     "quartermode": True,

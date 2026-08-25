@@ -98,6 +98,16 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "y_wall": (24.0, 12.0, 32.0),
         "w_ext":  (20.7, 14.0, 26.0),
     },
+    # 2026-08-25, second pass: adds a flat launch facet (wf_mm, fixed per run
+    # by explore_taper.py, not searched here) instead of another internal
+    # perturbation -- tests the coupling-sweep doc's taper-less-launch
+    # hypothesis directly. Same coupling box as circular_cross_ring2/nvia.
+    "circular_cross_taper": {
+        "a":      (67.0, 63.0, 71.0),
+        "w_iris": (16.0, 8.0, 24.0),
+        "y_wall": (24.0, 12.0, 32.0),
+        "w_ext":  (20.7, 14.0, 26.0),
+    },
     "corner_cut_2corner": {
         "a":      (59.4, 56.0, 63.0),
         "w_iris": (5.0, 3.0, 14.0),      # the SECOND cut adds coupling too, so

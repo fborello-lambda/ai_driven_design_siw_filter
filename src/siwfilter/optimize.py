@@ -149,6 +149,11 @@ GPU_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "circular_cross_ring2": (2.5, 0.35, 2.0),
     "corner_cut_2corner": (2.5, 0.35, 2.0),
     "rhombic_2diag": (2.5, 0.35, 2.0),
+    # circular_cross_taper (2026-08-25 round 2): 172140 tets at box upper
+    # bound (a=71,w_iris=24,y_wall=32,w_ext=26,wf_mm=10) -- still under
+    # GPU_MAX_TETS but closer to it than the other variants (the facet +
+    # connector vias add mesh detail), so the parent's preset still applies.
+    "circular_cross_taper": (2.5, 0.35, 2.0),
     # cascade's GPU-viable mesh is NOT yet established -- its CPU preset is
     # already much coarser and its DOF count far higher (196 vias vs 78). Fall
     # back to the CPU preset and let it fail loudly rather than silently
@@ -615,6 +620,7 @@ SCREEN_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "circular_cross_ring2": (3.5, 0.5, 3.0),
     "corner_cut_2corner": (3.5, 0.5, 3.0),
     "rhombic_2diag": (3.5, 0.5, 3.0),
+    "circular_cross_taper": (3.5, 0.5, 3.0),  # 159327 tets at box upper bound
 }
 SCREEN_TOL = 1e-4          # pass/fail only -- see COARSE_TOL's accuracy table
 S11_SCREEN_DB = -10.0      # user-specified: reject anything worse than this

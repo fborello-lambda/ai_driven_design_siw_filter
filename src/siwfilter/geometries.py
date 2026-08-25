@@ -345,6 +345,54 @@ def circular_cross_ring2(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_m
     return _dedupe(list(vias) + ring, r), {**info, "R2": R2}
 
 
+def circular_cross_taper(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+                         y_wall_mm=3.0, wf_mm=0.0, **_):
+    """circular_cross with a short FLAT launch facet at each feed aperture,
+    replacing the tangent point circular_cross feeds through with an actual
+    wall the Deslandes taper can flare onto -- see TAPER_TO_WALL in
+    palace_dualmode_driven.py for why the plain circular fence gets no taper
+    at all (a flare needs a flat wall of the right width to land on; a curve
+    only touches the feed axis at one point). This is the direct test of the
+    coupling-sweep doc's hypothesis that the taper-less launch, not the
+    internal perturbation, is what caps circular_cross's achievable match.
+
+    The facet is a flat wall at x=0/x=a_mm spanning y in [w_ext/2, w_ext/2+wf]
+    (mirrored to -y), same pattern as the standard end-wall in
+    palace_dualmode_driven._via_layout. The circular fence resumes from
+    wherever it naturally reaches that same y, with a short horizontal via
+    row closing the step between the flat facet and the resumed arc (the
+    fence is a discrete via chain already, so this step is no different in
+    kind from the pitch-sized gaps everywhere else in it).
+
+    wf_mm<=0 reproduces circular_cross exactly (delegates directly -- no
+    facet, no connector, byte-identical via list)."""
+    if wf_mm <= 0:
+        return circular_cross(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm,
+                              p_via_mm, y_wall_mm)
+    R, r, p = a_mm / 2.0, d_via_mm / 2.0, p_via_mm
+    cx = R
+    half_gap_lin = w_ext_mm / 2.0
+    yw = min(half_gap_lin + wf_mm, R - p)
+    vias = []
+    for o in _segment(half_gap_lin, yw, p):
+        vias.append((0.0, o)); vias.append((0.0, -o))
+        vias.append((a_mm, o)); vias.append((a_mm, -o))
+    theta_from = math.asin(min(0.99, yw / R))
+    x_from = R - R * math.cos(theta_from)      # where the circle naturally reaches y=+-yw
+    for xv in np.linspace(0.0, x_from, max(1, round(x_from / p)) + 1):
+        vias.append((xv, yw)); vias.append((xv, -yw))
+        vias.append((a_mm - xv, yw)); vias.append((a_mm - xv, -yw))
+    vias += _arc(cx, 0.0, R, theta_from, math.pi - theta_from, p, r)
+    vias += _arc(cx, 0.0, R, math.pi + theta_from, 2 * math.pi - theta_from, p, r)
+    arm_x, arm_y = w_iris_mm / 2.0, y_wall_mm / 2.0
+    for dx in (-arm_x, arm_x):
+        vias.append((cx + dx, 0.0))
+    for dy in (-arm_y, arm_y):
+        vias.append((cx, dy))
+    return _dedupe(vias, r), {"R": R, "cx": cx, "arm_x": arm_x, "arm_y": arm_y,
+                              "wf_mm": wf_mm}
+
+
 def corner_cut_2corner(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
                        y_wall_mm=3.0, n_corners=1, **_):
     """corner_cut with a SECOND truncated corner at (+x,-y) -- mirrors the
@@ -403,6 +451,7 @@ LAYOUTS = {
     "corner_cut": corner_cut,
     "circular_cross_nvia": circular_cross_nvia,
     "circular_cross_ring2": circular_cross_ring2,
+    "circular_cross_taper": circular_cross_taper,
     "corner_cut_2corner": corner_cut_2corner,
     "rhombic_2diag": rhombic_2diag,
 }
