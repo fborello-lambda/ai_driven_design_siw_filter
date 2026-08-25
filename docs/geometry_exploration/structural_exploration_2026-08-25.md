@@ -169,19 +169,29 @@ y_wall=24, w_ext=20.7), sweeping `wf_mm`:
 
 | wf_mm | S11 | S21 | pass |
 |---|---|---|---|
-| 4.0  | **-12.68 dB** | -1.84 dB | yes |
+| 1.0  | **-15.08 dB** | -1.72 dB | yes |
+| 2.0  | -14.84 dB | -1.76 dB | yes |
+| 3.0  | -14.33 dB | -1.87 dB | yes |
+| 4.0  | -12.68 dB | -1.84 dB | yes |
+| 6.0  | -10.53 dB | -2.18 dB | yes |
 | 8.0  | -10.06 dB | -2.05 dB | yes |
 | 14.0 | -8.05 dB  | -2.46 dB | no |
 
 This is the first result across the entire structural exploration (both
 rounds) to **break circular_cross's hard ~-4dB match ceiling** -- confirming
 the coupling-sweep doc's taper-less-launch hypothesis was correct. The trend
-is non-monotonic and favors *smaller* facets (a bigger facet perturbs the
-circle's shape more, degrading the degenerate-mode balance) -- a finer sweep
-below wf_mm=4 is in progress to locate the actual optimum before committing
-phase-B budget.
+is monotonic and clean once swept finely: smaller facets are strictly
+better, with diminishing returns as wf_mm -> 0 (a bigger facet perturbs the
+circle's shape more, degrading the degenerate-mode balance). wf_mm=1.0 is
+the chosen fixed point for phase B -- the gains from 8->4->3->2->1mm shrink
+each step (+2.6, +1.65, +0.5, +0.24 dB), suggesting the curve is
+approaching its asymptote, so going smaller than the tested range is
+unlikely to matter and phase B's coupling search matters more now.
 
-*(This document will be updated with the finer wf_mm sweep and
-circular_cross_taper's full phase-B score once available -- the same
-screen-vs-full-score gap documented for corner_cut_2corner means this
-phase-A win is encouraging but not yet a confirmed result.)*
+Phase B (full v17 score, `optimize()` with wf_mm=1.0 fixed, 18-eval budget):
+*(in progress -- see status note below)*.
+
+*(This document will be updated with circular_cross_taper's full phase-B
+score once available -- the same screen-vs-full-score gap documented for
+corner_cut_2corner means this phase-A win is encouraging but not yet a
+confirmed result.)*
