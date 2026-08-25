@@ -76,6 +76,41 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "y_wall": (37.6, 32.0, 44.0),    # transverse half-diagonal
         "w_ext":  (14.0, 8.0, 24.0),     # floor dropped 12 -> 8, see note above
     },
+    # -------------------------------------------------------------------
+    # Structural variants (2026-08-25). Coupling boxes re-centred on each
+    # PARENT's coupling-only sweep winner (docs/geometry_exploration/
+    # coupling_sweep_*_2026-08-24.md), not the original joint-search box --
+    # that sweep is the better-founded estimate of where the good region is.
+    # The new structural knob (n_perturb/ring2_frac/n_corners/w_iris2) is
+    # NOT part of this space -- see explore_structural.py, which fixes it
+    # per exploration run and only lets skopt search the coupling knobs at
+    # that fixed structural setting.
+    # -------------------------------------------------------------------
+    "circular_cross_nvia": {
+        "a":      (67.0, 63.0, 71.0),
+        "w_iris": (16.0, 8.0, 24.0),
+        "y_wall": (24.0, 12.0, 32.0),
+        "w_ext":  (20.7, 14.0, 26.0),
+    },
+    "circular_cross_ring2": {
+        "a":      (67.0, 63.0, 71.0),
+        "w_iris": (16.0, 8.0, 24.0),
+        "y_wall": (24.0, 12.0, 32.0),
+        "w_ext":  (20.7, 14.0, 26.0),
+    },
+    "corner_cut_2corner": {
+        "a":      (59.4, 56.0, 63.0),
+        "w_iris": (5.0, 3.0, 14.0),      # the SECOND cut adds coupling too, so
+                                         # the single-cut optimum (w_iris=3, the
+                                         # saturation floor) may not still be best
+        "w_ext":  (15.0, 8.0, 22.0),
+    },
+    "rhombic_2diag": {
+        "a":      (75.3, 71.0, 80.0),
+        "w_iris": (7.0, 4.0, 14.0),
+        "y_wall": (35.0, 30.0, 40.0),
+        "w_ext":  (19.7, 12.0, 26.0),
+    },
 }
 
 

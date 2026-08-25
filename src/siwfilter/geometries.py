@@ -274,10 +274,135 @@ def corner_cut(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     return _dedupe(vias, r), {"cut": cut, "half": half}
 
 
+# ---------------------------------------------------------------------------
+# 5. Structural variants (2026-08-25) -- genuinely NEW knobs, not re-tunes of
+# an existing parameter. Requested after the coupling-only sweeps found that
+# re-tuning w_iris/w_ext/y_wall within the existing via-placement logic
+# cannot close the gap to dual-mode for any of the three geometries. Each
+# function here is a small delta on an existing one and reduces to it EXACTLY
+# when the new kwarg is at its default -- so registering these does not
+# change the already-validated originals' behaviour.
+#
+# All four still end in _dedupe(vias, r) with the SAME uniform d_via_mm as
+# every other via in the layout, which is what makes _dedupe's existing
+# fab-rule spacing check sufficient on its own -- no separate DRC validator
+# needed for these, since a per-pair check with mixed diameters was the only
+# case _dedupe doesn't already cover, and none of these introduce a second
+# via size.
+# ---------------------------------------------------------------------------
+def circular_cross_nvia(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+                        y_wall_mm=3.0, n_perturb=1, **_):
+    """circular_cross with a CLUSTER of n_perturb vias at each arm tip instead
+    of a single via -- a wider effective obstacle perturbing more of the
+    mode's field at that point, rather than a stronger perturbation further
+    out (which is what increasing w_iris/y_wall alone already does, and the
+    coupling sweep showed saturates). n_perturb=1 reproduces circular_cross
+    exactly. Cluster vias are laid out transverse to each arm at min_via_
+    centre_sep spacing, which is why this needs no extra DRC check."""
+    vias, info = circular_cross(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm,
+                                p_via_mm, y_wall_mm)
+    if n_perturb <= 1:
+        return vias, info
+    r = d_via_mm / 2.0
+    step = min_via_centre_sep(2.0 * r) * 1.02   # tiny margin over the DRC floor
+    cx = info["cx"]
+    extra = []
+    # arm_x tips (+-arm_x, 0): cluster spreads in y (transverse to the arm)
+    for sx in (-1, 1):
+        x0 = cx + sx * info["arm_x"]
+        for k in range(1, n_perturb):
+            off = step * ((k + 1) // 2) * (1 if k % 2 else -1)
+            extra.append((x0, off))
+    # arm_y tips (0, +-arm_y): cluster spreads in x
+    for sy in (-1, 1):
+        y0 = sy * info["arm_y"]
+        for k in range(1, n_perturb):
+            off = step * ((k + 1) // 2) * (1 if k % 2 else -1)
+            extra.append((cx + off, y0))
+    return _dedupe(list(vias) + extra, r), {**info, "n_perturb": n_perturb}
+
+
+def circular_cross_ring2(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+                         y_wall_mm=3.0, ring2_frac=0.0, ring2_span_deg=90.0, **_):
+    """circular_cross plus a SECOND, inner, PARTIAL via arc at radius
+    ring2_frac*R -- an intra-cavity iris-like obstacle the plain cross
+    perturbation doesn't have. Deliberately a partial arc (ring2_span_deg
+    wide), not a closed ring: a closed inner ring would wall off a smaller
+    sub-cavity and likely kill the intended TE-pair resonance rather than
+    perturb it, the same failure mode documented for half/quarter-mode
+    (wrong boundary condition on the enclosed region). Centred on the x-axis
+    (theta=0), on the same side as the arm_x perturbation, so it reinforces
+    rather than competes with the existing split mechanism.
+    ring2_frac=0 reproduces circular_cross exactly."""
+    vias, info = circular_cross(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm,
+                                p_via_mm, y_wall_mm)
+    if ring2_frac <= 0:
+        return vias, info
+    r = d_via_mm / 2.0
+    R2 = ring2_frac * info["R"]
+    half_span = math.radians(ring2_span_deg) / 2.0
+    ring = _arc(info["cx"], 0.0, R2, -half_span, half_span, p_via_mm, r)
+    return _dedupe(list(vias) + ring, r), {**info, "R2": R2}
+
+
+def corner_cut_2corner(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+                       y_wall_mm=3.0, n_corners=1, **_):
+    """corner_cut with a SECOND truncated corner at (+x,-y) -- mirrors the
+    existing (+x,+y) cut across the feed axis, so the cavity stays symmetric
+    about y=0 (unlike cutting an adjacent corner, which would break that
+    symmetry and likely couple to spurious asymmetric modes). Two equal cuts
+    scatter roughly twice the energy between the mode pair per unit cut
+    depth, which is the direct test of whether corner_cut's IL/match problem
+    is a coupling-STRENGTH shortfall (more cutting helps) or something else
+    entirely (it doesn't). n_corners=1 reproduces corner_cut exactly."""
+    vias, info = corner_cut(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm,
+                            p_via_mm, y_wall_mm)
+    if n_corners <= 1:
+        return vias, info
+    Li, r, p = a_mm, d_via_mm / 2.0, p_via_mm
+    half, cut = info["half"], info["cut"]
+    extra = []
+    for o in _segment(w_ext_mm / 2.0, half, p):
+        if o <= half - cut:
+            extra.append((Li, -o))
+    for xv in _segment(0.0, Li, p):
+        if not (xv > Li - cut):
+            extra.append((xv, -half))
+    n = max(1, int(round(cut * math.sqrt(2) / p)))
+    for t in np.linspace(0.0, 1.0, n + 1):
+        extra.append((Li - cut * (1 - t), -(half - cut * t)))
+    return _dedupe(list(vias) + extra, r), {**info, "n_corners": n_corners}
+
+
+def rhombic_2diag(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+                  y_wall_mm=3.0, w_iris2_mm=0.0, **_):
+    """rhombic plus a SECOND pair of tuning vias on the FEED diagonal (near
+    centre, along x through cx) -- the existing w_iris tuning vias sit only
+    on the transverse diagonal. A second, independent knob on the other
+    diagonal is what the coupling sweep found it structurally lacked: that
+    sweep showed y_wall alone dominates the whole outcome (transverse-
+    diagonal-only story), so this tests whether a feed-axis perturbation can
+    contribute independently rather than being redundant with y_wall.
+    w_iris2_mm=0 reproduces rhombic exactly."""
+    vias, info = rhombic(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm,
+                         p_via_mm, y_wall_mm)
+    if w_iris2_mm <= 0:
+        return vias, info
+    r = d_via_mm / 2.0
+    p, cx = p_via_mm, info["cx"]
+    off = min(cx - p, w_iris2_mm / 2.0)
+    extra = [(cx - off, 0.0), (cx + off, 0.0)]
+    return _dedupe(list(vias) + extra, r), {**info, "w_iris2": w_iris2_mm}
+
+
 LAYOUTS = {
     "halfmode": halfmode,
     "circular_cross": circular_cross,
     "rhombic": rhombic,
     "quartermode": quartermode,
     "corner_cut": corner_cut,
+    "circular_cross_nvia": circular_cross_nvia,
+    "circular_cross_ring2": circular_cross_ring2,
+    "corner_cut_2corner": corner_cut_2corner,
+    "rhombic_2diag": rhombic_2diag,
 }
