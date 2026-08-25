@@ -137,6 +137,18 @@ GPU_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "corner_cut": (2.5, 0.35, 2.0),
     "circular_cross": (2.5, 0.35, 2.0),
     "rhombic": (2.5, 0.35, 2.0),
+    # Structural variants (2026-08-25) -- looked up by exact topology.name, so
+    # a variant name NOT in this dict silently fell through to CPU (found live:
+    # corner_cut_2corner took 600s+ on CPU instead of the expected ~150-170s on
+    # GPU). Measured at each variant's box UPPER bounds with its structural
+    # knob at ITS OWN max value (the biggest board a candidate run can ask
+    # for): circular_cross_nvia 157k, circular_cross_ring2 164k, corner_cut_
+    # 2corner 139k, rhombic_2diag 138k tets on this exact preset -- all safely
+    # under GPU_MAX_TETS, so the parent's preset applies unchanged.
+    "circular_cross_nvia": (2.5, 0.35, 2.0),
+    "circular_cross_ring2": (2.5, 0.35, 2.0),
+    "corner_cut_2corner": (2.5, 0.35, 2.0),
+    "rhombic_2diag": (2.5, 0.35, 2.0),
     # cascade's GPU-viable mesh is NOT yet established -- its CPU preset is
     # already much coarser and its DOF count far higher (196 vias vs 78). Fall
     # back to the CPU preset and let it fail loudly rather than silently
@@ -594,6 +606,15 @@ SCREEN_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "corner_cut": (3.5, 0.5, 3.0),
     "circular_cross": (3.5, 0.5, 3.0),
     "rhombic": (3.5, 0.5, 3.0),
+    # Structural variants (2026-08-25) -- see the matching note in
+    # GPU_MESH_PRESETS: a variant name absent from this dict also falls
+    # through silently (to _mesh_preset()'s own "no GPU-validated preset"
+    # path, which is the CPU preset). Measured under 176k tets for all four
+    # at their box upper bounds -- see GPU_MESH_PRESETS's note for numbers.
+    "circular_cross_nvia": (3.5, 0.5, 3.0),
+    "circular_cross_ring2": (3.5, 0.5, 3.0),
+    "corner_cut_2corner": (3.5, 0.5, 3.0),
+    "rhombic_2diag": (3.5, 0.5, 3.0),
 }
 SCREEN_TOL = 1e-4          # pass/fail only -- see COARSE_TOL's accuracy table
 S11_SCREEN_DB = -10.0      # user-specified: reject anything worse than this
