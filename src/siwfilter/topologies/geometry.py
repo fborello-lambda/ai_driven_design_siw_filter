@@ -93,6 +93,8 @@ class GeometryTopology:
     def param_space(self, spec: FilterSpec) -> dict[str, ParamRange]:
         return dict(_SPACES[self.name])
 
+    _LAYOUT_KNOWN_KEYS = {'a_mm','w_iris_mm','x_iris_mm','w_ext_mm','d_via_mm','p_via_mm','y_wall_mm','w_cav_mm'}
+
     def _kw(self, params: dict) -> dict:
         p = dict(params)
         kw = dict(
@@ -111,6 +113,19 @@ class GeometryTopology:
         for k, v in TAOGLAS_SMA.items():   # real connector by default
             kw.setdefault(k, v)
         return kw
+
+    def _extra(self, kw: dict) -> dict:
+        """NEW structural knobs (per-arm via count, second ring, cut angle,
+        etc.) present in kw but not one of the standard params LAYOUTS calls
+        already pass by name. Mesh/SMA/device settings also land here but are
+        harmless: every layout function's signature ends in **_, so passing
+        them through is a no-op for layouts that don't declare the key --
+        this is what lets a brand new structural parameter reach a layout
+        function without editing every call site that invokes LAYOUTS."""
+        skip = self._LAYOUT_KNOWN_KEYS | {
+            "with_sma", "w_ms_mm", "mesh_max", "mesh_min", "h_air_factor"}
+        return {k: v for k, v in kw.items()
+               if k not in skip and not k.startswith(("sma_", "gnd_"))}
 
     def build_mesh(self, spec: FilterSpec, out_name: str, **params) -> MeshResult:
         res = _build_mesh(geometry=self.name, out_name=out_name, show=False,
@@ -135,7 +150,7 @@ class GeometryTopology:
             a_mm=kw["a_mm"], w_iris_mm=kw["w_iris_mm"], x_iris_mm=kw["x_iris_mm"],
             w_ext_mm=kw["w_ext_mm"], d_via_mm=kw["d_via_mm"],
             p_via_mm=kw["p_via_mm"], y_wall_mm=kw["y_wall_mm"],
-            w_cav_mm=kw.get("w_cav_mm"))
+            w_cav_mm=kw.get("w_cav_mm"), **self._extra(kw))
         W, Lt, Lf = _dims(kw["a_mm"], kw["w_ms_mm"], None, None)
         r = kw["d_via_mm"] / 2.0
         xs = [v[0] for v in vias]; ys = [v[1] for v in vias]
@@ -169,7 +184,7 @@ class GeometryTopology:
             a_mm=kw["a_mm"], w_iris_mm=kw["w_iris_mm"], x_iris_mm=kw["x_iris_mm"],
             w_ext_mm=kw["w_ext_mm"], d_via_mm=kw["d_via_mm"],
             p_via_mm=kw["p_via_mm"], y_wall_mm=kw["y_wall_mm"],
-            w_cav_mm=kw.get("w_cav_mm"))
+            w_cav_mm=kw.get("w_cav_mm"), **self._extra(kw))
         return max(v[0] for v in vias) + 2 * (Lt + Lf)
 
     def board_area_mm2(self, spec: FilterSpec, **params) -> float:
@@ -181,7 +196,7 @@ class GeometryTopology:
             a_mm=kw["a_mm"], w_iris_mm=kw["w_iris_mm"], x_iris_mm=kw["x_iris_mm"],
             w_ext_mm=kw["w_ext_mm"], d_via_mm=kw["d_via_mm"],
             p_via_mm=kw["p_via_mm"], y_wall_mm=kw["y_wall_mm"],
-            w_cav_mm=kw.get("w_cav_mm"))
+            w_cav_mm=kw.get("w_cav_mm"), **self._extra(kw))
         ys = [v[1] for v in vias]
         width = (max(0.0, max(ys)) + 3.0) - (min(0.0, min(ys)) - 3.0)
         return self.board_length_mm(spec, **params) * width

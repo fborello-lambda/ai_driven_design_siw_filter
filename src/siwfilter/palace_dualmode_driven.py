@@ -232,7 +232,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                out_name: str = "dualmode_driven.msh",
                preview: bool = False, render_png: str | None = None,
                render_hide_air: bool = True,
-               show: bool = True, rot_xyz: tuple[float, float, float] = (55, 0, 20)) -> dict:
+               show: bool = True, rot_xyz: tuple[float, float, float] = (55, 0, 20),
+               **geom_extra) -> dict:
     W, Lt, Lf = _dims(a_mm, w_ms_mm, l_taper_mm, l_feed_mm)
     Xf = Lt + Lf
     we = w_ext_mm if w_ext_mm is not None else 25.0   # external iris gap, independent of W
@@ -256,10 +257,18 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         # Alternative cavity shapes (see geometries.py) differ ONLY in via
         # placement, so they reuse every bit of machinery below.
         from .geometries import LAYOUTS
+        # geom_extra: NEW structural knobs (per-arm via count, second ring,
+        # cut angle, etc.) that a given layout function declares explicitly
+        # instead of absorbing into its **_ catch-all. Threaded through as a
+        # generic passthrough rather than adding a named build_mesh parameter
+        # per knob per geometry, which would not scale past two or three
+        # candidates -- see geometries.py for what each key means for a given
+        # layout.
         final, _info = LAYOUTS[geometry](a_mm=a_mm, w_iris_mm=w_iris_mm,
                                          x_iris_mm=x_iris_mm, w_ext_mm=we,
                                          d_via_mm=d_via_mm, p_via_mm=p_via_mm,
-                                         y_wall_mm=y_wall_mm, w_cav_mm=w_cav_mm)
+                                         y_wall_mm=y_wall_mm, w_cav_mm=w_cav_mm,
+                                         **geom_extra)
         x_iris = _info.get("x_iris", a_mm / 2.0)
         # Shrink the board onto the actual cavity instead of assuming a full
         # a_mm square. Without this a half-mode cavity keeps a full-height
