@@ -104,6 +104,106 @@ isn't yet as precisely tuned to the 143.5MHz target as dual-mode's own
 60-eval-refined design. Both share a similar spurious-mode floor above
 ~4GHz, as expected since they're built from the same unit cell.
 
+## dualmode_cascade selectivity investigation (2026-08-26, follow-up)
+
+User-prompted follow-up: "can we try to make the cascade more selective?"
+Two-part investigation: fix the scoring, then try a coupling-matrix-directed
+design change. Net result: the scoring bug is real and fixed, but the
+directed fix attempted here did not yield a better design -- see verdict.
+
+### Part 1: the search was scored against the wrong ideal target
+
+`dualmode_cascade` is a genuine 4-pole device (`poles_per_cavity` override =
+4 in `topologies/geometry.py`: 2 cascaded cavities x 2 degenerate TE102/TE201
+modes each). The 2026-08-26 search that produced the "adopt, score=13.964"
+verdict above scored it with `FilterSpec(N=2)` -- the same default every
+scratch script this session used for the single-cavity dual-mode design,
+copy-pasted without checking it was still appropriate. Scoring a 4-pole
+device's shape against a 2-pole Chebyshev ideal never rewards the steeper
+skirts / flatter passband a correctly-tuned 4-pole filter should have.
+
+Verified numerically before spending compute on a re-run: rescoring the
+already-computed FINE-confirm response (same physical measurement) against
+a proper `FilterSpec(N=4)` ideal target raised the RMSE-based score from
+14.346 to 15.681 -- i.e. the existing design is *further* from a true 4-pole
+equal-ripple shape than the old (wrong) score suggested, not closer.
+
+Re-ran the full pipeline under the corrected objective: a fresh 22-eval GP
+search (same 6D box), FINE confirm, FAB-TOLERANCE confirm, all scored against
+`FilterSpec(N=4)`. Result: **the search converged to the IDENTICAL physical
+geometry** (a=57.2, w_iris=15.3, x_iris=28.7, y_wall=8.6, w_ext=16.3,
+w_inter_mm=16.3 -- bit-for-bit the same landed point), with identical
+measured electricals (fc=2.887, bw=348MHz, s11w=-10.28dB, il=-1.92dB) --
+only the score changed, from 13.964 (wrong N=2 comparison) to **15.563
+(correct N=4 comparison, official)**. Same fragility pattern as before
+(15/22 evals screened to zero resonance either way). **The scoring bug is
+real and now fixed, but it was not the reason the search couldn't find a
+more selective design** -- the GP search itself, under either objective,
+keeps re-finding the same naive point as the best reachable in its budget.
+
+### Part 2: coupling-matrix-directed sweep (not blind search)
+
+Rather than run more blind GP evals, computed what the ideal N=4 design
+actually calls for: `synthesis.chebyshev_g(4, 0.1)` + `coupling_matrix` (both
+already N-generic, no new code needed) give, for FBW=5%:
+
+```
+k12 = k34 = 0.0415   (each cavity's own internal iris coupling, ~ w_iris)
+k23        = 0.0329   (inter-cavity coupling, ~ w_inter_mm)
+k23/k12    = 0.79     (the middle coupling should be noticeably WEAKER)
+Qe_in = Qe_out = 22.18
+```
+
+The naive design has `w_inter_mm` (16.3) *larger* than `w_iris` (15.3) --
+the inter-cavity link is if anything looser than each cavity's own internal
+coupling, the opposite of what a symmetric N=4 Chebyshev wants. Hypothesis:
+this is why the measured response is one wide, soft hump (bw=348MHz, 2.4x
+the 143.5MHz target) instead of a properly split 4-pole passband -- the
+middle coupling isn't decoupled enough to let the two cavity-pairs act as
+distinct stages.
+
+Ran a directed (not GP, not blind) 6-point sweep of `w_inter_mm` alone
+(9.0/10.5/12.0/13.5/16.31-baseline/18.5), all other landed dimensions held
+fixed, scored under `FilterSpec(N=4)`:
+
+| w_inter_mm | fc (GHz) | bw (MHz) | s11w (dB) | il (dB) | score |
+|---|---|---|---|---|---|
+| 9.0  | -- (screened, zero resonance) | | | | 1e9 |
+| 10.5 | 3.049 | 87.4  | -2.40 | -3.21 | 27.73 |
+| 12.0 | 3.009 | 124.4 | -3.20 | -2.87 | 25.07 |
+| 13.5 | 2.989 | 290.2 | -4.95 | -2.74 | 21.48 |
+| **16.31 (baseline)** | **2.929** | **336.6** | **-7.76** | **-2.33** | **15.57** |
+| 18.5 | 2.889 | 259.1 | -4.16 | -2.23 | 16.77 |
+
+![w_inter_mm sweep](../../output/imgs/dualmode_cascade_winter_sweep.png)
+
+**Finding: `w_inter_mm` is not an independent bandwidth knob in this
+topology -- it also detunes the cavity's own resonant frequency.** Narrowing
+it (9.0->13.5) does narrow bandwidth as the coupling-matrix math predicted,
+but it *also* drags `fc` up from 2.887 toward 3.05 GHz (physically sensible:
+a narrower full-width via-fence gap adds more inductive loading, raising the
+loaded resonance of both cavities), and match quality (`s11w`) gets
+monotonically *worse* in that direction, not better. Widening it past
+baseline (18.5) pulls `fc` back down closer to 2.87 GHz and narrows bandwidth
+too, but again at the cost of match quality. **No point in the sweep beat
+the baseline's score (15.57 remains the best of all 6).**
+
+### Verdict
+
+The N=2/N=4 scoring bug was real and is now fixed (corrected official score:
+**15.563**, not 13.964 -- still the best new non-dual-mode result of the
+whole session, ahead of `corner_cut_2corner`'s 15.44... actually now
+essentially tied with it). But a 1-dimensional directed sweep cannot
+separate "more selective" from "detuned," because `w_inter_mm` moves both at
+once. **Genuinely improving this design's selectivity needs a joint
+re-optimization** -- at minimum `a` (cavity size, to re-center `fc` as
+`w_inter_mm` moves) together with `w_inter_mm` itself, ideally a fresh full
+6D GP search run under the now-corrected `FilterSpec(N=4)` objective with a
+larger budget than 22 evals (this topology's screen-out rate, ~65-70%,
+already eats most of a small budget). **Not launched automatically** --
+flagged here as the concrete next step, pending the user's go-ahead, since
+this investigation already used substantial compute this session.
+
 ## Related: circular_cross_iris (architecture change, see structural_exploration doc)
 
 Same session, same reasoning pattern (replace a localised perturbation
