@@ -261,3 +261,43 @@ question, not purely a bug: whether a real board should have copper relief
 in those corners is a design choice this project hasn't made either way.
 Deferred as a follow-up requiring real CAD work, not attempted further
 under this deadline.
+
+## Architecture change: circular_cross_iris -- real spanning iris instead of a stub
+
+User-prompted (2026-08-26): stop grid-searching and make a reasoned
+architecture change instead. Observation: dual-mode and `corner_cut` (the
+two best performers all session) both couple via a structure that SPANS
+most of the cavity's transverse width (dual-mode's floating iris row;
+corner_cut's truncated wall). `circular_cross`'s centre "cross" and
+rhombic's diagonal tuning vias are both localised STUBS near the centre
+that perturb the field without ever creating a real constriction --
+plausibly why both stayed chronically over-coupled in every search this
+session regardless of internal tuning.
+
+Implemented `circular_cross_iris`: same circular fence + launch facet as
+`circular_cross_taper`, but the centre cross is replaced outright by a
+real transverse iris row at the circle's equator (x=cx, where the local
+half-width is exactly R) -- dual-mode's own w_iris/y_wall row mechanism,
+borrowed verbatim. Not a delta (no parameter reduces it to
+`circular_cross`); a genuinely different perturbation mechanism.
+
+**Validated the reasoning**: phase-A screen passed cleanly at w_ext=14
+(S11=-14.6dB, S21=-3.1dB) -- the first result in the ENTIRE circular_cross
+family (nvia, ring2, taper, iris) to break the historic ~-4dB match
+ceiling via an internal-mechanism change alone (`circular_cross_taper`
+needed the launch-facet fix to get there; this got there through the
+internal iris instead, at the OLD unfixed w_ext=20.7-adjacent value).
+
+Full 18-eval optimization (4D: a, w_iris, y_wall, w_ext) hit process
+instability under this session's heavy concurrent GPU/CPU load (killed
+silently, likely OOM, after 17/18 evals -- no traceback). Re-confirmed the
+best point found (a=63.94, w_iris=16.36, y_wall=14.87, w_ext=18.23) with a
+single fine evaluation instead of relaunching the full search given the
+deadline: **final score 20.08** (`s11w=-5.55dB, bw=353MHz, il=-1.14dB`).
+
+**Verdict**: confirms the architecture reasoning is directionally sound
+(a real spanning iris beats a centre stub for coupling strength/control),
+but the resulting design still isn't competitive with `corner_cut_2corner`
+(15.44) or `dualmode_cascade` (13.96, see
+`dualmode_enhancements_2026-08-26.md`) -- circular_cross's over-coupling
+problem is deeper than any single internal-mechanism swap fixes alone.

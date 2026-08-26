@@ -69,10 +69,35 @@ point (the naive mirror-symmetric guess, identical params to dual-mode's
 own landed design duplicated for both cavities) scored **14.72**
 (`s11w=-7.76dB, bw=336.6MHz, il=-2.33dB`) -- already close to
 `corner_cut_2corner`'s 15.44 (the best non-dual-mode result all session)
-straight out of the box, with no tuning at all. *(GP-refined final score
-pending -- see status note.)*
+straight out of the box, with no tuning at all.
 
-*(This document will be updated with dualmode_cascade's confirmed
-FINE/FAB-TOLERANCE score, whether the GP search beat the naive starting
-point, and a verdict on whether it's worth adopting as a genuine N=4
-alternative.)*
+**Final confirmed score: 13.964** (`s11w=-10.28dB, bw=348MHz, il=-1.92dB`,
+FAB-TOLERANCE at a=57.2, w_iris=15.3, x_iris=28.7, y_wall=8.6, w_ext=16.3,
+w_inter=16.3). The 20-eval GP search never found anything better than the
+naive mirror-symmetric starting point (12/20 evals screened out entirely --
+a fragile search space, but the one good region is very robust): best
+(coarse)=14.722, FINE=14.346, FAB-TOLERANCE=13.964. **This is the best new
+(non-dual-mode) result of the entire session**, clearly ahead of
+`corner_cut_2corner`'s 15.44, though still short of dual-mode's 9.31.
+
+**Verdict: adopt.** Unlike every other new structural variant this
+session, `dualmode_cascade` needed essentially no tuning to work well --
+duplicating dual-mode's own already-optimized single-cavity parameters
+into two cascaded cavities landed within 10% of the joint search's best
+found value. That's a strong practical result: an N=4 filter, built from
+a proven N=2 building block, reaching competitive performance on the
+first educated guess. Worth prototyping over any of the single-cavity
+alternative geometries explored this session.
+
+## Related: circular_cross_iris (architecture change, see structural_exploration doc)
+
+Same session, same reasoning pattern (replace a localised perturbation
+stub with a real spanning structure) applied to `circular_cross` instead
+of dual-mode -- full writeup lives in
+`structural_exploration_2026-08-25.md`. Summary for cross-reference:
+**final confirmed score 20.08** (single-point re-confirm after the
+18-eval optimizer process was killed, likely OOM, after 17/18 evals; best
+coarse result seen was 19.55) -- confirms the architecture reasoning was
+directionally correct (broke circular_cross's historic ~-4dB match
+ceiling) but the resulting design still isn't competitive with
+`corner_cut_2corner` (15.44) or `dualmode_cascade` (13.96).
