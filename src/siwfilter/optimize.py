@@ -733,7 +733,7 @@ def screen_at_f0(topology: Topology, spec: FilterSpec, params: dict, tag: str,
 def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = False,
             tag_prefix: str = "opt", device: str = "auto", np_ranks: int = CPU_NP,
             fine_sweep_ghz: tuple[float, float, float] | None = None,
-            screen: bool = True) -> dict:
+            screen: bool = True, score_kwargs: dict | None = None) -> dict:
     device = resolve_device(device, topology.name)
     fw0, fw1 = _fit_window_ghz(spec)
     # Coarse search runs the GPU mesh (fast, and validated for every dual-mode
@@ -788,7 +788,7 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
 
     r = run_driven(topology, spec, params, tag, fmin, fmax, step, mmax, mmin, hair,
                    device=device, np_ranks=np_ranks, tol=tol)
-    r["score"] = score(spec, r, board_len)
+    r["score"] = score(spec, r, board_len, **(score_kwargs or {}))
     r["board_length_mm"] = board_len
     return r
 
