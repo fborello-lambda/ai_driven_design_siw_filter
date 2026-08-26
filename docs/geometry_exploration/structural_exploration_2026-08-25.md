@@ -218,3 +218,37 @@ of the structural variants are).
 
 *(Result pending -- this document will be updated with the sweep's best
 point and whether it beats corner_cut/dual-mode.)*
+
+## Investigated, deferred: top-copper "corner leak" outside the via fence
+
+User question (2026-08-26): is a leak from the microstrip feed itself (no
+ground-via stitching flanking the trace) contributing to circular_cross/
+rhombic's problems? The bare-feed region checked out fine (standard
+single-sided microstrip over a continuous bottom ground, nothing to fix
+there). But investigating it surfaced a DIFFERENT, real issue: the top
+copper ground plane inside the cavity's x/y bounding box is solid PEC
+across the ENTIRE box, not just the actual via-fence footprint -- for a
+circle inscribed in its bounding square that leaves ~21% of the box area
+(the four corners between the arc and the square) as top+bottom PEC with NO
+via wall isolating it from the rest of the board; for a diamond (rhombic)
+inscribed in its bounding rectangle it's a full 50%. This tracks with
+rhombic scoring worse than circular_cross all session.
+
+Attempted fix: reclassify those corner faces by an actual point-in-circle/
+point-in-diamond test (`CAVITY_SHAPE` + `in_cavity_shape()`) instead of the
+existing x/y bounding-box test. **Confirmed by direct gmsh probe to be a
+no-op**: the cavity's entire top surface collapses to a small handful of
+already-merged topological faces (11 total for circular_cross, one of them
+covering the whole cavity top) during the boolean cut/fragment step, and
+face classification happens per-FACE (by centroid), not per-point --
+identical PEC/absorbing face counts (78/18) before and after. Splitting the
+corner out for real needs an actual geometric cut (a curve along the circle/
+diamond boundary, added before meshing) so it becomes its own face, not a
+classification-time tweak. Reverted the ineffective version rather than
+leave dead code in the tree.
+
+This is a legitimate open question -- and it's also a fabrication-model
+question, not purely a bug: whether a real board should have copper relief
+in those corners is a design choice this project hasn't made either way.
+Deferred as a follow-up requiring real CAD work, not attempted further
+under this deadline.
