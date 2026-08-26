@@ -121,6 +121,25 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "y_wall": (35.0, 30.0, 40.0),
         "w_ext":  (19.7, 12.0, 26.0),
     },
+    # 2026-08-26: architecture change, not another delta -- replaces the
+    # centre "cross" stub with a real SPANNING transverse iris row (dual-
+    # mode's own mechanism) at the circle's equator, reasoned from dual-mode/
+    # corner_cut (both couple via a structure spanning most of the transverse
+    # width) beating circular_cross/rhombic (localised stubs) all session
+    # regardless of internal tuning -- see geometries.py's docstring on
+    # circular_cross_iris. w_iris/y_wall mean what they mean for dualmode
+    # here (gap width / standoff from the fence), NOT cross-arm length, so
+    # the box is centred on dualmode-like ratios against this cavity's
+    # R=33.5mm rather than circular_cross's own box. y_wall kept SMALL
+    # (3-15, vs 12-32 for the cross variants) since a real iris row sits
+    # close to the fence -- much larger than R would shrink the row to
+    # nothing.
+    "circular_cross_iris": {
+        "a":      (67.0, 63.0, 71.0),
+        "w_iris": (16.0, 6.0, 28.0),
+        "y_wall": (8.0, 3.0, 15.0),
+        "w_ext":  (20.7, 14.0, 26.0),
+    },
 }
 
 

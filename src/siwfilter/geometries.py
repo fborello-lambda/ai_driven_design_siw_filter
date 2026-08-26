@@ -393,6 +393,53 @@ def circular_cross_taper(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_m
                               "wf_mm": wf_mm}
 
 
+def circular_cross_iris(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+                        y_wall_mm=8.0, wf_mm=1.0, **_):
+    """Circular via fence (with the taper-launch facet proven in
+    circular_cross_taper) perturbed by a REAL SPANNING transverse iris row at
+    the cavity's equator (x=cx, the widest point -- local half-width is
+    exactly R there) instead of circular_cross's centred 'cross' stub.
+
+    Reasoning (2026-08-26, user-prompted architecture change instead of more
+    parameter search): dual-mode and corner_cut -- the two best performers all
+    session -- both couple via a structure that SPANS most of the cavity's
+    transverse width (dual-mode's floating iris row; corner_cut's truncated
+    wall). circular_cross's cross and rhombic's diagonal tuning vias are both
+    localised STUBS near the centre that perturb the field locally without
+    ever creating a real constriction -- plausibly why both stayed chronically
+    over-coupled in every joint/coupling search this session regardless of
+    internal tuning. This borrows dual-mode's own w_iris/y_wall row mechanism
+    verbatim (same `_segment` construction), just centred on the circle's
+    equator instead of a rectangle's midline. Not a delta on circular_cross --
+    a different perturbation mechanism entirely, so there is no parent value
+    this reduces to; wf_mm defaults to 1.0 (the screened optimum for the
+    facet fix) since this variant is meant to combine both fixes."""
+    R, r, p = a_mm / 2.0, d_via_mm / 2.0, p_via_mm
+    cx = R
+    half_gap_lin = w_ext_mm / 2.0
+    vias = []
+    if wf_mm > 0:
+        yw = min(half_gap_lin + wf_mm, R - p)
+        for o in _segment(half_gap_lin, yw, p):
+            vias.append((0.0, o)); vias.append((0.0, -o))
+            vias.append((a_mm, o)); vias.append((a_mm, -o))
+        theta_from = math.asin(min(0.99, yw / R))
+        x_from = R - R * math.cos(theta_from)
+        for xv in np.linspace(0.0, x_from, max(1, round(x_from / p)) + 1):
+            vias.append((xv, yw)); vias.append((xv, -yw))
+            vias.append((a_mm - xv, yw)); vias.append((a_mm - xv, -yw))
+    else:
+        theta_from = math.asin(min(0.99, half_gap_lin / R))
+    vias += _arc(cx, 0.0, R, theta_from, math.pi - theta_from, p, r)
+    vias += _arc(cx, 0.0, R, math.pi + theta_from, 2 * math.pi - theta_from, p, r)
+    # real transverse iris row at the equator -- identical construction to
+    # _via_layout's internal row, just using R as the local half-width.
+    if w_iris_mm is not None:
+        for o in _segment(w_iris_mm / 2.0, R - y_wall_mm, p):
+            vias.append((cx, o)); vias.append((cx, -o))
+    return _dedupe(vias, r), {"R": R, "cx": cx, "wf_mm": wf_mm}
+
+
 def corner_cut_2corner(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
                        y_wall_mm=3.0, n_corners=1, **_):
     """corner_cut with a SECOND truncated corner at (+x,-y) -- mirrors the
@@ -452,6 +499,7 @@ LAYOUTS = {
     "circular_cross_nvia": circular_cross_nvia,
     "circular_cross_ring2": circular_cross_ring2,
     "circular_cross_taper": circular_cross_taper,
+    "circular_cross_iris": circular_cross_iris,
     "corner_cut_2corner": corner_cut_2corner,
     "rhombic_2diag": rhombic_2diag,
 }

@@ -127,6 +127,7 @@ TAPER_TO_WALL: dict[str, bool] = {
     "corner_cut": True,
     "circular_cross": False,
     "circular_cross_taper": True,  # adds a flat facet at the feed -- see geometries.py
+    "circular_cross_iris": True,   # same flat facet, different internal iris
     "rhombic": False,
     "halfmode": True,
     "quartermode": True,
