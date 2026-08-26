@@ -188,10 +188,33 @@ each step (+2.6, +1.65, +0.5, +0.24 dB), suggesting the curve is
 approaching its asymptote, so going smaller than the tested range is
 unlikely to matter and phase B's coupling search matters more now.
 
-Phase B (full v17 score, `optimize()` with wf_mm=1.0 fixed, 18-eval budget):
-*(in progress -- see status note below)*.
+Phase B (full v17 score, `optimize()` with wf_mm=1.0 fixed, 18-eval budget)
+result: **coarse=16.116, FINE=16.636, FAB-TOLERANCE=17.157**
+(a=67.8, w_iris=21.4, y_wall=29.1, w_ext=24.3). Same screen-vs-full-score gap
+as `corner_cut_2corner`: the taper facet genuinely fixed the match (S11 down
+to -15dB from a -4dB ceiling), but the joint 4D search got stuck over-coupled
+the entire run -- every one of the 18 evaluated points landed BW=270-540MHz
+(vs the ~143.5MHz target), except the single point that hit w_ext=14 (the
+box floor), which flipped all the way to BW=45MHz (too narrow, IL=-4.31,
+screened as a failure) rather than landing near the target in between. The
+GP never got a gradient toward that middle region because both directions
+away from it look equally bad in score terms from a joint search's
+perspective. **17.16 is still worse than `corner_cut` (11.65) and dual-mode
+(9.31)**, though clearly better than every other structural variant's
+confirmed phase-B result except `corner_cut_2corner`'s 15.44.
 
-*(This document will be updated with circular_cross_taper's full phase-B
-score once available -- the same screen-vs-full-score gap documented for
-corner_cut_2corner means this phase-A win is encouraging but not yet a
-confirmed result.)*
+## Follow-up: coupling-only sweep for circular_cross_taper
+
+Same rationale as task #28/29's original coupling-sweep tool: a joint search
+trades cavity size against coupling and can walk straight past a narrow
+target region sitting between two differently-bad regimes. Launched a fixed-
+cavity (`a=67.8, wf_mm=1.0`) grid sweep directly over `w_iris` (12/16/20),
+`w_ext` (10/12/14/16/18/20 -- finer resolution bracketing the 14mm point that
+flipped to BW=45), and `y_wall` (15/22/29) -- 54 points, screened first with
+`screen_at_f0` before any full coarse eval, same tool (`sweep_coupling.py`)
+used for the original three geometries, pointed at `GeometryTopology
+("circular_cross_taper")` directly (not registered in `REGISTRY`, since none
+of the structural variants are).
+
+*(Result pending -- this document will be updated with the sweep's best
+point and whether it beats corner_cut/dual-mode.)*
