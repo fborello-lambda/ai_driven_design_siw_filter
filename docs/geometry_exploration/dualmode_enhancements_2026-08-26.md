@@ -110,9 +110,11 @@ Same session, same reasoning pattern (replace a localised perturbation
 stub with a real spanning structure) applied to `circular_cross` instead
 of dual-mode -- full writeup lives in
 `structural_exploration_2026-08-25.md`. Summary for cross-reference:
-**final confirmed score 20.08** (single-point re-confirm after the
-18-eval optimizer process was killed, likely OOM, after 17/18 evals; best
-coarse result seen was 19.55) -- confirms the architecture reasoning was
-directionally correct (broke circular_cross's historic ~-4dB match
-ceiling) but the resulting design still isn't competitive with
-`corner_cut_2corner` (15.44) or `dualmode_cascade` (13.96).
+**final confirmed score 19.93** (FAB-TOLERANCE; the 18-eval search only
+*appeared* stalled under heavy concurrent load -- a flawed process check
+misdiagnosed it as an OOM kill mid-session, corrected in
+`structural_exploration_2026-08-25.md` once it finished normally) --
+confirms the architecture reasoning was directionally correct (broke
+circular_cross's historic ~-4dB match ceiling) but the resulting design
+still isn't competitive with `corner_cut_2corner` (15.44) or
+`dualmode_cascade` (13.96).

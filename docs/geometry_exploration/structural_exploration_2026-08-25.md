@@ -288,12 +288,21 @@ ceiling via an internal-mechanism change alone (`circular_cross_taper`
 needed the launch-facet fix to get there; this got there through the
 internal iris instead, at the OLD unfixed w_ext=20.7-adjacent value).
 
-Full 18-eval optimization (4D: a, w_iris, y_wall, w_ext) hit process
-instability under this session's heavy concurrent GPU/CPU load (killed
-silently, likely OOM, after 17/18 evals -- no traceback). Re-confirmed the
-best point found (a=63.94, w_iris=16.36, y_wall=14.87, w_ext=18.23) with a
-single fine evaluation instead of relaunching the full search given the
-deadline: **final score 20.08** (`s11w=-5.55dB, bw=353MHz, il=-1.14dB`).
+Full 18-eval optimization (4D: a, w_iris, y_wall, w_ext) *appeared* to stop
+responding under this session's heavy concurrent GPU/CPU load, with no new
+output for 17+ minutes -- misdiagnosed at the time as a silent OOM kill
+(this doc originally said so). **Correction**: the process was never dead;
+the diagnostic check (`ps aux | grep iris_optimize`) was wrong -- the
+process ran as an inline `python -c "..."` command with no script filename
+in its argv, so that grep could never match it regardless of whether it
+was alive. It was simply slow, same as everything else competing for the
+GPU at the time, and completed normally: GP search best(coarse)=19.549,
+FINE=20.080, **FAB-TOLERANCE (final)=19.931** (a=63.9, w_iris=16.4,
+y_wall=14.9, w_ext=18.2 -- `s11w=-5.71dB, bw=356MHz, il=-1.13dB`). A
+separate single-point re-confirm run in parallel, done out of the mistaken
+belief the search had died, landed at 20.08 -- reassuringly close to the
+real FINE value (20.080), just not the slightly-better official
+FAB-TOLERANCE number.
 
 **Verdict**: confirms the architecture reasoning is directionally sound
 (a real spanning iris beats a centre stub for coupling strength/control),
