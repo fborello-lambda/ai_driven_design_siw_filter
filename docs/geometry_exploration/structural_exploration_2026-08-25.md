@@ -216,8 +216,17 @@ used for the original three geometries, pointed at `GeometryTopology
 ("circular_cross_taper")` directly (not registered in `REGISTRY`, since none
 of the structural variants are).
 
-*(Result pending -- this document will be updated with the sweep's best
-point and whether it beats corner_cut/dual-mode.)*
+**Final result**: killed after 18/54 grid points (2026-08-26 03:52 UTC) to
+free GPU capacity for the higher-priority architecture work below
+(circular_cross_iris, dualmode_2wall, dualmode_cascade) once resource
+contention pushed its per-eval time past 3000s -- 18 points already showed
+the trend clearly, and the marginal value of the remaining 36 was low next
+to what those three were producing in the same GPU-hours. **Best found:
+score=15.46** (w_iris=12, w_ext=20, y_wall=15, S11w=-16.0dB, BW=514MHz) --
+essentially ties `corner_cut_2corner`'s 15.44, still worse than dual-mode's
+9.31, but the sweep DID find real improvement (16.12 best) that the joint
+4D phase-B search missed entirely -- confirming the same lesson task #29's
+original sweeps already taught for the three base geometries.
 
 ## Investigated, deferred: top-copper "corner leak" outside the via fence
 
