@@ -89,6 +89,21 @@ a proven N=2 building block, reaching competitive performance on the
 first educated guess. Worth prototyping over any of the single-cavity
 alternative geometries explored this session.
 
+### 0.1-8 GHz comparison
+
+![dual-mode vs dualmode_cascade, 0.1-8GHz](../../output/imgs/final_dualmode_vs_cascade_0_8ghz.png)
+
+Confirms the qualitative benefit expected from going N=2 -> N=4: the
+cascade's passband skirts are visibly steeper than the standalone dual-
+mode's (faster roll-off on both sides of 2.87GHz), the direct payoff of
+adding a second resonant stage. The standalone design still wins on the
+v17 score (9.31 vs 13.96) because that score weights match/bandwidth-to-
+target more heavily than selectivity -- the cascade is the more
+_capable_ filter (closer to a real N=4 response shape) even though it
+isn't yet as precisely tuned to the 143.5MHz target as dual-mode's own
+60-eval-refined design. Both share a similar spurious-mode floor above
+~4GHz, as expected since they're built from the same unit cell.
+
 ## Related: circular_cross_iris (architecture change, see structural_exploration doc)
 
 Same session, same reasoning pattern (replace a localised perturbation
