@@ -533,6 +533,58 @@ def dualmode_2wall(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     return _dedupe(vias, r), {"x_iris": x_iris, "half": half}
 
 
+def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+                     y_wall_mm=3.0, w_inter_mm=None, x_iris2_mm=None,
+                     w_iris2_mm=None, **_):
+    """TWO dual-mode square cavities in series (N=4: 2 poles/cavity x 2
+    cavities), joined by a NEW inter-cavity coupling row -- genuinely new
+    mesh topology, not a delta: the single-cavity dualmode builder has no
+    notion of a second cavity at all, so there is no parameter that
+    reduces this to it.
+
+    User-prompted (2026-08-26): "2 dualmodes in cascade" for an order-4
+    filter. Both cavities share the same width a_mm (mirror-symmetric --
+    the same convention cascade.py already uses for N>3 single-mode
+    cavities), each with its OWN internal iris row for mode-splitting
+    (x_iris/w_iris for cavity 1, x_iris2/w_iris2 for cavity 2, independently
+    tunable but defaulting to mirror cavity 1's values), plus a THIRD
+    transverse row at their shared boundary (x=a_mm): the inter-cavity
+    coupling, w_inter_mm -- a FULL wall-to-wall partition (unlike the
+    floating internal irises), the same convention the end walls and the
+    original single-mode cascade.py's inter-cavity walls both use, since
+    its job is dividing two resonators, not perturbing one.
+
+    w_inter_mm defaults to w_ext_mm (stages start out coupled about as
+    strongly as each is coupled to its own port, to be tuned from there)."""
+    half = a_mm / 2.0
+    r, p = d_via_mm / 2.0, p_via_mm
+    Li = 2.0 * a_mm                      # total cavity length, both stages
+    w_inter = w_inter_mm if w_inter_mm is not None else w_ext_mm
+    x_iris1 = x_iris_mm if x_iris_mm is not None else a_mm / 2.0
+    x_iris2 = a_mm + (x_iris2_mm if x_iris2_mm is not None else a_mm / 2.0)
+    w_iris_b = w_iris2_mm if w_iris2_mm is not None else w_iris_mm
+
+    vias = []
+    # end walls (true ports) at x=0 and x=Li, w_ext gap
+    for o in _segment(w_ext_mm / 2.0, half, p):
+        vias.append((0.0, o)); vias.append((0.0, -o))
+        vias.append((Li, o)); vias.append((Li, -o))
+    # continuous side walls the full length (both cavities share the width)
+    for xv in np.linspace(0.0, Li, max(1, round(Li / p)) + 1):
+        vias.append((xv, -half)); vias.append((xv, half))
+    # inter-cavity coupling wall at the shared boundary (full extent)
+    for o in _segment(w_inter / 2.0, half, p):
+        vias.append((a_mm, o)); vias.append((a_mm, -o))
+    # each cavity's own floating internal mode-splitting iris
+    if w_iris_mm is not None:
+        for o in _segment(w_iris_mm / 2.0, half - y_wall_mm, p):
+            vias.append((x_iris1, o)); vias.append((x_iris1, -o))
+    if w_iris_b is not None:
+        for o in _segment(w_iris_b / 2.0, half - y_wall_mm, p):
+            vias.append((x_iris2, o)); vias.append((x_iris2, -o))
+    return _dedupe(vias, r), {"x_iris": x_iris1, "x_iris2": x_iris2, "half": half}
+
+
 LAYOUTS = {
     "halfmode": halfmode,
     "circular_cross": circular_cross,
@@ -546,4 +598,5 @@ LAYOUTS = {
     "corner_cut_2corner": corner_cut_2corner,
     "rhombic_2diag": rhombic_2diag,
     "dualmode_2wall": dualmode_2wall,
+    "dualmode_cascade": dualmode_cascade,
 }

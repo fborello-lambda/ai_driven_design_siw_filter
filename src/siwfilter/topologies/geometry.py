@@ -140,6 +140,27 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "y_wall": (8.0, 3.0, 15.0),
         "w_ext":  (20.7, 14.0, 26.0),
     },
+    # 2026-08-26, user-prompted: 2 dual-mode cavities in series (N=4). Box
+    # centred on dual-mode's own landed values for the shared knobs (a,
+    # w_iris, x_iris, y_wall, w_ext); w_inter (inter-cavity coupling) gets
+    # its own range around w_ext's landed value, same starting-guess logic
+    # as dualmode_cascade()'s own default. x_iris2/w_iris2 are NOT part of
+    # this box -- mirrored to cavity 1's values by default (see
+    # dualmode_cascade's docstring); a full 7D search is a stretch goal,
+    # not the first thing to try.
+    "dualmode_cascade": {
+        "a":      (57.21, 50.0, 64.0),
+        "w_iris": (15.26, 8.0, 22.0),
+        "x_iris": (28.68, 20.0, 37.0),
+        "y_wall": (8.62, 3.0, 15.0),
+        "w_ext":  (16.31, 10.0, 24.0),
+        # NOTE: key must be the exact LAYOUTS function kwarg name (w_inter_mm),
+        # not "w_inter" -- unlike a/w_iris/x_iris/y_wall/w_ext, this bypasses
+        # _kw()'s explicit pop-based renaming and flows through the generic
+        # structural-knob passthrough (_extra()), same as wf_mm/w_iris2_mm/
+        # n_corners/ring2_frac/n_perturb elsewhere in this dict.
+        "w_inter_mm": (16.31, 8.0, 26.0),
+    },
     # 2026-08-26, user-prompted: dual-mode's own landed 5D box, unchanged --
     # the second wall (w_iris2_mm, iris_sep_mm) is the structural knob, fixed
     # per phase-A/B run exactly like the other _2xxx variants, not searched
@@ -155,6 +176,14 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
 }
 
 
+#: Informational only (see base.Topology's docstring) -- 2-cavity cascades
+#: report the TOTAL pole count (2 dual-mode cavities x 2 poles each), not
+#: the per-instance class default.
+_POLES_PER_CAVITY_OVERRIDE: dict[str, int] = {
+    "dualmode_cascade": 4,
+}
+
+
 class GeometryTopology:
     """Drives one alternative cavity layout through the standard pipeline."""
 
@@ -165,6 +194,8 @@ class GeometryTopology:
             raise KeyError(f"no search box for geometry {name!r}; "
                            f"have {sorted(_SPACES)}")
         self.name = name
+        self.poles_per_cavity = _POLES_PER_CAVITY_OVERRIDE.get(
+            name, GeometryTopology.poles_per_cavity)
 
     def param_space(self, spec: FilterSpec) -> dict[str, ParamRange]:
         return dict(_SPACES[self.name])

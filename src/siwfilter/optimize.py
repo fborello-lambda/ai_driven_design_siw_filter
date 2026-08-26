@@ -160,6 +160,16 @@ GPU_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     # dualmode_2wall (2026-08-26): 156967 tets at box upper bound
     # (a=61,w_iris=20,x_iris=35,y_wall=3,w_ext=22,w_iris2=20,iris_sep=20).
     "dualmode_2wall": (2.5, 0.35, 2.0),
+    # dualmode_cascade (2026-08-26): TWO cavities in series means ~2x the
+    # volume/tets of every other geometry here -- the standard (2.5,0.35,2.0)
+    # preset hits 295908 tets at this box's upper bound, well over
+    # GPU_MAX_TETS. Needed a dedicated coarser preset: 147461 tets measured
+    # at the same upper bound (a=64,w_iris=22,x_iris=37,y_wall=3,w_ext=24,
+    # w_inter=26) with (5.5,0.8,4.0). Same value used for the screen preset
+    # below too -- the usual coarse-vs-fine gap barely helps here (140677
+    # tets even at (7.0,1.0,5.0)), so one preset for both isn't a real
+    # accuracy sacrifice.
+    "dualmode_cascade": (5.5, 0.8, 4.0),
     # cascade's GPU-viable mesh is NOT yet established -- its CPU preset is
     # already much coarser and its DOF count far higher (196 vias vs 78). Fall
     # back to the CPU preset and let it fail loudly rather than silently
@@ -629,6 +639,7 @@ SCREEN_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "circular_cross_taper": (3.5, 0.5, 3.0),  # 159327 tets at box upper bound
     "circular_cross_iris": (3.5, 0.5, 3.0),   # 138712 tets at default params
     "dualmode_2wall": (3.5, 0.5, 3.0),        # 133784 tets at default params
+    "dualmode_cascade": (5.5, 0.8, 4.0),      # see GPU_MESH_PRESETS note -- same preset both ways
 }
 SCREEN_TOL = 1e-4          # pass/fail only -- see COARSE_TOL's accuracy table
 S11_SCREEN_DB = -10.0      # user-specified: reject anything worse than this
