@@ -172,6 +172,15 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "x_iris": (28.68, 20.0, 37.0),
         "y_wall": (8.62, 3.0, 15.0),
         "w_ext":  (16.31, 10.0, 24.0),
+        # 2026-08-26 round 2: promoted from a fixed structural knob to a
+        # searched dimension -- all 4 isolated screens at the landed dual-
+        # mode point (w_iris2 in {8,15} x iris_sep in {8,15}) failed badly
+        # (S11 ~-2.6 to -2.7dB, resonance destroyed), meaning the other 5
+        # knobs need to move together with the second wall, not just have
+        # it bolted on. w_iris2_mm<=0 still means "no second wall" if the
+        # search lands there.
+        "w_iris2_mm": (10.0, 0.0, 20.0),
+        "iris_sep_mm": (10.0, 4.0, 20.0),
     },
 }
 
