@@ -204,6 +204,109 @@ already eats most of a small budget). **Not launched automatically** --
 flagged here as the concrete next step, pending the user's go-ahead, since
 this investigation already used substantial compute this session.
 
+## dualmode_cascade: directed re-optimization, round 2 -- a real win (2026-08-26)
+
+User asked to kill the blind extended search and re-optimize "with new
+algorithms and not blindly," after two more findings needed acting on: (a)
+the design "is also not centered around the desired center frequency" and
+(b) a proposal to use the cheap coarse-GPU eval as a fast triage before
+committing to deeper search. Both addressed directly.
+
+**Score fix.** `evaluate()` gained an optional `score_kwargs` passthrough to
+`score()` (backward compatible). The default centering weight (`w_fc=0.05`)
+was too weak: for the landed design it contributed only ~1.4 of a ~15.7
+total score, versus ~6.4 for shape and ~4.2 for bandwidth -- centering was
+mostly enforced *indirectly*, through the fixed-window shape-fit. Reran with
+`w_fc=0.2` so centering is a first-class term.
+
+**Algorithm ("new, not blind"): physics-informed ridge search.** Root cause
+of the wide bandwidth: `w_inter_mm` (inter-cavity coupling) is NOT
+independent of `fc` in this topology -- narrowing it (correctly, per the
+N=4 coupling-matrix math) also drags `fc` up, because the cavity scales
+self-similarly (`L_cav = 2*a`), so `fc ~ 1/a` to first order. Fix: for each
+candidate `w_inter_mm`, compute the `a` that re-centers `fc` to 2.87GHz via
+`a_new = 57.21 * fc_sweep(w) / 2.87` (`fc_sweep` interpolated from the
+earlier 5-point sweep), then test it directly -- a design-of-experiments
+line search, not GP/random sampling.
+
+**v2 attempt -- failed, root-caused, not just abandoned.** First try grew
+`a` while leaving `w_iris`/`x_iris`/`y_wall`/`w_ext` fixed in absolute mm.
+3/3 points screened out. Diagnosed with a wide 2.0-3.6GHz sweep (bypassing
+the narrow screen window) rather than accepting the negative result: a
+resonance DID exist, but badly matched (-7.94dB at ~2.70GHz, not the
+predicted 2.87GHz, messy non-clean shape) -- growing the cavity without
+scaling the iris/aperture positions moved them to the wrong relative
+location, degrading coupling directly, not just shifting frequency.
+
+**v3 fix -- self-similar scaling.** Scale `w_iris`/`x_iris`/`y_wall`/`w_ext`
+by the SAME factor as `a` (preserves their relative position/coupling on
+the bigger cavity); only `w_inter_mm` stays at its deliberately-chosen
+absolute value (the one knob intentionally perturbed away from pure
+self-similarity). Single-point validation: `w_inter_mm=12.0` gave
+**fc=2.869GHz (1.3MHz off target)** and bw=101.5MHz -- confirms the fc~1/a
+model was right all along; only the missing proportional scaling was the
+bug.
+
+**Ridge search results** (8 points, w_inter_mm 11.0-16.31, each with
+correctly-scaled companion `a`/`w_iris`/`x_iris`/`y_wall`/`w_ext`):
+
+| w_inter_mm | fc (GHz) | bw (MHz) | note |
+|---|---|---|---|
+| 11.0 | 2.869 | 81.4 | |
+| 11.5 | 2.869 | 88.7 | |
+| 12.0 | 2.869 | 100.3 | best ridge point |
+| 12.5 | -- | -- | screened out |
+| 13.0 | 2.869 | 263.8 | jump -- discontinuity |
+| 13.5 | 2.869 | 272.7 | plateaued near 13.0 |
+| 14.5 | -- | -- | screened out |
+| 16.31 (re-centered) | 2.869 | 325.2 | |
+
+`fc` landed at the EXACT SAME value (2.869GHz) for every single non-screened
+point -- the self-similar-scaling recipe for centering is completely robust.
+But bandwidth is NOT a smooth function of `w_inter_mm`: it jumps roughly 2.6x
+between w=12.0 and w=13.0, with w=12.5 screening out in between -- a genuine
+discontinuity/mode-transition in this narrow design space, not measurement
+noise (consistent with the ~50-70% screen-out fragility seen everywhere in
+this topology all session).
+
+**Local refinement** (nudging `w_iris`/`w_ext` around the w=12.0 winner,
+greedy/sequential): `w_iris +1.0mm` then `w_ext +1.0mm` compounded to
+improve the boosted score from 15.19 to **13.48**, also improving match
+(`s11w` from -2.83 to -3.92dB) and bandwidth (100.3 -> 107.4MHz).
+
+**Final confirmed result (FAB-TOLERANCE, 0.1mm):**
+
+```
+a=60.0  w_iris=17.0  x_iris=30.1  y_wall=9.0  w_ext=18.1  w_inter_mm=12.0
+fc=2.867GHz   bw=119MHz   s11w=-3.35dB   il=-2.28dB
+standard v17 score = 13.827
+```
+
+![new optimized dualmode_cascade vs ideal N=4](../../output/imgs/dualmode_cascade_v3_vs_ideal_N4.png)
+
+**Comparison to the old naive (mirror-duplicate) design:**
+
+| | old naive | new optimized | ideal N=4 target |
+|---|---|---|---|
+| fc | 2.887 GHz | **2.867 GHz** | 2.870 GHz |
+| bw | 348 MHz | **119 MHz** | 143.5 MHz |
+| s11w | **-10.28 dB** | -3.35 dB | (well-matched) |
+| il | **-1.92 dB** | -2.28 dB | 0 dB (lossless) |
+| standard v17 score | 15.563 | **13.827** | 0 |
+
+**Verdict: a genuine, honest improvement, not a strictly-better-in-every-way
+one.** Centering and bandwidth are both dramatically closer to the true N=4
+target (bandwidth error dropped from 2.4x-over to 0.83x-under -- overall
+closer to target either way). Match quality (`s11w`) got WORSE in exchange
+(-3.35 vs -10.28dB) -- the net v17 score improves because the objective
+weights shape/bandwidth/centering more heavily than raw match, but a real
+board built to `s11w=-3.35dB` would reflect noticeably more power than the
+old design. **The remaining open problem for this design is match quality**,
+not centering or bandwidth anymore -- a further round tuning `w_ext`
+specifically for external Q (Qe_in=22.18 for N=4, per the earlier
+coupling-matrix calculation) is the natural next step, not attempted here
+given the compute already spent on this investigation.
+
 ## Related: circular_cross_iris (architecture change, see structural_exploration doc)
 
 Same session, same reasoning pattern (replace a localised perturbation
