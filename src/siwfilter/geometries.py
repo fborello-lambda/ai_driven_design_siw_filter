@@ -490,6 +490,49 @@ def rhombic_2diag(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     return _dedupe(list(vias) + extra, r), {**info, "w_iris2": w_iris2_mm}
 
 
+def dualmode_2wall(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+                   y_wall_mm=3.0, w_iris2_mm=0.0, iris_sep_mm=10.0, **_):
+    """dualmode's landed rectangular cavity plus a SECOND floating transverse
+    iris row, parallel to the first and offset by iris_sep_mm along the feed
+    axis.
+
+    User-prompted (2026-08-26): what happens with another wall in parallel,
+    some distance from the existing one? Motivated by dual-mode's one
+    persistent shortfall across this whole session -- a 60-eval Bayesian
+    search of the existing single-iris 5D box (a, w_iris, x_iris, y_wall,
+    w_ext) converged on the SAME point a much smaller search had already
+    found (see overnight_dualmode_2026-08-24.md), with bandwidth stuck at
+    ~318MHz against the 143.5MHz (5% FBW) target -- decisive evidence that
+    box's optimum, not a search-budget problem. A second internal wall is a
+    genuinely new degree of freedom that box never had: a two-iris cavity
+    is closer to a proper 2-resonator coupled structure (each iris a
+    partial reflector), which is the standard way a physical waveguide
+    filter gets steeper skirts/narrower response without touching the
+    external match at all -- untestable with only one iris no matter how
+    much a/w_iris/w_ext/y_wall are searched.
+
+    w_iris2_mm<=0 reproduces dualmode's single-iris layout exactly (same
+    rectangular fence + one iris row, built the same way as
+    palace_dualmode_driven._via_layout)."""
+    Li, r, p = a_mm, d_via_mm / 2.0, p_via_mm
+    half = a_mm / 2.0
+    x_iris = x_iris_mm if x_iris_mm is not None else a_mm / 2.0
+    vias = []
+    for o in _segment(w_ext_mm / 2.0, half, p):
+        vias.append((0.0, o)); vias.append((0.0, -o))
+        vias.append((Li, o)); vias.append((Li, -o))
+    for xv in np.linspace(0.0, Li, max(1, round(Li / p)) + 1):
+        vias.append((xv, -half)); vias.append((xv, half))
+    if w_iris_mm is not None:
+        for o in _segment(w_iris_mm / 2.0, half - y_wall_mm, p):
+            vias.append((x_iris, o)); vias.append((x_iris, -o))
+    if w_iris2_mm and w_iris2_mm > 0:
+        x_iris2 = min(Li - p, x_iris + iris_sep_mm)
+        for o in _segment(w_iris2_mm / 2.0, half - y_wall_mm, p):
+            vias.append((x_iris2, o)); vias.append((x_iris2, -o))
+    return _dedupe(vias, r), {"x_iris": x_iris, "half": half}
+
+
 LAYOUTS = {
     "halfmode": halfmode,
     "circular_cross": circular_cross,
@@ -502,4 +545,5 @@ LAYOUTS = {
     "circular_cross_iris": circular_cross_iris,
     "corner_cut_2corner": corner_cut_2corner,
     "rhombic_2diag": rhombic_2diag,
+    "dualmode_2wall": dualmode_2wall,
 }

@@ -140,6 +140,18 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "y_wall": (8.0, 3.0, 15.0),
         "w_ext":  (20.7, 14.0, 26.0),
     },
+    # 2026-08-26, user-prompted: dual-mode's own landed 5D box, unchanged --
+    # the second wall (w_iris2_mm, iris_sep_mm) is the structural knob, fixed
+    # per phase-A/B run exactly like the other _2xxx variants, not searched
+    # here. See dualmode_2wall's docstring in geometries.py for why (BW stuck
+    # at 318MHz across dual-mode's own 60-eval search of this exact box).
+    "dualmode_2wall": {
+        "a":      (57.21, 54.0, 61.0),
+        "w_iris": (15.26, 8.0, 22.0),
+        "x_iris": (28.68, 20.0, 37.0),
+        "y_wall": (8.62, 3.0, 15.0),
+        "w_ext":  (16.31, 10.0, 24.0),
+    },
 }
 
 
