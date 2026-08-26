@@ -30,6 +30,12 @@ FINE confirm). Every region of the 7D box that was actually sampled --
 including near-zero `w_iris2_mm` values that should behave close to plain
 dual-mode -- destroys the resonance.
 
+**Final confirmed score: 28.51** (FINE=28.72, FAB-TOLERANCE=28.51, at the
+un-improved warm-start point since the GP search never found anything
+better) -- `s11w=-1.20dB, il=-32.49dB`: essentially total reflection with
+massive insertion loss, the worst confirmed result of any geometry this
+entire session.
+
 **Conclusion: negative.** A second floating iris row, at least built the
 same way as the first and searched across this box, does not work for
 this cavity. Two candidate reasons, neither confirmed: (a) two floating
