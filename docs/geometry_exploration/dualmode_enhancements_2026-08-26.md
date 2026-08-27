@@ -307,6 +307,128 @@ specifically for external Q (Qe_in=22.18 for N=4, per the earlier
 coupling-matrix calculation) is the natural next step, not attempted here
 given the compute already spent on this investigation.
 
+## dualmode_cascade: coupling-matrix extraction, round 3 -- the honest ceiling (2026-08-26/27)
+
+User looked at the round-2 (v3) comparison plot and correctly called it out:
+*"that one just seems an order 2 filter with another order 2 with an
+offset, doesn't seem to be optimal."* Checking the raw data confirmed it:
+v3's response was a very narrow, high-Q near-single-pole notch (S11 down to
+-26.7dB but only within ~20MHz of center) sitting next to a weak, detuned
+satellite bump ~250MHz below it -- not a real 4-pole equal-ripple passband.
+Root cause: the v3 ridge search optimized a SINGLE (fc, bandwidth) pair
+against the target, which says nothing about whether the underlying 4 poles
+are actually distributed the way a Chebyshev filter needs.
+
+### Coupling-matrix extraction (new diagnostic tool)
+
+Built a least-squares fit of the standard mirror-symmetric N=4
+coupled-resonator model (`A = M + Omega*W - jR`, `Omega=(f/f0-f0/f)`, reusing
+`synthesis.sparams_from_matrix` unchanged) directly against a measured
+S11/S21 sweep, recovering the ACTUAL realized `k12=k34`, `k23`, `Qe`, `f0` --
+no new EM simulation needed, pure post-processing of data already in hand.
+Fitting it to v3's own FAB-TOLERANCE sweep gave the smoking gun:
+
+| | v3 (measured) | ideal N=4 |
+|---|---|---|
+| k12=k34 | 0.0313 (0.75x -- too weak) | 0.0415 |
+| k23 | 0.0367 (1.12x) | 0.0329 |
+| Qe | 46.27 (2.09x -- way under-coupled to feed) | 22.18 |
+
+This is the correct methodology CLAUDE.md always intended (section 6's
+eigenmode-based k-calibration), realized via curve-fitting instead of
+symmetry-wall eigenmode decomposition -- cheaper (reuses existing sweeps)
+though less first-principles.
+
+### Iterative coupling-directed correction
+
+Ran an automated loop: sweep -> fit couplings -> apply a damped
+`sqrt(ideal/measured)` proportional correction to the responsible dimension
+(`w_iris` for k12/k34, `w_inter_mm` for k23, `w_ext` for Qe) -> re-center `a`
+(self-similar scaling, same fix as v2->v3) -> repeat.
+
+**k12/k23 converged almost immediately and almost exactly**: after ONE
+correction step, `w_iris` 17.0->19.081mm and `w_inter_mm` 12.0->11.001mm
+gave **k12=0.0412 (0.99x ideal), k23=0.0318 (0.97x ideal)** -- confirms the
+proportional-correction methodology works well for these two.
+
+**Qe/`w_ext` diverged and had to be caught.** The same damped correction
+pushed `w_ext` 18.1->27.944mm, which made Qe WORSE (52.88->143.11), not
+better -- the naive "wider aperture couples more strongly" assumption broke
+down, and the next planned step would have pushed `w_ext` to 70.9mm (killed
+before that ran). Diagnosed by falling back to a safe empirical scan of
+`w_ext` within the previously-validated 10-24mm search box, at the
+now-frozen good `w_iris`/`x_iris`/`y_wall`/`w_inter_mm`:
+
+| w_ext | Qe (fit) | k12 | k23 | bw (raw) | s11w (raw) |
+|---|---|---|---|---|---|
+| 18.1 | 96.29 (4.3x) | 0.84x | 1.08x | 86.5 MHz | -2.83 dB |
+| 20.0 | 111.79 (5.0x) | 0.99x | 0.93x | 113.7 MHz | -1.79 dB |
+| 22.0 | 103.41 (4.7x) | 0.96x | 0.96x | 142.7 MHz | -2.72 dB |
+| 24.0 | 113.73 (5.1x) | 0.98x | 0.96x | 168.1 MHz | -2.65 dB |
+
+Two findings: (1) Qe never gets anywhere near 22.18 across the entire safe
+`w_ext` range -- stuck at 4.3-5.1x, non-monotonic (up/down/up), most likely
+reflecting a poorly-conditioned fit in this weak-coupling regime rather than
+a real reversed physical law. (2) Match quality (raw `s11w`, the directly
+trustworthy number) stays uniformly poor (-1.8 to -2.8dB) across the WHOLE
+range regardless of `w_ext` -- a genuine ceiling, not a tuning miss.
+Bandwidth DOES respond as expected to `w_ext` (86->114->143->168MHz,
+w_ext=22.0 lands almost exactly on the 143.5MHz target), confirming `w_ext`
+does control bandwidth normally; it's specifically the MATCH that won't
+improve.
+
+### Final confirmed result (FAB-TOLERANCE, coupling-corrected design)
+
+```
+a=60.0  w_iris=19.1  x_iris=30.1  y_wall=9.0  w_ext=18.1  w_inter_mm=11.0
+fc=2.867GHz   bw=101MHz   s11w=-2.79dB   il=-3.78dB
+standard v17 score = 17.878
+```
+
+**Worse aggregate score than v3 (17.88 vs 13.83)** -- but examining the raw
+S11/S21 curve directly (not just the score) shows something the score
+misses: the main passband is now noticeably broader and more physically
+sensible (a single, smooth S11 dip spanning roughly 2.80-2.94GHz, best point
+-7.36dB) instead of v3's absurd near-single-frequency -26.7dB spike. The
+underlying pole coupling (k12, k23) IS now correct. **But a persistent weak
+satellite mode near 2.55-2.60GHz remains in BOTH v3 and this
+coupling-corrected design** -- same order of magnitude, same rough location,
+present regardless of the coupling correction. This is not an artifact of
+the search methodology; it is a real additional resonance of the physical
+cascade structure that the simple in-line 4-pole coupling-matrix model does
+not account for (likely a spurious mode of the coupled-cavity system outside
+the intended TE102/TE201 dual-mode pair -- not identified further tonight).
+
+![v3 vs coupling-corrected vs ideal N=4](../../output/imgs/dualmode_cascade_final_comparison.png)
+
+### Honest final verdict
+
+- The N2/N4 scoring bug (round 2) was real and stays fixed.
+- The self-similar-scaling bug (v2->v3) was real and stays fixed; v3's
+  centering/bandwidth-matching methodology is sound.
+- v3's *shape*, however, was an illusion the aggregate score could not
+  detect -- the user's visual read was correct, and the coupling-matrix
+  extraction tool built tonight confirmed exactly why, in quantitative terms.
+- Individual coupling correction (k12, k23) works well and is now validated
+  as a real, reusable technique for this topology.
+- External-Q correction via `w_ext` hit a genuine wall: bandwidth responds
+  normally, but IN-BAND MATCH does not improve anywhere in the safe range.
+  Fixing this for real needs a different external-coupling mechanism (a
+  different taper/feed geometry, not just a wider aperture on the same
+  structure) -- out of scope for tonight.
+- A persistent spurious satellite mode near 2.55-2.60GHz appears in every
+  attempt regardless of coupling tuning -- a genuine, previously-undetected
+  structural issue with `dualmode_cascade` worth investigating before
+  further optimization effort is spent on this topology.
+- **Neither v3 nor the coupling-corrected design is a clean, fully genuine
+  order-4 Chebyshev response.** v3 wins on the (now known to be
+  incomplete) aggregate score; the coupling-corrected design wins on
+  correct pole placement and a more physically sensible main passband, at
+  the cost of worse absolute match. Recommend treating this whole line of
+  investigation as informative but NOT yet ready to replace the standalone
+  dual-mode design (still the project's best result, score 9.31) as the
+  design to prototype.
+
 ## Related: circular_cross_iris (architecture change, see structural_exploration doc)
 
 Same session, same reasoning pattern (replace a localised perturbation
