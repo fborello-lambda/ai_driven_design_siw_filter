@@ -520,6 +520,70 @@ now understood, precisely and with ground-truth evidence:
   unattended after this many hours of investigation. Flagged as the concrete
   next step, pending the user's go-ahead.
 
+## dualmode_cascade: eigenmode-targeted search, round 5 -- a real breakthrough (2026-08-27)
+
+Computed the exact ideal N=4 closed-cavity pole target analytically
+(eigenvalues of the inner 4x4 coupling matrix, no simulation): poles at
+2.7836/2.8298/2.9108/2.9590 GHz, gaps **46.1/81.1/48.2 MHz**, centered
+2.8708GHz. v3's outer gaps (45, 48MHz) already nearly matched this --
+`w_iris` was never the problem. Only the middle gap (governed by
+`w_inter_mm`) was wrong (197MHz vs ideal 81.1MHz).
+
+Ran an 8-point eigenmode-only sweep of `w_inter_mm` (13-22mm, `a=60`/
+`w_iris=19.1` held fixed), scoring against this ideal gap pattern directly
+(gap RMSE in MHz) -- ground truth, no driven S-parameter proxy:
+
+| w_inter_mm | gap1 | gap2 | gap3 | center | RMSE |
+|---|---|---|---|---|---|
+| 13.0 | 51.7 | 253.5 | 51.0 | 2.803 | 99.6 |
+| 14.0 | 64.7 | 244.8 | 59.6 | 2.797 | 95.3 |
+| 15.0 | 79.7 | 236.0 | 68.2 | 2.791 | 92.2 |
+| 16.0 | 98.8 | 226.9 | 77.0 | 2.783 | 91.0 |
+| 17.0 | 117.9 | 218.8 | 84.9 | 2.776 | 92.2 |
+| 18.0 | 138.6 | 211.3 | 92.4 | 2.768 | 95.7 |
+| **20.0** | **114.2** | **83.9** | **105.4** | **2.827** | **51.4** |
+| 22.0 | 7.7 (near-crossing) | 180.7 | 115.1 | 2.797 | 72.7 |
+| ideal | 46.1 | 81.1 | 48.2 | 2.871 | 0 |
+
+![pole migration vs w_inter_mm](../../output/imgs/dualmode_cascade_pole_migration.png)
+
+**Surprise finding #1**: 13-18mm is a dead end -- RMSE plateaus around
+91-100MHz, never approaching v3's own 12mm point (~67MHz). Increasing
+`w_inter_mm` from 12 initially makes the middle gap WORSE, not better.
+
+**Surprise finding #2, important**: the user's own visual pick from the
+EARLIER driven S21 overlay plot -- w_inter_mm=18, which looked like the
+most merged/single-passband shape by eye -- is actually **eigenmode-confirmed
+as one of the worst points tested** (RMSE=95.7, middle gap 211MHz, wider
+than v3's own 197MHz). The apparent visual improvement in the driven S21
+curve was almost certainly a port-excitation artifact (the weaker pole
+becoming harder for the port to excite/see, not actually moving closer in
+frequency) -- exactly the ambiguity building the eigenmode tool was meant to
+resolve. Driven S-parameter shape is not a reliable proxy for pole-structure
+correctness in this fragile regime.
+
+**Breakthrough**: `w_inter_mm=20` gives **RMSE=51.4MHz, the best result of
+the entire multi-day cascade investigation** -- beating v3, the coupling-
+corrected design, and every earlier attempt. The middle gap (83.9MHz)
+almost exactly matches the ideal 81.1MHz. There's a genuine regime
+transition between w=18 (worst) and w=20 (best) -- consistent with the
+mode-crossing/discontinuity behavior seen earlier in the driven sweeps
+(the w=12.5 discontinuity). w=22 shows an actual near-crossing (7.7MHz
+gap between two poles) -- w=20 sits close to a sensitive transition point,
+so this region may be fragile and needs care around exact dimensions.
+
+At w=20, the OUTER gaps (114, 105MHz) are now too large vs ideal (46, 48)
+-- `w_iris=19.1` is the thing out of balance at this coupling strength.
+Center (2.827) is ~44MHz low of ideal, needs `a` re-centering.
+
+**Next step (not yet run, pending user go-ahead)**: a small joint
+follow-up -- reduce `w_iris` (try ~15-17mm) paired with `w_inter_mm` near
+20, still eigenmode-only (cheap, no driven sim needed yet), to bring the
+outer gaps down to ~46/48 while keeping the middle gap near 81. Once a
+good eigenmode candidate is found, re-center `a`, THEN move to Stage 2
+(external `w_ext`/Qe tuning via driven sweep) and Stage 3 (final FINE+FAB
+confirm) as originally planned.
+
 ## Related: circular_cross_iris (architecture change, see structural_exploration doc)
 
 Same session, same reasoning pattern (replace a localised perturbation
