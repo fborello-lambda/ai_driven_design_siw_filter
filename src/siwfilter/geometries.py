@@ -535,7 +535,7 @@ def dualmode_2wall(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
 
 def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
                      y_wall_mm=3.0, w_inter_mm=None, x_iris2_mm=None,
-                     w_iris2_mm=None, **_):
+                     w_iris2_mm=None, y_iris_off_mm=0.0, y_iris2_off_mm=0.0, **_):
     """TWO dual-mode square cavities in series (N=4: 2 poles/cavity x 2
     cavities), joined by a NEW inter-cavity coupling row -- genuinely new
     mesh topology, not a delta: the single-cavity dualmode builder has no
@@ -555,7 +555,21 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     its job is dividing two resonators, not perturbing one.
 
     w_inter_mm defaults to w_ext_mm (stages start out coupled about as
-    strongly as each is coupled to its own port, to be tuned from there)."""
+    strongly as each is coupled to its own port, to be tuned from there).
+
+    y_iris_off_mm / y_iris2_off_mm (2026-08-27, user-prompted: "the inner
+    parts of each cavity should change and they can be off centered too"):
+    shift each cavity's OWN internal iris gap off the cavity's y-centerline
+    -- previously hardcoded symmetric (mirrored +-o pairs about y=0).
+    Motivation: the two cavities' exact mirror (x-swap) symmetry forces the
+    4-pole spectrum into an even/odd pair split that neither coupling-width
+    tuning nor a floating-coupling redesign could escape (see
+    dualmode_cascade_floatinter's docstring); staggering x_iris2/w_iris2
+    (already supported) breaks that x-symmetry, and this breaks the
+    INTERNAL iris's own y-parity too -- an independent knob, same
+    zero-board-size-cost philosophy. Both default to 0.0, reproducing the
+    exact original symmetric iris (regression-verified). Clamped to
+    +-y_wall_mm so the row never crosses its own cavity's side wall."""
     half = a_mm / 2.0
     r, p = d_via_mm / 2.0, p_via_mm
     Li = 2.0 * a_mm                      # total cavity length, both stages
@@ -575,13 +589,16 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     # inter-cavity coupling wall at the shared boundary (full extent)
     for o in _segment(w_inter / 2.0, half, p):
         vias.append((a_mm, o)); vias.append((a_mm, -o))
-    # each cavity's own floating internal mode-splitting iris
+    # each cavity's own floating internal mode-splitting iris -- off_1/2
+    # clamped to +-y_wall_mm so the shifted row stays inside the cavity.
     if w_iris_mm is not None:
+        off1 = max(-y_wall_mm, min(y_wall_mm, y_iris_off_mm))
         for o in _segment(w_iris_mm / 2.0, half - y_wall_mm, p):
-            vias.append((x_iris1, o)); vias.append((x_iris1, -o))
+            vias.append((x_iris1, o + off1)); vias.append((x_iris1, -o + off1))
     if w_iris_b is not None:
+        off2 = max(-y_wall_mm, min(y_wall_mm, y_iris2_off_mm))
         for o in _segment(w_iris_b / 2.0, half - y_wall_mm, p):
-            vias.append((x_iris2, o)); vias.append((x_iris2, -o))
+            vias.append((x_iris2, o + off2)); vias.append((x_iris2, -o + off2))
     return _dedupe(vias, r), {"x_iris": x_iris1, "x_iris2": x_iris2, "half": half}
 
 
