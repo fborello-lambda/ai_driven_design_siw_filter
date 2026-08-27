@@ -27,16 +27,21 @@ import gmsh
 import numpy as np
 
 from .config import FilterSpec, find_palace, out_data
-from .geometries import dualmode_cascade
+from .geometries import LAYOUTS
 
 
 def build_closed_mesh(a_mm: float, w_iris_mm: float, x_iris_mm: float, y_wall_mm: float,
                       w_inter_mm: float, d_via_mm: float = 1.5, p_via_mm: float = 3.0,
                       h_mm: float = 0.76, mesh_max: float = 2.5, mesh_min: float = 0.5,
-                      out_name: str = "dmcasc_eig.msh") -> str:
-    vias, meta = dualmode_cascade(a_mm=a_mm, w_iris_mm=w_iris_mm, x_iris_mm=x_iris_mm,
-                                  w_ext_mm=0.0, d_via_mm=d_via_mm, p_via_mm=p_via_mm,
-                                  y_wall_mm=y_wall_mm, w_inter_mm=w_inter_mm)
+                      out_name: str = "dmcasc_eig.msh", layout_name: str = "dualmode_cascade",
+                      **extra) -> str:
+    """`layout_name` selects any cascade-style via-layout from geometries.LAYOUTS
+    (e.g. "dualmode_cascade_floatinter") -- `**extra` passes its own structural
+    knobs through (e.g. y_wall_inter_mm)."""
+    layout_fn = LAYOUTS[layout_name]
+    vias, meta = layout_fn(a_mm=a_mm, w_iris_mm=w_iris_mm, x_iris_mm=x_iris_mm,
+                           w_ext_mm=0.0, d_via_mm=d_via_mm, p_via_mm=p_via_mm,
+                           y_wall_mm=y_wall_mm, w_inter_mm=w_inter_mm, **extra)
     half = meta["half"]
     Li = 2.0 * a_mm
     r = d_via_mm / 2.0
@@ -69,16 +74,23 @@ def build_closed_mesh(a_mm: float, w_iris_mm: float, x_iris_mm: float, y_wall_mm
 
 
 def run_eigenmode(spec: FilterSpec, params: dict, tag: str, n_modes: int = 8,
-                  window: float = 0.6, device: str = "CPU") -> dict:
+                  window: float = 0.6, device: str = "CPU",
+                  layout_name: str = "dualmode_cascade") -> dict:
     """Closed-cavity eigenmode solve. device="CPU" is the safe default --
     "GPU" needs the same MFEM_MEMORY=cuda fix optimize.py's run_driven()
     applies (this mesh is ~2x a single dual-mode cavity's size, enough to
     trip the pooled-allocator OOM the fix avoids); not wired up here since
-    this is a one-off diagnostic tool, not a repeated search."""
+    this is a one-off diagnostic tool, not a repeated search.
+
+    `params` beyond a/w_iris/x_iris/y_wall/w_inter_mm (e.g. y_wall_inter_mm
+    for dualmode_cascade_floatinter) are passed through automatically."""
+    known = {"a", "w_iris", "x_iris", "y_wall", "w_inter_mm"}
+    extra = {k: v for k, v in params.items() if k not in known}
     mesh = build_closed_mesh(
         a_mm=params["a"], w_iris_mm=params["w_iris"], x_iris_mm=params["x_iris"],
         y_wall_mm=params["y_wall"], w_inter_mm=params["w_inter_mm"],
-        h_mm=spec.substrate.h * 1000, out_name=f"{tag}.msh")
+        h_mm=spec.substrate.h * 1000, out_name=f"{tag}.msh",
+        layout_name=layout_name, **extra)
     cfg = {
         "Problem": {"Type": "Eigenmode", "Verbose": 1, "Output": f"postpro/{tag}"},
         "Model": {"Mesh": mesh, "L0": 1.0e-3},
