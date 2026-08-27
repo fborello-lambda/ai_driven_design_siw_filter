@@ -182,6 +182,27 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "w_iris2_mm": (10.0, 0.0, 20.0),
         "iris_sep_mm": (10.0, 4.0, 20.0),
     },
+    # 2026-08-27, user-prompted: dualmode_cascade's inter-cavity coupling
+    # made a FLOATING segment (y_wall_inter_mm) instead of a full
+    # wall-to-wall slot -- a genuinely different coupling mechanism, not a
+    # re-tune of the same one (see dualmode_cascade_floatinter's docstring
+    # in geometries.py for the root-cause reasoning: a full-wall slot's
+    # y-profile couples unevenly to the cavity's two internal w_iris-split
+    # field patterns, capping what (w_iris, w_inter_mm) alone can achieve --
+    # measured outer-gap asymmetry ~90MHz vs ~38MHz at the best point found,
+    # ideal wants ~46/48). Box centred on that night's landed values
+    # (a=59.0, w_iris=12.8, x_iris=29.6, y_wall=8.9, w_ext=14.0,
+    # w_inter_mm=13.7); y_wall_inter_mm=0 reproduces dualmode_cascade
+    # exactly, so 0 is a valid in-box fallback if floating doesn't help.
+    "dualmode_cascade_floatinter": {
+        "a":      (59.0, 52.0, 64.0),
+        "w_iris": (12.8, 8.0, 20.0),
+        "x_iris": (29.6, 20.0, 37.0),
+        "y_wall": (8.9, 3.0, 15.0),
+        "w_ext":  (14.0, 10.0, 22.0),
+        "w_inter_mm": (13.7, 8.0, 24.0),
+        "y_wall_inter_mm": (0.0, 0.0, 15.0),
+    },
 }
 
 
@@ -190,6 +211,7 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
 #: the per-instance class default.
 _POLES_PER_CAVITY_OVERRIDE: dict[str, int] = {
     "dualmode_cascade": 4,
+    "dualmode_cascade_floatinter": 4,
 }
 
 

@@ -585,6 +585,55 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     return _dedupe(vias, r), {"x_iris": x_iris1, "x_iris2": x_iris2, "half": half}
 
 
+def dualmode_cascade_floatinter(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
+                                y_wall_mm=3.0, w_inter_mm=None, x_iris2_mm=None,
+                                w_iris2_mm=None, y_wall_inter_mm=0.0, **_):
+    """dualmode_cascade with a FLOATING inter-cavity coupling row (standoff
+    y_wall_inter_mm from the side walls, same construction as the internal
+    mode-splitting irises) instead of a full wall-to-wall partition.
+
+    Root-cause motivated (2026-08-27): eigenmode ground truth showed the
+    4-pole spectrum from a single centered wall-to-wall coupling slot never
+    converges to the ideal's near-symmetric outer gaps (measured ~90MHz vs
+    ~38MHz at the best (w_iris, w_inter_mm) found by a full 2D search,
+    ideal wants ~46/48) -- the two cavities' mirror symmetry means the 4
+    poles split into an even/odd pair under cavity-swap, and a full
+    wall-to-wall slot's y-profile couples unevenly to the two internal
+    (w_iris-split) field patterns, capping what ANY (w_iris, w_inter_mm)
+    combination can achieve with that one coupling shape. Making the row
+    floating (leakage paths past its ends too, not just through the centre
+    gap) changes that y-overlap profile -- a genuinely different coupling
+    mechanism, not a parameter delta on the same one.
+
+    y_wall_inter_mm=0.0 reproduces dualmode_cascade() exactly (regression-
+    verified: identical via list)."""
+    half = a_mm / 2.0
+    r, p = d_via_mm / 2.0, p_via_mm
+    Li = 2.0 * a_mm
+    w_inter = w_inter_mm if w_inter_mm is not None else w_ext_mm
+    x_iris1 = x_iris_mm if x_iris_mm is not None else a_mm / 2.0
+    x_iris2 = a_mm + (x_iris2_mm if x_iris2_mm is not None else a_mm / 2.0)
+    w_iris_b = w_iris2_mm if w_iris2_mm is not None else w_iris_mm
+
+    vias = []
+    for o in _segment(w_ext_mm / 2.0, half, p):
+        vias.append((0.0, o)); vias.append((0.0, -o))
+        vias.append((Li, o)); vias.append((Li, -o))
+    for xv in np.linspace(0.0, Li, max(1, round(Li / p)) + 1):
+        vias.append((xv, -half)); vias.append((xv, half))
+    # inter-cavity coupling row -- now a FLOATING segment (standoff
+    # y_wall_inter_mm), same construction as the internal irises below.
+    for o in _segment(w_inter / 2.0, half - y_wall_inter_mm, p):
+        vias.append((a_mm, o)); vias.append((a_mm, -o))
+    if w_iris_mm is not None:
+        for o in _segment(w_iris_mm / 2.0, half - y_wall_mm, p):
+            vias.append((x_iris1, o)); vias.append((x_iris1, -o))
+    if w_iris_b is not None:
+        for o in _segment(w_iris_b / 2.0, half - y_wall_mm, p):
+            vias.append((x_iris2, o)); vias.append((x_iris2, -o))
+    return _dedupe(vias, r), {"x_iris": x_iris1, "x_iris2": x_iris2, "half": half}
+
+
 LAYOUTS = {
     "halfmode": halfmode,
     "circular_cross": circular_cross,
@@ -599,4 +648,5 @@ LAYOUTS = {
     "rhombic_2diag": rhombic_2diag,
     "dualmode_2wall": dualmode_2wall,
     "dualmode_cascade": dualmode_cascade,
+    "dualmode_cascade_floatinter": dualmode_cascade_floatinter,
 }

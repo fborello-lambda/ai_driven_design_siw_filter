@@ -170,6 +170,10 @@ GPU_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     # tets even at (7.0,1.0,5.0)), so one preset for both isn't a real
     # accuracy sacrifice.
     "dualmode_cascade": (5.5, 0.8, 4.0),
+    # dualmode_cascade_floatinter (2026-08-27): same 2-cavity scale as
+    # dualmode_cascade, floating inter-row doesn't change via count
+    # materially -- reuse the same coarser preset.
+    "dualmode_cascade_floatinter": (5.5, 0.8, 4.0),
     # cascade's GPU-viable mesh is NOT yet established -- its CPU preset is
     # already much coarser and its DOF count far higher (196 vias vs 78). Fall
     # back to the CPU preset and let it fail loudly rather than silently
@@ -640,6 +644,7 @@ SCREEN_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "circular_cross_iris": (3.5, 0.5, 3.0),   # 138712 tets at default params
     "dualmode_2wall": (3.5, 0.5, 3.0),        # 133784 tets at default params
     "dualmode_cascade": (5.5, 0.8, 4.0),      # see GPU_MESH_PRESETS note -- same preset both ways
+    "dualmode_cascade_floatinter": (5.5, 0.8, 4.0),
 }
 SCREEN_TOL = 1e-4          # pass/fail only -- see COARSE_TOL's accuracy table
 S11_SCREEN_DB = -10.0      # user-specified: reject anything worse than this
