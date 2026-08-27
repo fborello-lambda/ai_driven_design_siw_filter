@@ -429,6 +429,97 @@ the intended TE102/TE201 dual-mode pair -- not identified further tonight).
   dual-mode design (still the project's best result, score 9.31) as the
   design to prototype.
 
+## dualmode_cascade: eigenmode ground truth -- the real mechanism (2026-08-27)
+
+User's follow-up push: *"it's not ok, let's rethink the problem, it should
+be an order 4 filter centered at fc but it's like a degenerated filter with
+two different center frequencies."* Right call, and now confirmed at the
+ground-truth level (no S-parameter interpretation ambiguity).
+
+### Closed-cavity eigenmode analysis (new capability)
+
+Built a standalone eigenmode solver for `dualmode_cascade` reusing
+`geometries.dualmode_cascade()`'s own via-layout generator UNCHANGED
+(`w_ext_mm=0` collapses the port gap, sealing both ends -- the same
+transformation `palace_dualmode.py` already applies to the single-cavity
+case), so the eigenmode via positions are guaranteed identical to the real
+driven design's, just with ports closed. This directly counts the real
+resonances of the passive structure -- no curve-fitting, no S-parameter
+ambiguity.
+
+Results (frequencies within the band of interest, GHz):
+
+| design | eigenmodes | structure |
+|---|---|---|
+| old naive (w_inter=16.31, small a/w_iris) | 2.515, 2.627, 2.768, 2.920, 3.063, 3.131 | 6 modes, roughly evenly spaced (110-150MHz gaps) -- no obvious pair clustering |
+| v3 (w_inter=12.0, larger a/w_iris) | 2.701, 2.746, 2.943, 2.983 | **exactly 4 modes, split into 2 tight pairs** (45MHz, 40MHz splits) separated by a 197MHz gap |
+| coupling-corrected (w_inter=11.0) | 2.646, 2.677, 2.947, 2.982 | same 2-pair pattern, gap WIDENED to 270MHz |
+
+![eigenmode mode map](../../output/imgs/dualmode_cascade_eigenmode_map.png)
+
+**This is the real mechanism, confirmed directly**: v3 and the
+coupling-corrected design genuinely have only 4 poles (not 4+spurious as
+round-3's docs speculated) -- but the inter-cavity coupling (`w_inter_mm`)
+is too weak relative to each cavity's own internal splitting (driven up by
+the larger `w_iris` from tonight's tuning) to interleave the two cavities'
+pole-pairs into one coherent passband. Instead the two cavities behave as
+two nearly-independent 2-pole sub-filters -- literally two different center
+frequencies, exactly the user's diagnosis. It also explains why the earlier
+coupling-matrix curve-fit (round 3) gave unreliable numbers: that fit
+assumes a single interleaved in-line chain, which cannot correctly describe
+two separated pairs -- the "correction" it drove (further WEAKENING
+`w_inter_mm`, 12.0->11.0) made the split worse (197->270MHz gap), not
+better, which the old round-3 docs mis-attributed to an unrelated "external-Q
+ceiling."
+
+### Does reverting w_inter_mm fix it? No -- not by itself
+
+Tested directly: swept `w_inter_mm` from 11 back up to 18mm, holding
+tonight's larger `a`/`w_iris`/`x_iris`/`y_wall`/`w_ext` fixed.
+
+| w_inter_mm | bw (MHz) | fc (GHz) | satellite level |
+|---|---|---|---|
+| 11.0 | 79 | 2.880 | -10.1 dB |
+| 13.0 | 347 | 2.860 | -5.2 dB |
+| 15.0 | 378 | 2.820 | -3.2 dB |
+| 16.31 (original value) | 397 | 2.800 | -2.7 dB |
+| 18.0 | 423 | 2.760 | -2.6 dB |
+
+![w_inter_mm recheck overlay](../../output/imgs/dualmode_cascade_winter_recheck_overlay.png)
+
+The satellite weakens monotonically but **plateaus around -2.6 to -3dB and
+never fully disappears**, even at w_inter_mm=18 (above the original
+baseline's own 16.31). Meanwhile bandwidth overshoots 3x past the 143.5MHz
+target and `fc` drifts monotonically further from 2.87GHz (2.880->2.760) as
+`w_inter_mm` grows. **A straight 1D revert trades the pair-split problem for
+two new ones (bandwidth blowout, centering drift) faster than it fixes the
+split** -- confirms the user's original centering concern was never fully
+resolved either, it's entangled with the same coupling-balance problem.
+
+Root cause, precisely stated: growing `w_iris` (17.0->19.1mm, done to fix
+k12 in round 3) increased each cavity's own internal pole splitting beyond
+what the SAME `w_inter_mm` used at the old, smaller `w_iris` (15.26mm) could
+still interleave. The two knobs were tuned independently (each "fixed" its
+own target ratio in isolation) without accounting for how they interact.
+
+### Honest status
+
+A genuine order-4 passband from this topology is not yet achieved. What IS
+now understood, precisely and with ground-truth evidence:
+- The failure mode is real and specific: inter-cavity coupling too weak
+  relative to the (now-larger) intra-cavity coupling, causing pole-pair
+  splitting rather than interleaving.
+- Fixing it needs a **joint** re-optimization of `w_iris` (intra) and
+  `w_inter_mm` (inter) together -- not reverting one while holding the other
+  fixed -- most likely landing at intermediate values for both (smaller
+  `w_iris` than round 3's 19.1mm, `w_inter_mm` in the 13-16mm range where
+  the pair gap first closes), plus the usual `a` re-centering for whatever
+  `fc` results.
+- **Not launched tonight** -- this is a genuinely new, better-informed
+  starting point for a future re-optimization, not something to run
+  unattended after this many hours of investigation. Flagged as the concrete
+  next step, pending the user's go-ahead.
+
 ## Related: circular_cross_iris (architecture change, see structural_exploration doc)
 
 Same session, same reasoning pattern (replace a localised perturbation
