@@ -746,6 +746,68 @@ is a genuinely more capable topology (N=4 vs N=2, steeper theoretical
 selectivity) and tonight's work materially improved understanding of how
 to tune it correctly -- but it is not yet a finished, competitive design.
 
+## dualmode_cascade: architectural experiment -- floating inter-cavity coupling, disproven (2026-08-27)
+
+User's architectural insight, well-reasoned from first principles: the
+standalone dual-mode cavity's external ports use a taper; cascading two
+such cavities replaces that taper connection with a bare coupling iris at
+the shared wall. Proposed testing whether the coupling MECHANISM itself
+(not just its width) was the limiting factor, since 2D tuning of
+`(w_iris, w_inter_mm)` on the existing full-wall-slot coupling never
+closed the persistent outer-gap asymmetry (~90 vs ~38MHz, ideal wants
+~46/48).
+
+Implemented `dualmode_cascade_floatinter` (new via-layout, committed):
+the inter-cavity coupling row becomes a floating segment (its own
+`y_wall_inter_mm` standoff) instead of spanning the full wall, mirroring
+how the internal mode-splitting irises are already built.
+`y_wall_inter_mm=0` regression-verified identical to the original.
+
+Ran a full 3D eigenmode-ground-truth search `(w_iris, w_inter_mm,
+y_wall_inter_mm)`, warm-started with all 19 already-known 2D points (free)
+plus 11 new evals spanning `y_wall_inter_mm` from 0 to 15mm (its full
+range). **Result: every meaningfully-floating point scored worse (RMSE
+29-121) than the un-floated mechanism.** The search's own best point
+(RMSE=23.9, a genuine ~9% improvement over the prior 26.1) landed at
+`y_wall_inter_mm=0` -- i.e. still the original mechanism, just a better
+point within it that the earlier, coarser 2D search hadn't found.
+
+**The floating-coupling hypothesis is disproven.** Shortening a
+symmetric slot's extent doesn't change which internal mode combination
+it preferentially couples to -- it's still symmetric in shape, just
+smaller. Confirmed the new "best" point via driven sweep anyway: fc=2.980
+(110MHz off), **bw=44.6MHz** (way under-coupled once real ports load it,
+despite looking better in the unloaded eigenmode metric), s11w=-2.04dB,
+il=-5.83dB -- clearly worse in practice than every other confirmed
+cascade design this session. The eigenmode gap-RMSE metric, while
+essential for diagnosing the pole-splitting problem, does not reliably
+predict driven performance at tight coupling values where external
+loading dominates.
+
+### Final verdict on dualmode_cascade
+
+Across the full investigation (rounds 1-6): fixed a real scoring bug,
+fixed a real geometry-scaling bug, diagnosed the "two center frequencies"
+shape defect via ground-truth eigenmode analysis, fixed the internal pole
+structure via a principled joint search, closed the loop with empirical
+fc/`w_ext` corrections (best confirmed shape: score 16.53, genuine
+equal-ripple structure with 3 S11 nulls), and finally tested and
+disproved the most promising remaining architectural idea (floating
+inter-cavity coupling). No configuration found this session reaches a
+clean, centered, well-matched (-16dB+ across the band) order-4 response.
+
+**Recommendation: stop further tuning of this specific coupling
+mechanism (bare/floating slot between two dual-mode cavities) -- it has
+been explored thoroughly and the remaining gap is not closing with
+further parameter search.** If an order-4 filter remains a goal, the
+next real step is a different physical coupling mechanism entirely (e.g.
+an intentionally asymmetric/off-center coupling element, or reconsidering
+a conventional inline chain of 4 single-mode cavities -- well-established
+coupling behavior, unlike this dual-mode-to-dual-mode bridge) -- a
+substantial new undertaking, not a quick fix. **The standalone dual-mode
+cavity (score 9.31, real SMA, consistently -16dB+) remains this
+project's best, most reliable, fabrication-ready result.**
+
 ## Related: circular_cross_iris (architecture change, see structural_exploration doc)
 
 Same session, same reasoning pattern (replace a localised perturbation
