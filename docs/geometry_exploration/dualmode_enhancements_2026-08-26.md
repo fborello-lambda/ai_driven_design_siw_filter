@@ -584,6 +584,84 @@ good eigenmode candidate is found, re-center `a`, THEN move to Stage 2
 (external `w_ext`/Qe tuning via driven sweep) and Stage 3 (final FINE+FAB
 confirm) as originally planned.
 
+## dualmode_cascade: joint eigenmode search -- best bandwidth of the whole investigation (2026-08-27)
+
+User's follow-up: "run the eigenmode, find the best, then optimize with
+RMSE if that's the best approach, or propose another." Confirmed: RMSE
+against the analytically-computed ideal pole pattern, searched jointly over
+`(w_iris, w_inter_mm)`, is the right approach -- and it worked.
+
+### A cautionary note first: the user's own visual pick was wrong
+
+The user picked `w_inter_mm=18` from the earlier driven S21 overlay plot as
+looking "most like a 4th order Chebyshev." The 1D eigenmode sweep (prior
+section) directly disproved this: w=18 eigenmode-confirms as one of the
+*worst* points tested (gap RMSE=95.7, middle gap 211MHz -- wider than v3's
+own 197MHz). The apparent visual improvement in the driven S21 curve was a
+port-excitation artifact (a pole becoming harder for the feed to see, not
+actually moving closer in frequency) -- exactly the ambiguity eigenmode
+ground truth exists to catch. Worth remembering for future visual
+inspection of driven S-parameter plots on this fragile topology.
+
+### Joint (w_iris, w_inter_mm) GP search
+
+Warm-started with the 9 already-known 1D-sweep points (no re-simulation),
+then explored jointly (skopt GP, 16 new eigenmode-only evals, ~25 total),
+minimizing RMSE against the ideal gaps (46.1/81.1/48.2 MHz). Converged
+tightly and repeatably (4 consecutive evals within noise of each other):
+
+**Winner: `w_iris=13.0mm`, `w_inter_mm=13.706mm`** -- gap RMSE=**26.1MHz**,
+gaps [90/83/38]MHz, center 2.8957GHz. This is the best gap-pattern match of
+the entire cascade investigation (previous best: v3's own RMSE~67MHz at
+w_iris=19.1/w_inter_mm=12). Confirms the hypothesis from the 1D sweep: a
+*smaller* `w_iris` (13.0 vs the 19.1 arrived at through rounds 2-3's
+uncoordinated single-knob tuning) paired with `w_inter_mm` near 13.7-14
+brings the middle gap in line with ideal without blowing up the outer gaps.
+
+Tested a candidate x_iris-symmetry fix (x_iris=30.0 exactly vs the
+carried-over 30.1, in case the 0.1mm offset between the two nominally
+mirror-identical cavities explained the outer-gap asymmetry) -- negative
+result, RMSE actually got very slightly worse (27.4 vs 26.1). The
+asymmetry is a real feature of this coupling regime, not a symmetry bug.
+
+### Driven confirm
+
+Re-centered `a` (60.0->60.52, proportional scaling of x_iris/y_wall/w_iris
+with it, `w_inter_mm` held fixed as the deliberate knob) for the measured
+eigenmode center (2.8957 vs ideal 2.8708), then ran ONE driven sweep
+(`w_ext=18.1` unchanged -- Stage 2 external-Q retuning not yet done):
+
+```
+a=60.52  w_iris=13.11  x_iris=30.36  y_wall=9.08  w_ext=18.1  w_inter_mm=13.71
+fc=2.800GHz   bw=165.5MHz   s11w=-2.20dB   il=-3.92dB
+```
+
+![eigenmode-search winner vs ideal N=4](../../output/imgs/dualmode_cascade_eigensearch_vs_ideal.png)
+
+**bw=165.5MHz is the best bandwidth match of the ENTIRE cascade
+investigation** -- vs v3's 348MHz (2.4x over target) and every earlier
+attempt. This directly validates the eigenmode-targeted approach: fixing
+the actual pole structure (not chasing an aggregate S-parameter proxy)
+produces a design whose bandwidth control is fundamentally sound, without
+even touching external coupling. `fc` is 70MHz low of target -- the
+unloaded-eigenmode-to-loaded-driven frequency shift is design-dependent
+(v3 shifted UP under loading, this candidate shifted DOWN) and isn't
+captured by the simple 1/a rescaling; a further small `a` correction
+informed by this measurement would fix it. Match (`s11w`=-2.20dB) remains
+poor because `w_ext` has never been retuned for this candidate -- Stage 2
+(external coupling, planned from the start) is the natural next step, not
+yet run.
+
+### Status
+
+This is the strongest structural result of the whole cascade investigation
+-- correct pole interleaving AND close-to-target bandwidth, achieved via
+principled eigenmode-ground-truth search rather than driven-response
+guesswork. Remaining work before a final confirmed design: (1) a small
+further `a` correction for the loading-induced fc shift, (2) Stage 2
+external-`w_ext` retuning for match, (3) final FINE+FAB driven confirm.
+Not run tonight -- flagged as the next step.
+
 ## Related: circular_cross_iris (architecture change, see structural_exploration doc)
 
 Same session, same reasoning pattern (replace a localised perturbation
