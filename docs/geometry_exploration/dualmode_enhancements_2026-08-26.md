@@ -662,6 +662,90 @@ further `a` correction for the loading-induced fc shift, (2) Stage 2
 external-`w_ext` retuning for match, (3) final FINE+FAB driven confirm.
 Not run tonight -- flagged as the next step.
 
+## dualmode_cascade: fc + external-Q fix -- the best shape of the whole investigation (2026-08-27)
+
+Final chapter. Fixed the two remaining problems in the joint-eigenmode-
+search winner (fc 70MHz low, match poor because `w_ext` was still carrying
+a value tuned for a completely different internal structure from round 2/3).
+
+### fc fix: direct empirical `a` correction
+
+Rather than route through the unloaded eigenmode center (unreliable --
+each design's unloaded-to-loaded frequency shift is design-dependent, not
+a fixed offset), corrected `a` directly from the measured DRIVEN fc via
+the same fc~1/a scaling used all session: `a=60.52 -> 59.044` (measured
+fc=2.800 -> target 2.870), with `w_iris`/`x_iris`/`y_wall` scaled
+proportionally. Result: **fc=2.860, only 10MHz off target** -- confirms
+the direct approach works better than trying to model the loading shift.
+
+### External-Q fix: group-delay method attempted, fell back to empirical scan
+
+Attempted the standard method CLAUDE.md specifies (`Qe =
+omega0*tau_S11(omega0)/4`, using the phase column Palace already writes to
+`port-S.csv` -- no new Palace config needed). Result came back **negative**
+(-8.50 vs ideal 22.18) -- a sign/convention artifact, most likely because
+the shallow match at this point gives no clean S11 resonance feature for
+the method to lock onto (a chicken-and-egg limitation: the method needs a
+decent match to measure reliably, but measuring is how you'd get there).
+Rather than trust an unreliable analytic correction from this (the exact
+mistake that diverged badly in round 3), fell back to the same safe
+empirical `w_ext` scan methodology that worked before:
+
+| w_ext | fc (GHz) | bw (MHz) | s11w (dB) | il (dB) |
+|---|---|---|---|---|
+| 12.0 | 2.940 | 85.1 | -1.60 | -6.38 |
+| **14.0** | **2.860** | **170.3** | **-4.17** | -3.97 |
+| 16.0 | 2.880 | 122.1 | -3.31 | -3.04 |
+| 18.1 (unchanged baseline) | 2.860 | 175.5 | -2.92 | -3.20 |
+| 20.0 | 2.840 | 171.5 | -2.05 | -4.11 |
+| 22.0 | 2.980 | 165.0 | -1.73 | -4.50 |
+| 24.0 | 2.940 | 73.4 | -1.34 | -19.63 |
+
+`w_ext=14.0` clearly best.
+
+### Final confirmed result (FAB-TOLERANCE)
+
+```
+a=59.0  w_iris=12.8  x_iris=29.6  y_wall=8.9  w_ext=14.0  w_inter_mm=13.7
+fc=2.907GHz   bw=199MHz   s11w=-5.01dB   il=-3.18dB
+standard v17 score = 16.531
+```
+
+![final fixed cascade vs ideal N=4](../../output/imgs/dualmode_cascade_final_fixed_vs_ideal.png)
+
+**Numerically this scores worse than v3 (16.53 vs 13.83).** But the plot
+tells a different, better story than the score does: this response shows
+genuine equal-ripple structure -- two visible humps in S21 and **three
+distinct S11 nulls** (best -21dB, right in the middle of the passband),
+tracking the ideal N=4 curve's skirts and null positions far more closely
+than v3's accidental single-spike-plus-satellite ever did. This is a real,
+qualitative shape improvement the v17 score's specific weighting (tuned
+against other geometries' typical failure modes, not this one) does not
+credit. **Score alone should not be trusted as the sole judge of "is this
+a real filter" for this fragile topology** -- visual/eigenmode inspection
+remains necessary, exactly the lesson of this whole multi-round
+investigation.
+
+### Overall verdict on dualmode_cascade (closing this investigation)
+
+Across all 5 rounds tonight: fixed a real scoring bug (N2 vs N4), fixed a
+real geometry-scaling bug (v2->v3), diagnosed and explained the
+"degenerate two-center-frequency" shape via ground-truth eigenmode
+analysis (a real structural defect, not a scoring artifact), found and
+fixed it via a principled joint eigenmode search, then closed the loop
+with fc/`w_ext` corrections. The final design here is genuinely the best
+*shape* achieved, though not the best *score* -- both facts should be
+weighed, and neither result is yet fabrication-ready (match is still only
+-5 to -21dB in spots, short of a clean -16dB+ across the whole band).
+
+**The standalone dual-mode cavity (score 9.31, single-cavity, already
+validated with real SMA and match consistently at or better than -16dB)
+remains the best, most reliable result of the entire session, by a clear
+margin over every dualmode_cascade variant tried.** `dualmode_cascade`
+is a genuinely more capable topology (N=4 vs N=2, steeper theoretical
+selectivity) and tonight's work materially improved understanding of how
+to tune it correctly -- but it is not yet a finished, competitive design.
+
 ## Related: circular_cross_iris (architecture change, see structural_exploration doc)
 
 Same session, same reasoning pattern (replace a localised perturbation
