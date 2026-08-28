@@ -213,6 +213,102 @@ gap) is too weak relative to the intra-cavity splittings, and the top pair is pi
 Stage A's k_inter sweep is the direct fix; total spread 143 vs 175 MHz says overall
 coupling is only ~20% shy, i.e. well within tuning range.
 
+## 6.2 v6 step 1 result: y-offset apertures implemented, but a point-check does NOT yet confirm the fix
+
+`y_ext_off_mm` / `y_ext2_off_mm` / `y_inter_off_mm` were added to
+`dualmode_cascade()` (commit `6580725`) via a new `_wall_with_gap()` helper
+that opens the port/inter-cavity gap off-centre instead of at y=0, with
+`off=0.0` regression-verified byte-identical to the prior via list (150/150
+vias, exact match) and a smoke-tested mesh build (145,654 tets, both ports
+found) confirming the taper/port machinery needs no changes (`face_ty()`'s
+flare bound is anchored at the wall's true outer extent ±half regardless of
+where the gap sits inside it, as predicted in §4.1).
+
+A quick 4-point driven de-risking test (v5-best geometry, 2.70–2.95 GHz @
+8 MHz step, screen mesh) gave:
+
+| variant | best S11 | IL peak | real nulls (<−8dB) |
+|---|---|---|---|
+| baseline (all offsets 0) | −14.91 dB | −5.51 dB | 1 @ 2.828 GHz |
+| yoff_all (port ±6/∓4mm, inter 3mm) | −15.97 dB | −5.67 dB | 1 @ 2.828 GHz |
+| yoff_inter_only (3mm) | −14.99 dB | −5.80 dB | 1 @ 2.828 GHz |
+| yoff_ports_only (±6/∓4mm) | −11.44 dB (worse) | −6.09 dB | 1 @ 2.812 GHz |
+
+**This does NOT confirm the y-parity hypothesis as stated.** At these
+offset magnitudes (10–20% of the cavity half-width, 30.5mm), the response
+barely moved — the same single null, marginally better or worse — not the
+second/third/fourth null a clean y-even/y-odd selection rule predicts.
+`yoff_ports_only` alone made the match worse.
+
+Two readings, not mutually exclusive:
+1. **The offsets tested may simply be too small.** Three spot values is not
+   a sweep; the true k_inter(y_inter_off) / Qe(y_ext_off) functions could
+   need a larger offset, or a different sign/combination, to reach the
+   under-coupled modes. This is exactly why §4.2's Stage A calls for a real
+   swept calibration with a fitted curve, not point guesses.
+2. **The y-even/y-odd framing may be incomplete.** A dual-mode SIW cavity's
+   near-degenerate pair (typically TE102/TE201-like) are diagonal, mixed
+   x-y field patterns, not clean reflection eigenstates of y → −y. A modest
+   y-shift may not toggle their coupling as cleanly as a simple standing-
+   wave-mode argument predicts; the real lever might need a combined x-y
+   perturbation (e.g. a diagonal or corner-offset aperture) rather than a
+   pure y-shift.
+
+**Conclusion: do not treat the y-offset apertures as a proven fix yet.**
+The geometry capability is real and regression-safe, but its effect on the
+actual defect (per-mode external coupling) is still unmeasured beyond this
+inconclusive spot check. The next required step is §4.2 Stage A done
+properly — a swept, fitted Qe(y_ext_off) and k_inter(y_inter_off) via
+eigenmode/group-delay, not another round of driven point-guesses — before
+deciding whether this lever is sufficient or whether the fallback (§4.3)
+is warranted.
+
+## 6.3 Stage A on the reference cavity: the y-offset lever is FALSIFIED as a mode-unlocking switch
+
+The inconclusive cascade spot-check (§6.2) left two readings open: offsets
+too small, or the y-parity mechanism itself wrong. To settle it cleanly,
+`y_ext_off_mm`/`y_ext2_off_mm` were also added to the STANDALONE reference
+single dual-mode cavity (`palace_dualmode_driven._via_layout`/`build_mesh`,
+commit `eaf5c35`) -- the same a/w_iris/x_iris/y_wall/w_ext that scores 9.31
+in production, with its real Taoglas SMA connector and the real CPU fine
+mesh (1.2/0.2/6.0), i.e. the exact conditions known to produce −17.7 to
+−24dB. This isolates the offset's effect from mesh/connector confounds
+(a first attempt using the coarse screen mesh + no SMA connector gave a
+barely-resonant −2 to −4dB baseline even at offset 0 -- unusable signal,
+not a real test; see the abandoned `v6_stageA_qe_sweep.py`/its Qe-extraction
+bug for that dead end).
+
+Result, full fidelity, 3 points:
+
+| y_ext_off_mm | S11 best | resonance f | IL peak |
+|---|---|---|---|
+| 0 | −24.45 dB | 2.910 GHz | −1.42 dB |
+| 8 | −16.52 dB | 2.940 GHz | −1.63 dB |
+| 16 | −5.32 dB | 3.000 GHz (hit sweep edge) | −4.00 dB |
+
+**Clean, monotonic degradation as the offset grows — no second resonance
+appears.** This falsifies the y-parity "selection-rule switch" mechanism
+proposed in §2.2/§4.1: offsetting the port gap does not open a new coupling
+path to a previously-invisible mode. It simply de-tunes and de-couples the
+SAME mode pair the centred aperture already reaches (weaker coupling +
+frequency pulling), consistent with a purely local perturbation of the
+aperture's own near-field overlap, not a parity-based gating effect.
+
+**Conclusion: the y-offset apertures (`y_ext_off_mm`/`y_ext2_off_mm`/
+`y_inter_off_mm`) are a legitimate, regression-safe, working NEW geometry
+capability (they do measurably and controllably change coupling strength,
+useful for fine Qe tuning within a mode a port already reaches) -- but they
+are NOT the fix for dualmode_cascade's core defect (one real S11 null
+instead of four).** §4.2's Stage A/B/C plan, as originally scoped around
+this lever, does not resolve the problem; k_inter(y_inter_off) may still be
+worth a quick companion check for completeness, but the weight of evidence
+now says the missing-mode-coupling problem needs a DIFFERENT geometric
+mechanism than a pure y-shift of an existing centred gap -- e.g. a genuinely
+off-axis (diagonal/corner) aperture that couples to a different field
+component entirely, not just a shifted version of the same one, or
+accepting the standalone N=2 design (§4.3 fallback) as dualmode_cascade's
+practical outcome.
+
 ## 7. How to continue (checklist)
 
 1. Add `y_inter_off_mm`, `y_ext_off_mm`, `y_ext2_off_mm` to
