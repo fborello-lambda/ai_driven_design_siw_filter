@@ -141,25 +141,64 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "w_ext":  (20.7, 14.0, 26.0),
     },
     # 2026-08-26, user-prompted: 2 dual-mode cavities in series (N=4). Box
-    # centred on dual-mode's own landed values for the shared knobs (a,
-    # w_iris, x_iris, y_wall, w_ext); w_inter (inter-cavity coupling) gets
-    # its own range around w_ext's landed value, same starting-guess logic
-    # as dualmode_cascade()'s own default. x_iris2/w_iris2 are NOT part of
-    # this box -- mirrored to cavity 1's values by default (see
-    # dualmode_cascade's docstring); a full 7D search is a stretch goal,
-    # not the first thing to try.
+    # ORIGINALLY centred on dual-mode's own landed values with x_iris2/w_iris2
+    # mirrored (not searched) -- see v4 revision below for why that box was
+    # replaced.
+    #
+    # v4 revision (2026-08-28): promoted to a genuinely ASYMMETRIC, 10D box,
+    # after two full sessions of evidence that the mirrored 6D box cannot
+    # reach a real N=4 passband:
+    #   - eigenmode ground truth (this repo's own cascade_eigenmode.py)
+    #     proved the mirror (x-swap) symmetry forces the 4-pole spectrum into
+    #     an even/odd pair split no amount of coupling-WIDTH tuning escapes --
+    #     x_iris2_mm/w_iris2_mm must be free, independent dimensions.
+    #   - the `band_edges()` bandwidth-bridging bug (fixed alongside this
+    #     box) hid that EVERY prior "narrower bandwidth" cascade result
+    #     (this session and the last) was actually the response splitting
+    #     into two disconnected resonance lobes, not a real merged, narrower
+    #     N=4 Chebyshev passband. Re-measured with the fix: the naive
+    #     symmetric baseline (w_inter=16.31, well-matched, s11w=-10.28dB) has
+    #     ONE genuine ~290MHz lobe; every asymmetric/narrowed attempt this
+    #     session (v1/v2/v3 of the eigenmode search) split into two ~20-55MHz
+    #     lobes instead. Classic coupled-resonator theory: two cavities merge
+    #     into one passband only while inter-cavity coupling stays comparable
+    #     to each cavity's own loaded-Q; narrowing `w_inter_mm` in isolation
+    #     (every previous session's strategy) while `w_ext`/Qe stays
+    #     chronically under-coupled (measured 4-5x the ideal 22.18 across
+    #     the ENTIRE `w_ext` range ever tried, up to 24mm) pushes the system
+    #     into the weak-coupling/split regime instead of narrowing smoothly.
+    #   - `w_ext` ceiling raised 24->36mm (still comfortably under `a`'s 50mm
+    #     floor, see the w_ext/a-clearance note above) specifically to let
+    #     the search test stronger external coupling than any prior round --
+    #     nobody has found where, or if, critical coupling (Qe~22) exists for
+    #     this port aperture; round 3 stopped short of finding out.
+    #   - `iris_defect_frac`/`iris2_defect_frac` (commit 1ea9d2a, 2026-08-28,
+    #     user-prompted "remove vias inside the cavity") added as genuinely
+    #     new coupling dims: drop one via pair from a cavity's own internal
+    #     fence at a chosen point, a localized coupling defect no continuous
+    #     width/position parameter can reach. `<0` (the floor) is the
+    #     no-defect sentinel, matching `dualmode_cascade()`'s own `None`
+    #     convention.
+    # This is a genuinely bigger, more expensive search than the box below
+    # replaces -- deliberately paired with `screen_at_f0()`'s cheap GPU
+    # pre-screen (already wired into `optimize()`'s coarse stage) to reject
+    # non-viable candidates fast, rather than spending a full sweep on each.
     "dualmode_cascade": {
-        "a":      (57.21, 50.0, 64.0),
-        "w_iris": (15.26, 8.0, 22.0),
-        "x_iris": (28.68, 20.0, 37.0),
-        "y_wall": (8.62, 3.0, 15.0),
-        "w_ext":  (16.31, 10.0, 24.0),
-        # NOTE: key must be the exact LAYOUTS function kwarg name (w_inter_mm),
-        # not "w_inter" -- unlike a/w_iris/x_iris/y_wall/w_ext, this bypasses
-        # _kw()'s explicit pop-based renaming and flows through the generic
-        # structural-knob passthrough (_extra()), same as wf_mm/w_iris2_mm/
-        # n_corners/ring2_frac/n_perturb elsewhere in this dict.
-        "w_inter_mm": (16.31, 8.0, 26.0),
+        "a":      (61.18, 55.0, 66.0),
+        "w_iris": (9.89, 8.0, 22.0),
+        "x_iris": (29.74, 20.0, 37.0),
+        "y_wall": (10.42, 3.0, 15.0),
+        "w_ext":  (16.0, 8.0, 36.0),
+        # NOTE: keys below must be the exact LAYOUTS function kwarg names --
+        # unlike a/w_iris/x_iris/y_wall/w_ext, these bypass _kw()'s explicit
+        # pop-based renaming and flow through the generic structural-knob
+        # passthrough (_extra()), same as wf_mm/n_corners/ring2_frac
+        # elsewhere in this dict.
+        "w_inter_mm":         (10.03, 8.0, 26.0),
+        "w_iris2_mm":         (12.92, 8.0, 22.0),
+        "x_iris2_mm":         (30.27, 20.0, 37.0),
+        "iris_defect_frac":   (0.12, -0.1, 1.0),
+        "iris2_defect_frac":  (-0.1, -0.1, 1.0),
     },
     # 2026-08-26, user-prompted: dual-mode's own landed 5D box, unchanged --
     # the second wall (w_iris2_mm, iris_sep_mm) is the structural knob, fixed
