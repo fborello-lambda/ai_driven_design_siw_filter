@@ -1108,3 +1108,127 @@ minimum-in-band-ripple check consistent with the 0.1dB Chebyshev ripple
 spec) would be needed before `dualmode_cascade`'s driven bandwidth claims
 can be trusted going forward -- not implemented here, flagged as the
 necessary next step before any further tuning of this topology.
+
+## `band_edges()` fix + v4: a GPU-screen-then-refine search on the corrected metric (2026-08-28)
+
+**Fix implemented.** `band_edges()` (`src/siwfilter/optimize.py`) now takes
+the crossings bounding the CONTIGUOUS run around the S21 peak, not the
+first/last crossing over the whole window -- one targeted change (walk
+outward from `argmax(s21_db)`'s position in the sorted above-threshold
+index array to its contiguous run boundaries, then interpolate exactly as
+before). `score()` consumes `bw`/`fc_3db` from this function directly, so
+the objective is corrected for any future search, not just the reporting.
+
+Verified against real saved data before trusting it: the standalone
+dual-mode design (a genuine single ~290-320MHz lobe) is BIT-FOR-BIT
+unchanged (318.3MHz either way); every `dualmode_cascade` result measured
+this session shrinks to its true value (eval18 138.5->37.5MHz, v1 stagger
+142.8->53.9MHz, v2 88.2->17.3MHz) -- exactly the correction the user's
+by-eye catch predicted, confirmed numerically.
+
+### v4: genuinely asymmetric 10D search box, reusing the project's own pipeline
+
+Root-cause understanding after the fix: classic coupled-resonator theory
+says two cavities merge into one passband only while inter-cavity coupling
+stays comparable to each cavity's own loaded-Q; every session's strategy of
+narrowing `w_inter_mm` in isolation, while `w_ext`/Qe stayed chronically
+under-coupled (measured 4-5x the ideal 22.18 across the entire `w_ext`
+range ever tried, up to 24mm), pushes the system into the weak-coupling/
+split regime instead of narrowing smoothly. User asked: fix the metric,
+analyze further, then try a GPU-based fast-screen search (v4) rather than
+more ad hoc eigenmode-only scripts.
+
+Promoted `topologies/geometry.py`'s `dualmode_cascade` box from the old
+mirrored 6D box to a genuinely asymmetric 10D box: `x_iris2_mm`/
+`w_iris2_mm` freed (previously mirrored to cavity 1, never independently
+searched by the project's own `optimize()` pipeline), `iris_defect_frac`/
+`iris2_defect_frac` added (commit `1ea9d2a`), and the `w_ext` ceiling
+raised 24->36mm specifically to test coupling strengths nobody had reached
+-- round 3 stopped at 24mm still 4.3-5.1x under-coupled, never finding
+where (or if) critical coupling exists for this port aperture.
+
+Reused the project's own `optimize()`/`screen_at_f0()` GPU-screen-then-
+refine pipeline (already built, already used for every other geometry
+this project has tuned) instead of another custom eigenmode script, now
+that `band_edges()` is trustworthy. Sanity-checked the wiring before
+committing compute: `screen_at_f0()` on eval18's exact old params
+correctly failed (`s21_best=-7.74dB`, below the -6dB floor) -- consistent
+with everything already known about that design.
+
+**Result: all 40 evals (11 random-seed + 29 GP-guided) screened out on
+GPU. Zero survivors across the entire budget** -- a 100% screen-out rate,
+confirmed by checking raw solve logs for two representative failures (one
+a harmless leftover from an earlier interrupted launch, one a genuinely
+valid but completely non-resonant sweep, s21 ~-38 to -45dB throughout the
+window) to rule out a meshing/solver bug before trusting the result. The
+GP surrogate had no gradient to exploit -- every screened candidate ties
+at exactly the `1e9` sentinel, so the "GP-guided" phase was effectively
+still broad exploration, unable to home in on the narrow viable pocket
+this session's eigenmode-ground-truth searches (v1/v2/v3) had already
+found by a completely different method.
+
+`optimize()`'s FINE + FAB-TOLERANCE confirm ran on its tracked fallback
+(`best_p` never updated off the warm-start point, i.e. eval18's exact
+params) since nothing ever beat the tied `1e9`:
+
+```
+FINE:          fc=2.857GHz  bw=110MHz  s11w=-1.47dB  il=-7.16dB  score=25.551
+FAB-TOLERANCE: fc=2.857GHz  bw=57MHz   s11w=-1.61dB  il=-5.72dB  score=24.406
+```
+
+Both bandwidths verified as genuine single contiguous runs (band_edges
+recomputation matches exactly). Notably, these numbers differ from the
+EARLIER standalone `evaluate()` confirm of the SAME exact parameters
+(`fc=2.887GHz, bw=138.5->37.5MHz corrected, s11w=-1.51dB, il=-9.16dB`) --
+run-to-run meshing/floating-point non-determinism alone shifts this
+design's bandwidth by roughly 2-3x. This is itself a meaningful finding,
+independent of the search result: **this design point is sensitive enough
+that even numerical noise, not just parameter perturbation, moves its
+bandwidth substantially** -- reinforcing every fragility finding
+documented earlier in this investigation (mode-crossing discontinuities,
+fab-tolerance sensitivity, w_ext non-monotonicity).
+
+### Verdict on v4
+
+**Widening the search box was the wrong direction.** The viable region
+this session's eigenmode-ground-truth searches found (v1's stagger
+breakthrough, v2's sensitivity-informed refinement, v3's via-defect
+discovery of eval18/eval45) is narrow and specific -- reachable by a
+method that could cheaply evaluate thousands of unloaded-cavity
+candidates and follow a real gradient (gap-symmetry/spacing), but NOT
+easily rediscovered by a generic driven-GPU screen starting from
+scratch across a wide box, because every screened candidate scores
+identically (a hard pass/fail, not a graded signal) until one happens to
+land in the pocket -- and 40 draws, guided or not, never found it.
+
+**Recommendation for any future search of this topology**: warm-start
+tightly around eval18's exact params (or another already-known-good
+point) with SMALL local bounds, not wide exploratory ones -- the GPU
+screen-then-refine pipeline is still the right infrastructure (cheap
+rejection, correct driven metric now that `band_edges()` is fixed), but
+it needs to be pointed at a narrow neighborhood of a known-decent point,
+not asked to rediscover one from a wide box blind.
+
+### Overall final verdict (this investigation, all rounds, this session)
+
+- **Pole-shape problem solved**: the "order 2 + order 2 with an offset"
+  defect the user originally flagged is genuinely fixed at the
+  eigenmode/physics level (best `rmse=3.9`, `|gap1-gap3|=5.7`, center
+  10.1MHz off target -- eval45) -- the best characterization of this
+  topology's achievable pole structure this project has produced.
+- **Match and fab-tolerance robustness are NOT solved**: every design
+  with genuinely good pole-shape lands at the same -1.5 to -2dB match
+  ceiling regardless of how the needed asymmetry is introduced (stagger,
+  defects, or v4's wider search), confirmed structural via the
+  stagger-ramp test; the design point degrades further under both fab
+  rounding (bw 110->57MHz) and even run-to-run numerical noise.
+- **The bandwidth-bridging measurement bug is fixed** for all future
+  work on this and every other topology, a permanent, valuable
+  correction independent of whether `dualmode_cascade` itself ever
+  becomes competitive.
+- **Final recommendation stands unchanged**: the standalone dual-mode
+  cavity (score 9.31, real SMA, consistently -16dB+ match, a genuinely
+  robust single contiguous passband) remains this project's best, most
+  reliable, fabrication-ready result. `dualmode_cascade` is now a
+  thoroughly characterized, scientifically well-understood N=4-capable
+  topology -- not yet a competitive one.
