@@ -59,6 +59,29 @@ def _segment(lo: float, hi: float, p: float) -> np.ndarray:
     return np.linspace(lo, hi, n + 1)
 
 
+def _wall_with_gap(gap_half_w: float, off: float, half: float, p: float) -> np.ndarray:
+    """Y-positions of a full transverse via wall spanning [-half, half], with
+    a gap of half-width gap_half_w centred at y=off instead of y=0.
+
+    off=0.0 reproduces the classic centred-gap wall EXACTLY (regression-
+    verified: the two segments [-half,-gap_half_w] and [gap_half_w,half] are
+    the same point sets `_segment(gap_half_w, half, p)` and its negation
+    always produced, just not necessarily in the same order -- order does
+    not matter, _dedupe treats the via list as a set).
+
+    Clamped so the gap never reaches a side wall (at least one segment
+    pitch of wall remains on each side) -- an unclamped call could open the
+    gap onto y=+-half and leave that whole side wall missing."""
+    off = max(-(half - gap_half_w - p), min(half - gap_half_w - p, off))
+    lo_edge, hi_edge = off - gap_half_w, off + gap_half_w
+    ys = []
+    if lo_edge > -half:
+        ys.extend(_segment(-half, lo_edge, p))
+    if hi_edge < half:
+        ys.extend(_segment(hi_edge, half, p))
+    return np.array(ys)
+
+
 def _defect_index(offsets: np.ndarray, frac: float | None) -> int:
     """Map a 0..1 fraction to an index into `offsets` (a fence via to drop).
 
@@ -547,7 +570,8 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
                      y_wall_mm=3.0, w_inter_mm=None, x_iris2_mm=None,
                      w_iris2_mm=None, y_iris_off_mm=0.0, y_iris2_off_mm=0.0,
                      iris_defect_frac=None, iris2_defect_frac=None,
-                     w_ext2_mm=None, **_):
+                     w_ext2_mm=None, y_ext_off_mm=0.0, y_ext2_off_mm=0.0,
+                     y_inter_off_mm=0.0, **_):
     """TWO dual-mode square cavities in series (N=4: 2 poles/cavity x 2
     cavities), joined by a NEW inter-cavity coupling row -- genuinely new
     mesh topology, not a delta: the single-cavity dualmode builder has no
@@ -615,7 +639,23 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     INTERNAL iris's own y-parity too -- an independent knob, same
     zero-board-size-cost philosophy. Both default to 0.0, reproducing the
     exact original symmetric iris (regression-verified). Clamped to
-    +-y_wall_mm so the row never crosses its own cavity's side wall."""
+    +-y_wall_mm so the row never crosses its own cavity's side wall.
+
+    y_ext_off_mm / y_ext2_off_mm / y_inter_off_mm (2026-08-28, v6 -- see
+    dualmode_cascade_v6_handoff_2026-08-28.md): shift the PORT and
+    INTER-CAVITY coupling apertures off y=0, same motivation as
+    y_iris_off_mm/y_iris2_off_mm but for the three walls that were still
+    hardcoded to a centred gap. Eigenmode ground truth on the v5 best design
+    showed all 4 poles present and well-placed (within 26MHz of the N=4
+    synthesis targets) in the CLOSED cavity, yet the driven response showed
+    only ONE real S11 null -- the poles exist, the (y-symmetric) apertures
+    just cannot reach the y-odd ones. A centred gap couples only to
+    y-even fields; shifting it off-centre opens a path to the y-odd modes,
+    which y_iris_off_mm/w_ext2_mm alone (both preserve the OTHER apertures'
+    y=0 centring) could not do. All three default to 0.0, reproducing the
+    exact original centred-gap walls (regression-verified: `_wall_with_gap`
+    at off=0 emits the same point set the old `_segment(w/2,half,p)` +-o
+    pairing did)."""
     half = a_mm / 2.0
     r, p = d_via_mm / 2.0, p_via_mm
     Li = 2.0 * a_mm                      # total cavity length, both stages
@@ -627,17 +667,18 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     w_ext2 = w_ext2_mm if w_ext2_mm is not None else w_ext_mm
 
     vias = []
-    # end walls (true ports) at x=0 and x=Li -- independently sized apertures
-    for o in _segment(w_ext_mm / 2.0, half, p):
-        vias.append((0.0, o)); vias.append((0.0, -o))
-    for o in _segment(w_ext2 / 2.0, half, p):
-        vias.append((Li, o)); vias.append((Li, -o))
+    # end walls (true ports) at x=0 and x=Li -- independently sized AND
+    # independently positioned apertures.
+    for o in _wall_with_gap(w_ext_mm / 2.0, y_ext_off_mm, half, p):
+        vias.append((0.0, o))
+    for o in _wall_with_gap(w_ext2 / 2.0, y_ext2_off_mm, half, p):
+        vias.append((Li, o))
     # continuous side walls the full length (both cavities share the width)
     for xv in np.linspace(0.0, Li, max(1, round(Li / p)) + 1):
         vias.append((xv, -half)); vias.append((xv, half))
-    # inter-cavity coupling wall at the shared boundary (full extent)
-    for o in _segment(w_inter / 2.0, half, p):
-        vias.append((a_mm, o)); vias.append((a_mm, -o))
+    # inter-cavity coupling wall at the shared boundary
+    for o in _wall_with_gap(w_inter / 2.0, y_inter_off_mm, half, p):
+        vias.append((a_mm, o))
     # each cavity's own floating internal mode-splitting iris -- off_1/2
     # clamped to +-y_wall_mm so the shifted row stays inside the cavity.
     if w_iris_mm is not None:
