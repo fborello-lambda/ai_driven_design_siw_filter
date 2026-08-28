@@ -1052,3 +1052,59 @@ deliverable, until both its match ceiling and its fab-tolerance fragility
 are separately addressed -- likely via a redesigned external-coupling/
 taper mechanism together with a search objective that penalizes parameter
 sensitivity, not just landed performance at exact (unrounded) values.
+
+### CRITICAL CORRECTION: the reported `bw`/`fc` numbers above are measurement artifacts, not real passbands
+
+User caught this by eye: *"the bandwidths in this case and the center
+frequencies doesn't make sense because of the shape of the filter."*
+Checked directly against the raw S11/S21 arrays -- correct call.
+
+`optimize.py`'s `band_edges()` computes bandwidth as the FIRST-to-LAST
+frequency crossing `max(S21)-3dB`, over the *entire* swept band -- not a
+walk outward from the peak, and not a check that the region in between
+stays continuously above threshold. For a response with two separated
+lobes (a real notch dropping below -3dB relative to the taller lobe
+sitting between them), this silently BRIDGES across the notch and
+reports one wide "bandwidth" spanning both disconnected lobes as if they
+were a single passband.
+
+Checked all three of this session's "best" driven results for genuinely
+contiguous above-threshold runs (not just the first/last crossing):
+
+| version | reported `bw` | actual contiguous -3dB run(s) |
+|---|---|---|
+| v1 (stagger) | 142.8 MHz | fragments only: 1 sample + a 20MHz run -- no continuous run anywhere near 142.8MHz |
+| v2 (7D free search) | 88.2 MHz | two **isolated single points**, 80MHz apart -- essentially no continuous -3dB band |
+| v3/eval18 (official FINE) | 138.5 MHz | two separate lobes, 40MHz and 30MHz, with a real ~3.5dB-deep notch between them (down to -12.71dB vs the -12.16dB threshold) |
+
+**None of v1/v2/eval18 ever became a genuine single continuous passband
+when actually driven with real ports.** The eigenmode ground-truth
+metric (gap symmetry/spacing on the CLOSED, unloaded cavity) genuinely
+improved across this investigation -- that part of the story is real --
+but it never translated into the driven structure actually merging its
+poles into one coherent, continuously-coupled passband. The two
+resonances stay measurably separated (a real notch, not just ripple)
+even in the "best" design. This is consistent with, and likely explains,
+the persistently poor `il`/`s11w` numbers documented above: a response
+that is really two weakly-linked narrow resonators, not one
+well-coupled wide passband, will trap and dissipate power in the gap
+between them rather than passing it through -- match, insertion loss,
+and this bandwidth-bridging artifact are most likely three symptoms of
+the same underlying problem (still-insufficient inter-cavity/external
+coupling), not three independent issues.
+
+**Verified this does NOT affect the standalone dual-mode recommendation**:
+`output/data/opt_dualmode_best.json`'s reported `bw=318MHz` corresponds
+to ONE genuinely contiguous 310MHz run -- a real single passband, no
+bridging artifact. The 9.31 score and the recommendation to build that
+design stand as reported.
+
+**Practical implication**: `dualmode_cascade` has not achieved a real N=4
+passband at the driven level at any point in this entire investigation
+(this session or the prior one) -- every "wide bandwidth" result measured
+this way should be treated as unverified until re-checked for contiguity.
+A corrected bandwidth metric (largest contiguous -3dB run, or a
+minimum-in-band-ripple check consistent with the 0.1dB Chebyshev ripple
+spec) would be needed before `dualmode_cascade`'s driven bandwidth claims
+can be trusted going forward -- not implemented here, flagged as the
+necessary next step before any further tuning of this topology.
