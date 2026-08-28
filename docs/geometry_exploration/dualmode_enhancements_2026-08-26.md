@@ -1232,3 +1232,71 @@ not asked to rediscover one from a wide box blind.
   reliable, fabrication-ready result. `dualmode_cascade` is now a
   thoroughly characterized, scientifically well-understood N=4-capable
   topology -- not yet a competitive one.
+
+## v5: independent per-port coupling (`w_ext2_mm`) -- real leverage found, not yet a full fix (2026-08-28)
+
+Direct analysis of v4's fallback design's raw S11 curve (not just the
+summary `s11w`) found only ONE genuine return-loss null across the entire
+sweep (-7.94dB at one frequency), while all 4 poles clearly contribute to
+S21's shape. Mechanism: once cavity 1 != cavity 2 (needed for the pole-
+shape fix), each of the 4 driven eigenmodes is a different mixture of
+"cavity-1 character" vs "cavity-2 character" -- a mode localized mostly in
+one cavity couples well to the port nearest it and poorly to the far one.
+A single SYMMETRIC `w_ext` (same aperture at both ports) cannot present
+good coupling to differently-localized modes at both ends simultaneously.
+
+**Two fixes implemented together**:
+1. `w_ext2_mm` (commit `ee15eb6`): independent external-coupling aperture
+   at the `x=Li` port, separate from `w_ext_mm` at `x=0`. Defaults to
+   `None` (mirrors `w_ext_mm`), regression-verified identical to the prior
+   symmetric-port behavior. The taper flare geometry
+   (`palace_dualmode_driven.py`'s `face_ty()`) already derives its extent
+   from the ACTUAL via positions at each end face, so it automatically
+   follows whichever aperture is present there -- no further plumbing
+   needed.
+2. Graded screen-fail scoring (commit `1ac9d30`): `evaluate()`'s coarse
+   GPU screen previously scored every rejected candidate at a flat `1e9`
+   regardless of how close it came to passing -- root cause of v4's
+   40-eval zero-survivor result, since the GP surrogate had no gradient
+   within the failed region (every failure tied). Now scores measured
+   failures as `1e6 + graded margins past the S11/S21 thresholds`,
+   reserving the flat `1e9` for genuine mesh/solver failures only.
+
+### First test: real, if narrow, improvement
+
+Single manual test -- eval18's exact params, `w_ext=16` unchanged,
+`w_ext2_mm=22` (asymmetric) instead of mirroring `w_ext`:
+
+- `screen_at_f0()` flipped from FAIL (`s21_best=-7.74dB`) to PASS
+  (`s11_best=-15.93dB`) -- a dramatic jump.
+- The full wideband driven confirm (0.02GHz step) only found
+  `s11w=-1.91dB`, essentially unchanged from the symmetric-port ceiling --
+  the screen's promising number didn't show up there.
+- Diagnosed the discrepancy directly: the screen's frequency grid is
+  offset from the wideband sweep's grid (different anchor point, same
+  0.02GHz step) -- exactly the kind of narrowband feature this topology
+  has shown all session could be aliased between sample points on one
+  grid and caught on another. A finer 4MHz-step re-scan of the region
+  (2.70-2.90GHz) found a REAL null at `f~2.770GHz` reaching `s11=-10.36dB`
+  -- the coarse sweep's neighboring samples (2.76: -6.63dB, 2.78: -6.70dB)
+  straddled it and never got close.
+
+**Verdict: the asymmetric-port hypothesis is confirmed as directionally
+correct and has real leverage** -- one specific mode's match improved from
+the session's ~-2dB ceiling to ~-10dB from a single, un-optimized guess at
+`w_ext2_mm`. But it is a PARTIAL fix at this exact point: the null sits
+~100MHz off the 2.87GHz target, is fairly narrow, and the rest of the
+passband (2.78-2.90GHz, where the other poles' contributions dominate)
+still only reaches -4 to -5dB. A single `(w_ext, w_ext2)` pair appears to
+favor whichever mode benefits from that particular ratio, not all 4
+simultaneously -- consistent with the per-mode-localization mechanism
+above.
+
+### v5 search: launched
+
+`dmcasc_v5_optimize.py` (36-eval budget): reuses the narrow box centred on
+eval18's exact params (+-15-30% on the 9 established dims, full range on
+the defect fractions) plus `w_ext2_mm` (8-36mm) as a new free dimension,
+now with the graded screen score giving the GP surrogate real gradient to
+climb -- a fundamentally different, better-posed search than v4's wide,
+gradient-free one. Results pending; will be appended once complete.
