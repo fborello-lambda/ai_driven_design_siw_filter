@@ -108,6 +108,8 @@ def run_eigenmode(spec: FilterSpec, params: dict, tag: str, n_modes: int = 8,
     json.dump(cfg, open(cfgp, "w"), indent=2)
     palace = find_palace()
     env = dict(os.environ, PATH=f"{os.path.dirname(palace)}:{os.environ['PATH']}")
+    if device == "GPU":
+        env.update({"MFEM_MEMORY": "cuda"})  # see optimize.py's GPU_ENV docstring
     np_ranks = "1" if device == "GPU" else "4"
     logp = out_data(f"{tag}.log")
     subprocess.run([palace, "-np", np_ranks, os.path.basename(cfgp)],
