@@ -183,22 +183,43 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
     # replaces -- deliberately paired with `screen_at_f0()`'s cheap GPU
     # pre-screen (already wired into `optimize()`'s coarse stage) to reject
     # non-viable candidates fast, rather than spending a full sweep on each.
+    # v5 revision (2026-08-28): v4's WIDE box (above, kept in comments for the
+    # record) found ZERO survivors across all 40 evals -- a real result, not
+    # a search-budget problem: the GPU screen is a hard pass/fail with no
+    # graded signal, so a GP surrogate has nothing to climb within the failed
+    # region, and the viable pocket the eigenmode-ground-truth searches found
+    # is narrow enough that 40 wide-box draws never landed in it. v5 instead
+    # searches TIGHTLY around that known pocket (eval18's exact params,
+    # +-15-30%) rather than exploring wide bounds -- paired with two fixes:
+    # (1) `screen_at_f0()`'s failures now get a GRADED score (see
+    # `evaluate()`'s screen branch) instead of a flat 1e9 tie, so the
+    # surrogate has real gradient even while every candidate still fails;
+    # (2) `w_ext2_mm` (new, independent second-port aperture, commit-pending)
+    # added as a genuinely new dimension: analysis of the v4 fallback's raw
+    # S11 showed only ONE real return-loss null across the whole sweep (the
+    # other 3 poles ride along in S21 with no null of their own) -- consistent
+    # with cavity-1-vs-cavity-2 asymmetry making each driven mode couple
+    # differently to each end, which a single SYMMETRIC w_ext cannot fix.
+    # `iris_defect_frac`/`iris2_defect_frac` kept at their full natural range
+    # (already bounded, narrowing a discrete-ish selector doesn't help the
+    # way narrowing a continuous dimension does).
     "dualmode_cascade": {
-        "a":      (61.18, 55.0, 66.0),
-        "w_iris": (9.89, 8.0, 22.0),
-        "x_iris": (29.74, 20.0, 37.0),
-        "y_wall": (10.42, 3.0, 15.0),
-        "w_ext":  (16.0, 8.0, 36.0),
+        "a":      (61.18, 58.0, 64.0),
+        "w_iris": (9.89, 8.0, 12.0),
+        "x_iris": (29.74, 27.0, 32.0),
+        "y_wall": (10.42, 8.0, 13.0),
+        "w_ext":  (16.0, 12.0, 22.0),
         # NOTE: keys below must be the exact LAYOUTS function kwarg names --
         # unlike a/w_iris/x_iris/y_wall/w_ext, these bypass _kw()'s explicit
         # pop-based renaming and flow through the generic structural-knob
         # passthrough (_extra()), same as wf_mm/n_corners/ring2_frac
         # elsewhere in this dict.
-        "w_inter_mm":         (10.03, 8.0, 26.0),
-        "w_iris2_mm":         (12.92, 8.0, 22.0),
-        "x_iris2_mm":         (30.27, 20.0, 37.0),
+        "w_inter_mm":         (10.03, 8.0, 13.0),
+        "w_iris2_mm":         (12.92, 10.0, 16.0),
+        "x_iris2_mm":         (30.27, 27.0, 34.0),
         "iris_defect_frac":   (0.12, -0.1, 1.0),
         "iris2_defect_frac":  (-0.1, -0.1, 1.0),
+        "w_ext2_mm":          (16.0, 8.0, 36.0),
     },
     # 2026-08-26, user-prompted: dual-mode's own landed 5D box, unchanged --
     # the second wall (w_iris2_mm, iris_sep_mm) is the structural knob, fixed
