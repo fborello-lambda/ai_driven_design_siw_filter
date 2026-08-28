@@ -35,7 +35,7 @@ import gmsh
 import numpy as np
 
 from .config import SPEC, VIA_PRESETS, out_data, out_img
-from .geometries import min_via_centre_sep
+from .geometries import min_via_centre_sep, _wall_with_gap
 from .siw_geometry import microstrip_width_50ohm, microstrip_eps_eff, microstrip_guided_wavelength
 from .palace_dualmode import A_SIW_MM, D_VIA_MM, P_VIA_MM
 
@@ -73,9 +73,20 @@ def _segment_vias(lo: float, hi: float, p: float) -> np.ndarray:
     return np.linspace(lo, hi, n + 1)
 
 
-def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall_mm=3.0):
+def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall_mm=3.0,
+                y_ext_off_mm=0.0, y_ext2_off_mm=0.0):
     """Pure-geometry via-position computation, shared by build_mesh (gmsh)
-    and plot_layout_2d (matplotlib) so the two never drift apart."""
+    and plot_layout_2d (matplotlib) so the two never drift apart.
+
+    y_ext_off_mm / y_ext2_off_mm (2026-08-28, v6 Stage A calibration -- see
+    dualmode_cascade_v6_handoff_2026-08-28.md): shift the port-1 (x=0) /
+    port-2 (x=Li) coupling gap off y=0, independently, using the same
+    `_wall_with_gap` helper `geometries.dualmode_cascade()` uses for its own
+    port apertures. This reference single-cavity structure is the calibration
+    testbed for Qe(y_ext_off) -- cheaper and better-characterized than the
+    fragile cascade itself. Both default to 0.0, reproducing the exact prior
+    centred-gap via list (regression-verified: `_wall_with_gap` at off=0
+    emits the same point set `_segment_vias(w_ext/2,half,p)` +-o did)."""
     Li = a_mm
     half = a_mm / 2.0
     r = d_via_mm / 2.0
@@ -87,9 +98,10 @@ def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall
     vias: list[tuple[float, float]] = []
     # external wall gaps: segments span EXACTLY [w_ext/2, half] (continuous
     # in w_ext_mm), not a filtered fixed grid.
-    for o in _segment_vias(w_ext_mm / 2.0, half, p):
-        vias.append((0.0, o)); vias.append((0.0, -o))
-        vias.append((Li, o)); vias.append((Li, -o))
+    for o in _wall_with_gap(w_ext_mm / 2.0, y_ext_off_mm, half, p):
+        vias.append((0.0, o))
+    for o in _wall_with_gap(w_ext_mm / 2.0, y_ext2_off_mm, half, p):
+        vias.append((Li, o))
     for xv in xs:
         vias.append((xv, -half))
         vias.append((xv, half))
@@ -235,6 +247,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                preview: bool = False, render_png: str | None = None,
                render_hide_air: bool = True,
                show: bool = True, rot_xyz: tuple[float, float, float] = (55, 0, 20),
+               y_ext_off_mm: float = 0.0, y_ext2_off_mm: float = 0.0,
                **geom_extra) -> dict:
     W, Lt, Lf = _dims(a_mm, w_ms_mm, l_taper_mm, l_feed_mm)
     Xf = Lt + Lf
@@ -254,7 +267,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     if geometry is None:
         final, x_iris = _via_layout(a_mm, w_iris_mm, x_iris_mm, we, d_via_mm,
-                                    p_via_mm, y_wall_mm)
+                                    p_via_mm, y_wall_mm,
+                                    y_ext_off_mm=y_ext_off_mm, y_ext2_off_mm=y_ext2_off_mm)
     else:
         # Alternative cavity shapes (see geometries.py) differ ONLY in via
         # placement, so they reuse every bit of machinery below.
