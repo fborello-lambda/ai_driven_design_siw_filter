@@ -59,6 +59,16 @@ def _segment(lo: float, hi: float, p: float) -> np.ndarray:
     return np.linspace(lo, hi, n + 1)
 
 
+def _defect_index(offsets: np.ndarray, frac: float | None) -> int:
+    """Map a 0..1 fraction to an index into `offsets` (a fence via to drop).
+
+    `frac=None` -> -1, which never matches a real index, i.e. "no defect"."""
+    if frac is None or len(offsets) == 0:
+        return -1
+    frac = max(0.0, min(1.0, frac))
+    return round(frac * (len(offsets) - 1))
+
+
 def min_via_centre_sep(d_mm: float, fab: str = "JLCPCB_2layer") -> float:
     """Smallest centre-to-centre spacing the fab allows for d_mm vias."""
     return d_mm + FAB_RULES[fab]["min_hole_to_hole"]
@@ -535,7 +545,8 @@ def dualmode_2wall(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
 
 def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
                      y_wall_mm=3.0, w_inter_mm=None, x_iris2_mm=None,
-                     w_iris2_mm=None, y_iris_off_mm=0.0, y_iris2_off_mm=0.0, **_):
+                     w_iris2_mm=None, y_iris_off_mm=0.0, y_iris2_off_mm=0.0,
+                     iris_defect_frac=None, iris2_defect_frac=None, **_):
     """TWO dual-mode square cavities in series (N=4: 2 poles/cavity x 2
     cavities), joined by a NEW inter-cavity coupling row -- genuinely new
     mesh topology, not a delta: the single-cavity dualmode builder has no
@@ -556,6 +567,21 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
 
     w_inter_mm defaults to w_ext_mm (stages start out coupled about as
     strongly as each is coupled to its own port, to be tuned from there).
+
+    iris_defect_frac / iris2_defect_frac (2026-08-28, user-prompted: "remove
+    vias if needed, inside the cavity, that would give more parameters"):
+    drop ONE via pair (symmetric +-o, so each cavity's own up/down mirror
+    stays intact) from that cavity's internal mode-splitting fence, at
+    fractional position `frac` (0=nearest the iris gap, 1=nearest y_wall)
+    along the fence. This is NOT reachable by continuously tuning w_iris/
+    x_iris/y_iris_off_mm -- those move the whole fence; this punches a
+    single localized defect/leak at a chosen point along an otherwise
+    intact fence, a genuinely new coupling mechanism. Deliberately restricted
+    to the INTERNAL fence only (never the perimeter side/end/inter-cavity
+    via rows a few lines below) so SIW confinement is never compromised --
+    only the mode-splitting perturbation is touched. Both default to None,
+    reproducing the exact original fence with no defect (regression-
+    verified).
 
     y_iris_off_mm / y_iris2_off_mm (2026-08-27, user-prompted: "the inner
     parts of each cavity should change and they can be off centered too"):
@@ -593,11 +619,19 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     # clamped to +-y_wall_mm so the shifted row stays inside the cavity.
     if w_iris_mm is not None:
         off1 = max(-y_wall_mm, min(y_wall_mm, y_iris_off_mm))
-        for o in _segment(w_iris_mm / 2.0, half - y_wall_mm, p):
+        offsets1 = _segment(w_iris_mm / 2.0, half - y_wall_mm, p)
+        drop1 = _defect_index(offsets1, iris_defect_frac)
+        for i, o in enumerate(offsets1):
+            if i == drop1:
+                continue
             vias.append((x_iris1, o + off1)); vias.append((x_iris1, -o + off1))
     if w_iris_b is not None:
         off2 = max(-y_wall_mm, min(y_wall_mm, y_iris2_off_mm))
-        for o in _segment(w_iris_b / 2.0, half - y_wall_mm, p):
+        offsets2 = _segment(w_iris_b / 2.0, half - y_wall_mm, p)
+        drop2 = _defect_index(offsets2, iris2_defect_frac)
+        for i, o in enumerate(offsets2):
+            if i == drop2:
+                continue
             vias.append((x_iris2, o + off2)); vias.append((x_iris2, -o + off2))
     return _dedupe(vias, r), {"x_iris": x_iris1, "x_iris2": x_iris2, "half": half}
 
