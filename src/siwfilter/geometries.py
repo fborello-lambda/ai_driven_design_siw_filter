@@ -546,7 +546,8 @@ def dualmode_2wall(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
 def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
                      y_wall_mm=3.0, w_inter_mm=None, x_iris2_mm=None,
                      w_iris2_mm=None, y_iris_off_mm=0.0, y_iris2_off_mm=0.0,
-                     iris_defect_frac=None, iris2_defect_frac=None, **_):
+                     iris_defect_frac=None, iris2_defect_frac=None,
+                     w_ext2_mm=None, **_):
     """TWO dual-mode square cavities in series (N=4: 2 poles/cavity x 2
     cavities), joined by a NEW inter-cavity coupling row -- genuinely new
     mesh topology, not a delta: the single-cavity dualmode builder has no
@@ -583,6 +584,25 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     reproducing the exact original fence with no defect (regression-
     verified).
 
+    w_ext2_mm (2026-08-28): independent external-coupling aperture at the
+    x=Li port, separate from `w_ext_mm` at x=0. Motivation: once cavity 1
+    and cavity 2 are genuinely different (x_iris2_mm/w_iris2_mm/defects),
+    breaking the cascade's x-mirror symmetry, the 4 driven eigenmodes are no
+    longer simple even/odd combinations of two IDENTICAL cavities -- each
+    is a different mix of "cavity-1 character" vs "cavity-2 character", so
+    a mode localized mostly in cavity 1 couples well to port 1 but poorly
+    to port 2 (or vice versa). A single symmetric `w_ext_mm` cannot
+    simultaneously present good coupling to differently-localized modes at
+    both ends; keeping the two ports independent lets the search find each
+    end's own optimum. Observed directly: the FAB-tolerance confirm of the
+    v4 fallback design showed exactly ONE real S11 null (-7.94dB at one
+    frequency) with the other 3 poles never producing their own null,
+    despite contributing to a broad S21 passband -- consistent with
+    asymmetric per-mode port coupling, not a a scalar over/under-coupling
+    problem `w_ext` alone (symmetric) can fix. Defaults to `None`, meaning
+    "same as `w_ext_mm`" -- reproduces the exact prior symmetric-port
+    behavior (regression-verified).
+
     y_iris_off_mm / y_iris2_off_mm (2026-08-27, user-prompted: "the inner
     parts of each cavity should change and they can be off centered too"):
     shift each cavity's OWN internal iris gap off the cavity's y-centerline
@@ -604,10 +624,13 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     x_iris2 = a_mm + (x_iris2_mm if x_iris2_mm is not None else a_mm / 2.0)
     w_iris_b = w_iris2_mm if w_iris2_mm is not None else w_iris_mm
 
+    w_ext2 = w_ext2_mm if w_ext2_mm is not None else w_ext_mm
+
     vias = []
-    # end walls (true ports) at x=0 and x=Li, w_ext gap
+    # end walls (true ports) at x=0 and x=Li -- independently sized apertures
     for o in _segment(w_ext_mm / 2.0, half, p):
         vias.append((0.0, o)); vias.append((0.0, -o))
+    for o in _segment(w_ext2 / 2.0, half, p):
         vias.append((Li, o)); vias.append((Li, -o))
     # continuous side walls the full length (both cavities share the width)
     for xv in np.linspace(0.0, Li, max(1, round(Li / p)) + 1):
