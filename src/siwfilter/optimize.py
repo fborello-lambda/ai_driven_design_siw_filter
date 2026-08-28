@@ -801,9 +801,24 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
         s = screen_at_f0(topology, spec, params, f"scr_{tag}", device=device,
                          np_ranks=np_ranks)
         if not s["pass"]:
+            s11b, s21b = s.get("s11_best"), s.get("s21_best")
+            if s11b is None or s21b is None:
+                fail_score = 1e9   # no real measurement (mesh/solver failure) -- no gradient
+            else:
+                # Graded rejection: still always worse than any real (passing)
+                # score, but with real spread so a GP surrogate has a gradient
+                # to climb instead of every failure looking identical.
+                # Motivated 2026-08-28: dualmode_cascade's v4 40-eval GPU-screen
+                # search found zero survivors, and the GP-guided phase never
+                # improved on the random-seed phase -- every screened candidate
+                # tied at exactly 1e9, so the surrogate had nothing to learn
+                # from within the failed region.
+                margin_s11 = max(0.0, s11b - S11_SCREEN_DB)
+                margin_s21 = max(0.0, S21_SCREEN_FLOOR_DB - s21b)
+                fail_score = 1e6 + margin_s11 * 100.0 + margin_s21 * 100.0
             return {"ok": False, "err": f"screened out: {s.get('err') or s}",
-                   "screened": True, "score": 1e9, "board_length_mm": board_len,
-                   "s11_screen": s.get("s11_best"), "s21_screen": s.get("s21_best")}
+                   "screened": True, "score": fail_score, "board_length_mm": board_len,
+                   "s11_screen": s11b, "s21_screen": s21b}
 
     r = run_driven(topology, spec, params, tag, fmin, fmax, step, mmax, mmin, hair,
                    device=device, np_ranks=np_ranks, tol=tol)
