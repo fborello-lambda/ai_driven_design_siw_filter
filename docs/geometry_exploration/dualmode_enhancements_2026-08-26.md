@@ -822,3 +822,187 @@ confirms the architecture reasoning was directionally correct (broke
 circular_cross's historic ~-4dB match ceiling) but the resulting design
 still isn't competitive with `corner_cut_2corner` (15.44) or
 `dualmode_cascade` (13.96).
+
+## dualmode_cascade: stagger-tuning breaks the mirror symmetry -- the shape problem finally solved, match hits a hard ceiling (2026-08-28)
+
+Round 6's recommendation was to try "an intentionally asymmetric/off-center
+coupling element" next, since the bare-vs-floating inter-cavity slot
+experiment proved the coupling *mechanism* wasn't the bottleneck -- the two
+cavities' exact mirror (x-swap) symmetry was, forcing the 4-pole spectrum
+into an even/odd pair split no amount of coupling-width tuning could escape.
+This session picks that up directly: **stagger the two cavities' own
+internal irises against each other** (`x_iris2_mm`/`w_iris2_mm`, both
+already-existing but never-independently-searched parameters) instead of
+tuning coupling width or mechanism.
+
+### Breakthrough: x-stagger search
+
+A 5D eigenmode-ground-truth GP search (`w_iris, x_iris, w_iris2_mm,
+x_iris2_mm, w_inter_mm`, `a=59.0` fixed) found `rmse=16.1` -- by far the
+best of the whole multi-round investigation to that point (previous best
+23.9), with the eigenmode center landing almost exactly on the ideal
+2.8708GHz. A follow-up 7D search adding `y_iris_off_mm`/`y_iris2_off_mm`
+(each cavity's iris allowed to shift off its own y-centerline, not just
+stagger in x) converged both offsets back to 0.0 -- y-offsetting doesn't
+help beyond x-stagger alone.
+
+**Driven confirm of the raw winner**: `bw=142.8MHz`, matching the
+143.5MHz target almost exactly (the best bandwidth result of the entire
+session) -- but `fc=2.980GHz` (110MHz high, `w_ext` untuned) and poor match
+(`s11w=-2.71dB`).
+
+### Bandwidth-collapse diagnostic: the naive `a`-rescale trick breaks on this design
+
+The standard fc-recentering fix used successfully in every earlier round
+(`a_new = a_old * fc_measured/fc_target`, proportionally rescaling every
+cavity-scale dimension) was applied here too (`a: 59.0->61.261`). It fixed
+`fc` (2.860GHz, only 10MHz off) but **collapsed bandwidth to 43.7MHz** --
+an unexplained regression. A 7-point eigenmode diagnostic sweep (scale
+factor 1.0 through the full 1.038 rescale, plus two isolating variants:
+scale only cavity size / scale `w_inter_mm` too) showed the sharp
+discontinuity directly: `rmse` jumps from 16.1 at exactly `a=59.0` to
+29-32 for EVERY other scale factor tried (1.01 through 1.038), and both
+isolating variants land in the same bad regime -- a genuine mode-relabeling
+discontinuity, not smooth drift. **The x-stagger winner is a narrow,
+fragile local optimum at exactly `a=59.0`; proportional rescaling can't
+safely move it.**
+
+### Objective correction: symmetry was under-penalized
+
+User's review of the diagnosis correctly flagged the result as still
+looking "degenerate... like an order 2 and another one off centered" --
+checking the raw gaps confirmed it: the "best" `rmse=16.1` point has gaps
+`[38.3, 75.9, 74.5]` against the ideal's symmetric `[46.1, 81.1, 48.2]` --
+gap1 and gap3 differ by 36MHz, nowhere near the small-large-small shape a
+symmetric Chebyshev N=4 response requires. Plain gap-RMSE doesn't
+penalize this asymmetry enough. Re-scored all 54 eigenmode points
+collected so far with a corrected objective (`rmse + |gap1-gap3| +
+|center-2.8708|*1000`): **none scored well** (best re-ranked score 53.6) --
+the objective itself, not just the search, needed fixing.
+
+### New geometry DOF: via-defects (user idea)
+
+User proposed removing individual vias from inside the cavity (never the
+perimeter walls) as an additional, genuinely new coupling mechanism.
+Added `iris_defect_frac`/`iris2_defect_frac` to `geometries.dualmode_cascade()`
+(commit `1ea9d2a`): drops ONE symmetric via pair from a cavity's own
+internal mode-splitting fence at a chosen fractional position along it --
+localizes a small extra coupling defect at a specific point, something no
+continuous width/position parameter can represent. Defaults to `None` (no
+defect), regression-verified byte-identical to prior behavior; restricted
+by construction to the internal fence, never the side/end/inter-cavity
+walls that keep this a valid SIW structure.
+
+### v2/v3: sensitivity-informed re-search with the corrected objective
+
+**v2** (7D: `a, y_wall` now free for the first time alongside the 5
+coupling dims, corrected symmetry-aware objective, warm-started from all
+54 prior points): best found `score=41.0` -- `gaps=[31.4, 110.3, 49.5]`,
+excellent centering (`2.8748GHz`, 4MHz off) but symmetry still short
+(`|gap1-gap3|=18.1`, above the 15MHz bar).
+
+A dimension-sensitivity re-analysis (RandomForest + Spearman on all 80
+points) confirmed `a`/`y_wall` had been essentially unexplored before v2
+(5 distinct values crammed into a 2mm range) -- not unimportant, just
+never varied -- and identified `w_inter_mm` as the dominant, strictly
+monotonic driver of bad shape (bigger `w_inter_mm` blows the middle gap
+past the ideal 81.1MHz).
+
+**v3** (9D: sensitivity-informed narrower bounds on `w_inter_mm`/`x_iris`/
+`x_iris2_mm`, full range kept on `w_iris` since two distinct basins existed
+there, plus the new `iris_defect_frac`/`iris2_defect_frac` dims): found
+**`score=19.6`, `rmse~3.9`** (best of the entire session by a wide
+margin) -- `gaps=[48.5, 82.8, 54.2]` against ideal `[46.1, 81.1, 48.2]`,
+`|gap1-gap3|=5.7`, center only 10.1MHz off target. **Uses
+`iris_defect_frac=0.93`** (a real via removed near the far end of cavity
+1's fence) -- directly validates the via-defect idea. All three
+success criteria (rmse<20, symmetry<15, center<15MHz) met simultaneously
+for the first time in the whole investigation.
+
+**Lesson learned the hard way**: a second v3 candidate (`rmse=8.6`, even
+better than the eventual winner, using NO defect at all) drove BADLY
+(`bw` collapsed to 16.3MHz) at the one `w_ext` value tested -- this
+topology's `w_ext`-sensitivity is severe enough that no eigenmode
+candidate can be judged from a single driven point; every promising
+candidate needs its own `w_ext` mini-scan before comparison.
+
+### `w_ext` scans: centering + bandwidth achieved, match will not move
+
+Full 5-point `w_ext` scans (10/12/14/16/18mm) on both the `rmse=19.6`
+winner ("eval18") and the `rmse=3.9` point ("eval45"):
+
+| design | best w_ext | fc (GHz) | bw (MHz) | s11w (dB) | il (dB) |
+|---|---|---|---|---|---|
+| eval18 | 16 | 2.880 (10MHz off) | 126.6 | -1.88 | -10.00 |
+| eval45 | 14 | 2.900 (30MHz off) | 126.7 | -2.00 | -8.31 |
+
+Bandwidth is non-monotonic and occasionally collapses at specific `w_ext`
+values (12mm collapsed both designs to 15-18MHz) -- consistent with the
+mode-crossing fragility seen throughout this session -- but **match
+(`s11w`) never exceeds about -2.0dB across either design's entire scan**,
+regardless of which internal coupling realization produced it. This is
+the best confirmed driven result for `dualmode_cascade` this whole session
+on 3 of 4 axes (centering, bandwidth, and -- critically -- genuine 4-pole
+shape rather than the "order 2 + order 2" degenerate look flagged earlier).
+
+### Stagger-ramp test: is the match ceiling structural or avoidable?
+
+Critical cross-check against the session's own history:
+`docs/geometry_exploration/dualmode_enhancements_2026-08-26.md` documents
+that the ORIGINAL naive symmetric cascade (`a=57.2, w_iris=15.3,
+x_iris=28.7, y_wall=8.6, w_ext=16.3, w_inter_mm=16.3`, both cavities
+identical) had `s11w=-10.28dB` -- excellent match, with a degenerate
+(driven-overcoupled, single-wide-hump) pole spectrum. Round 3 (an earlier
+session) already found the same ~-2dB match ceiling via coupling-matrix
+curve-fitting and called it "a genuine ceiling, not a tuning miss," but
+never tested whether a SMALL stagger (vs. the large, multi-parameter
+9D-search excursion this session used) would preserve more of the naive
+design's good match.
+
+Ran an 8-point eigenmode-only ramp, staggering ONLY `x_iris2_mm` away from
+`x_iris_mm` in small steps (0 to 8mm) from the exact naive baseline,
+everything else held fixed at the naive design's own values (including
+`w_inter_mm=16.3`, already known to be too loose vs. the ideal
+coupling-matrix ratio). **Result: `rmse` never beat the unstaggered
+baseline's 73.8 at ANY tested delta** -- it worsened monotonically through
+2mm of stagger (73.8 -> 83.6 -> 93.4 -> 106.7 -> 123.3), then went chaotic
+(125.3, then two points losing a mode entirely past 3mm). Single-parameter
+stagger from the naive `w_inter_mm=16.3` point is not a productive
+direction on its own -- confirms that eval18/eval45's success required
+the coordinated multi-parameter shift (lower `w_inter_mm`, different
+`w_iris`, larger `a`, plus stagger and/or a defect) that the 9D search
+found, not a small nudge from the well-matched starting point.
+
+### Final verdict
+
+**The pole-shape problem that motivated this whole investigation ("looks
+like an order 2 filter with another order 2 with an offset") is solved**:
+eval18 achieves genuinely well-separated, symmetric, centered poles
+(`rmse=19.6`, `|gap1-gap3|=5.7`) and translates to a real driven response
+with matching centering and bandwidth -- the best `dualmode_cascade` shape
+result of the entire multi-session investigation, by a wide margin.
+
+**Match quality has a hard ceiling around -2dB that no method tried this
+session (or the prior session's coupling-matrix correction) can move**,
+and the stagger-ramp test shows it is not simply "not enough tuning" --
+gentle perturbation from the well-matched naive point makes shape worse,
+not better, and every design with genuinely good shape (eval18, eval45,
+v3, the coupling-corrected design) lands at essentially the same -2 to
+-3dB match regardless of exactly how the needed asymmetry was introduced.
+This looks like a real structural trade-off in this specific coupling
+mechanism (dual-mode cavity cascaded via a bare/staggered iris), between
+achieving proper N=4 pole separation and preserving the taper/port match
+that a symmetric, single-hump design enjoys for free.
+
+**Recommendation: `dualmode_cascade` is now a fully characterized,
+genuinely-N=4-shaped alternative, but the standalone dual-mode cavity
+(score 9.31, real SMA, consistently -16dB+ match) remains this project's
+best, most reliable, fabrication-ready result.** If N=4 selectivity is
+specifically wanted despite the match cost, eval18's parameters
+(`a=61.18, y_wall=10.42, w_iris=9.89, x_iris=29.74, w_iris2_mm=12.92,
+x_iris2_mm=30.27, w_inter_mm=10.03, iris_defect_frac=0.12, w_ext=16.0`)
+are the best starting point found; fixing match further would need a
+genuinely new external-coupling mechanism (a different taper/feed
+geometry specifically re-derived for this asymmetric internal structure's
+impedance, not just re-scanning `w_ext` on the existing taper) -- a
+substantial new undertaking, not attempted here.
