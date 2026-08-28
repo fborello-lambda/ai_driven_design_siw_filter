@@ -1006,3 +1006,49 @@ genuinely new external-coupling mechanism (a different taper/feed
 geometry specifically re-derived for this asymmetric internal structure's
 impedance, not just re-scanning `w_ext` on the existing taper) -- a
 substantial new undertaking, not attempted here.
+
+### Official FINE + FAB-TOLERANCE confirm (dense mesh, standard `evaluate()`)
+
+```
+FINE:          fc=2.887GHz  bw=138MHz  s11w=-1.51dB  il=-9.16dB  score=24.415
+FAB-TOLERANCE: fc=2.887GHz  bw=39MHz   s11w=-1.64dB  il=-6.76dB  score=24.645
+(0.1mm-rounded params: a=61.2, y_wall=10.4, w_iris=9.9, x_iris=29.7,
+ w_iris2_mm=12.9, x_iris2_mm=30.3, w_inter_mm=10.0, iris_defect_frac=0.1, w_ext=16.0)
+```
+
+Two honest findings the coarse `w_ext`-scan numbers above didn't fully
+capture:
+
+1. **The official v17 score (24.4-24.6) is WORSE than every prior
+   `dualmode_cascade` result this session** (old naive 13.964/15.563, v3
+   13.827, coupling-corrected 17.878, fc/`w_ext`-fixed 16.531) -- despite
+   eval18 having the best pole-shape, tightest centering, and closest
+   bandwidth match of the whole investigation. The score formula weights
+   match (`s11w`) heavily, and eval18's match never moved off the ~-1.5 to
+   -2dB ceiling documented above. This is the same "the aggregate score
+   doesn't credit real shape" pattern already seen for v3 vs the
+   coupling-corrected design earlier in this file -- confirmed again,
+   more starkly, here.
+2. **Bandwidth collapses from 138MHz to 39MHz under 0.1mm fab-tolerance
+   rounding alone** -- a real PCB fab holding only standard tolerance
+   would land far short of the simulated full-precision bandwidth. This
+   is a new, more concrete problem than "match is imperfect": the design
+   is fragile enough that realistic manufacturing rounding, by itself,
+   breaks the bandwidth by 3.5x. Combined with the mode-crossing
+   sensitivity documented throughout this session (small parameter
+   changes repeatedly causing large, non-smooth jumps), this strongly
+   suggests `dualmode_cascade`'s current best point sits very close to
+   an unstable boundary in parameter space, not a broad, robust optimum.
+
+**Updated final recommendation**: `dualmode_cascade`'s pole-degeneracy
+problem is genuinely solved at the eigenmode/physics level, a real and
+useful result for understanding this topology -- but the resulting best
+design is neither better-scoring nor more fabrication-robust than earlier
+attempts. **The standalone dual-mode cavity (score 9.31) remains the
+clear, correct choice for actual fabrication.** `dualmode_cascade` should
+be treated as a characterized research result (how to achieve genuine
+N=4 pole separation in this coupling mechanism), not a competing
+deliverable, until both its match ceiling and its fab-tolerance fragility
+are separately addressed -- likely via a redesigned external-coupling/
+taper mechanism together with a search objective that penalizes parameter
+sensitivity, not just landed performance at exact (unrounded) values.
