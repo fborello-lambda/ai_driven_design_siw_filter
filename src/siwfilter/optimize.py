@@ -291,10 +291,17 @@ def band_edges(f: np.ndarray, s21_db: np.ndarray) -> dict:
     is flat where it should be informative. Interpolating the two crossings
     recovers sub-step resolution from the same data.
 
-    Edges are the FIRST and LAST crossings over the window, not a walk outward
-    from the peak: a dual-mode response is double-humped, and walking from the
-    taller hump would stop at the dip between the poles and report half the
-    passband.
+    Edges are the crossings bounding the CONTIGUOUS run around the peak, not
+    the first/last crossing over the whole window. A well-formed multi-pole
+    response's inter-pole ripple stays above -3dB by construction (that's
+    what "ripple" means) -- for a real single passband this still recovers
+    the full width, same as bridging first-to-last would. But when the
+    response is genuinely two separated resonances (a notch actually drops
+    below -3dB between them), bridging across that notch silently reports
+    both disconnected lobes as one wide passband. Caught 2026-08-28: every
+    `dualmode_cascade` "wide bandwidth" result across two sessions was this
+    artifact, not a real merged passband -- the fix is the contiguous run
+    containing the peak, never a bridge across a genuine sub-threshold gap.
 
     `fc_3db` (band centre) is what the score uses, not the argmax peak: on a
     double-humped response argmax picks whichever pole happens to be taller,
@@ -313,7 +320,14 @@ def band_edges(f: np.ndarray, s21_db: np.ndarray) -> dict:
             return float(f[j])
         return float(f[i] + (f[j] - f[i]) * (thr - y0) / (y1 - y0))
 
-    i0, i1 = int(idx[0]), int(idx[-1])
+    peak_i = int(np.argmax(s21_db))          # always in idx: s21[peak_i] == max >= thr
+    pos = int(np.searchsorted(idx, peak_i))
+    lo = hi = pos
+    while lo > 0 and idx[lo - 1] == idx[lo] - 1:
+        lo -= 1
+    while hi < len(idx) - 1 and idx[hi + 1] == idx[hi] + 1:
+        hi += 1
+    i0, i1 = int(idx[lo]), int(idx[hi])
     trunc = (i0 == 0) or (i1 == len(f) - 1)
     f_lo = _cross(i0 - 1, i0) if i0 > 0 else float(f[0])
     f_hi = _cross(i1 + 1, i1) if i1 < len(f) - 1 else float(f[-1])
