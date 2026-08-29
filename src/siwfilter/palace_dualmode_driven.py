@@ -171,7 +171,9 @@ def face_ty(geometry, vias, xf: float, W: float, half: float,
 
 
 def feed_trace_poly(x_in: float, x_taper: float, x_siw: float,
-                    W: float, ty_lo: float, ty_hi: float) -> np.ndarray:
+                    W: float, ty_lo: float, ty_hi: float,
+                    w_pad: float | None = None,
+                    x_pad_end: float | None = None) -> np.ndarray:
     """Deslandes feed outline: constant 50-ohm width W from the port to
     x_taper, then a linear flare to the FULL cavity wall width at x_siw.
 
@@ -181,6 +183,20 @@ def feed_trace_poly(x_in: float, x_taper: float, x_siw: float,
     at the geometry comparison drew the feed as a constant-width line, which
     made it look as though the design had no taper at all.)
     """
+    if w_pad is not None and x_pad_end is not None:
+        # CPWG launch pad (2026-08-29): the centre conductor starts at
+        # `w_pad` at the connector and tapers to the 50-ohm microstrip width
+        # W by x_pad_end. Per edge-launch practice (Cinch/Copper Mountain/
+        # Altium app notes) the pad is deliberately WIDER than the pin -- the
+        # pad is capacitive and the taper supplies the compensating localised
+        # inductance, so the pair lands near 50 ohm. Matching the pad to the
+        # 0.76mm pin instead would need a ~0.095mm coplanar gap, below
+        # JLCPCB's 0.127mm minimum trace spacing, so it is not buildable here
+        # anyway. Defaults keep this off (plain constant-width feed).
+        return np.array([
+            (x_in, +w_pad / 2), (x_pad_end, +W / 2), (x_taper, +W / 2),
+            (x_siw, ty_hi), (x_siw, ty_lo),
+            (x_taper, -W / 2), (x_pad_end, -W / 2), (x_in, -w_pad / 2)])
     return np.array([(x_in, +W / 2), (x_taper, +W / 2), (x_siw, ty_hi),
                      (x_siw, ty_lo), (x_taper, -W / 2), (x_in, -W / 2)])
 

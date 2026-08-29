@@ -221,7 +221,7 @@ DEFAULT_FAB = "JLCPCB_2layer"
 #                inductance at the launch).
 VIA_PRESETS = {
     "siw_fence":  dict(d_mm=1.5, p_mm=3.0),
-    "gnd_stitch": dict(d_mm=0.6, p_mm=1.2),
+    "gnd_stitch": dict(d_mm=0.6, p_mm=1.2),  # ~literature: 0.4mm dia / 1.27mm pitch fence
 }
 
 
