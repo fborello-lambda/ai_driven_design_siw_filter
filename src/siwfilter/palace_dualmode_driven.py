@@ -74,7 +74,7 @@ def _segment_vias(lo: float, hi: float, p: float) -> np.ndarray:
 
 
 def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall_mm=3.0,
-                y_ext_off_mm=0.0, y_ext2_off_mm=0.0, y_iris_off_mm=0.0):
+                y_ext_off_mm=0.0, y_ext2_off_mm=0.0):
     """Pure-geometry via-position computation, shared by build_mesh (gmsh)
     and plot_layout_2d (matplotlib) so the two never drift apart.
 
@@ -86,20 +86,7 @@ def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall
     testbed for Qe(y_ext_off) -- cheaper and better-characterized than the
     fragile cascade itself. Both default to 0.0, reproducing the exact prior
     centred-gap via list (regression-verified: `_wall_with_gap` at off=0
-    emits the same point set `_segment_vias(w_ext/2,half,p)` +-o did).
-
-    y_iris_off_mm (2026-08-29, user suggestion during v18 tuning): same idea
-    applied to the INTERNAL iris row instead of the external wall gaps. The
-    iris row floats between y=-(half-y_wall) and y=+(half-y_wall) with a
-    centred gap of width w_iris; shifting that gap off y=0 makes the two
-    halves of the floating wall asymmetric (one long arm, one short arm)
-    without changing w_iris itself, i.e. a coupling knob independent of gap
-    width -- worth trying since the widened w_iris/w_ext search box alone
-    has not reached the 143.5MHz target after 20+ evals (see
-    docs/TUNING_PLAN_2026-08-29.md). Default 0.0 reproduces the exact prior
-    centred-gap iris list (`_wall_with_gap` at off=0 against span
-    half-y_wall is algebraically identical to the old symmetric
-    `_segment_vias(w_iris/2, half-y_wall, p)` +-o pairing)."""
+    emits the same point set `_segment_vias(w_ext/2,half,p)` +-o did)."""
     Li = a_mm
     half = a_mm / 2.0
     r = d_via_mm / 2.0
@@ -123,8 +110,8 @@ def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall
     # centered gap of width w_iris_mm -- see palace_dualmode.py for why.
     # Segments span EXACTLY [w_iris/2, half-y_wall] (continuous in both).
     if w_iris_mm is not None:
-        for o in _wall_with_gap(w_iris_mm / 2.0, y_iris_off_mm, half - y_wall_mm, p):
-            vias.append((x_iris, o))
+        for o in _segment_vias(w_iris_mm / 2.0, half - y_wall_mm, p):
+            vias.append((x_iris, o)); vias.append((x_iris, -o))
 
     # Fab-rule spacing, not 0.9*d: the old threshold sat BELOW one via
     # diameter and so permitted physically overlapping barrels. See
@@ -363,7 +350,6 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                render_hide_air: bool = True,
                show: bool = True, rot_xyz: tuple[float, float, float] = (55, 0, 20),
                y_ext_off_mm: float = 0.0, y_ext2_off_mm: float = 0.0,
-               y_iris_off_mm: float = 0.0,
                slot_x_mm: float | None = None, slot_y_mm: float = 0.0,
                slot_w_mm: float = 4.0, slot_l_mm: float = 3.0, slot_h_mm: float = 3.0,
                slot_pec_cap: bool = False,
@@ -387,8 +373,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     if geometry is None:
         final, x_iris = _via_layout(a_mm, w_iris_mm, x_iris_mm, we, d_via_mm,
                                     p_via_mm, y_wall_mm,
-                                    y_ext_off_mm=y_ext_off_mm, y_ext2_off_mm=y_ext2_off_mm,
-                                    y_iris_off_mm=y_iris_off_mm)
+                                    y_ext_off_mm=y_ext_off_mm, y_ext2_off_mm=y_ext2_off_mm)
     else:
         # Alternative cavity shapes (see geometries.py) differ ONLY in via
         # placement, so they reuse every bit of machinery below.
