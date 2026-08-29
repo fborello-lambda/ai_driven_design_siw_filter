@@ -659,9 +659,17 @@ combination, or geometry details not reconstructable from search snippets alone
 the mechanisms tried here, and continuing to guess at via patterns has clearly
 diminishing returns (confirmed by 3 rounds of escalation, ~7 real data points).
 
-**Recommendation**: this specific v10 direction is paused. If N=4-in-one-cavity
-is still wanted, the next real idea (untried) would be a non-via perturbation
-(e.g. a slot in the top copper, reusing v8's mechanism but applied to this single
-cavity instead of an inter-cavity wall) -- a genuinely different physical
-mechanism, not another via geometry variant. Otherwise, per Sections 10-11, the
-standalone N=2 design remains the practical, proven, compact deliverable.
+**Recommendation**: this specific v10 direction is paused. A candidate next idea
+(a top-copper slot, reusing v8's mechanism) was considered and rejected on
+reflection: v8's slot specifically coupled fields BETWEEN two adjacent cavities
+through a shared wall -- a single quad-mode cavity has no second region to couple
+to, so a slot here would just be another local perturbation shape (like the via),
+not a fundamentally different or more powerful lever, and there is no reason to
+expect it to outperform the via results above. Untried directions that might
+genuinely matter: a different pair of mode indices (not TE103/TE104/TE201/TE202 --
+the literature's choice, but not verified optimal here) at whichever ratio
+naturally clusters THAT combination, or accepting that the papers' full geometry
+(not reconstructable from search snippets alone) includes a perturbation shape
+genuinely more effective than a simple via cluster. Both are open-ended research,
+not scoped quick tries. Per Sections 10-11, the standalone N=2 design remains the
+practical, proven, compact deliverable in the meantime.
