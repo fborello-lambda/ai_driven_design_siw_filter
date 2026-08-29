@@ -895,10 +895,18 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
             n_initial: int | None = None,
             fine_sweep: tuple[float, float, float] | None = None,
             device: str = "auto", np_ranks: int = CPU_NP,
-            log_name: str | None = None, best_json_name: str | None = None) -> dict:
+            log_name: str | None = None, best_json_name: str | None = None,
+            patience: int | None = None) -> dict:
     """GP-surrogate coarse search over topology.param_space(spec), fine-mesh
     confirm of the winner, fab-tolerance (0.1mm rounding) check. Returns the
-    fine-confirmed best {params, metrics}."""
+    fine-confirmed best {params, metrics}.
+
+    patience (2026-08-29): stop the coarse search early once this many
+    consecutive evals pass with no improvement over the running best --
+    added after dualmode_N2's v18 search found zero improvement over its
+    warm-start baseline in 29/40 evals (docs/TUNING_PLAN_2026-08-29.md);
+    no point spending the remaining budget confirming a plateau. None (the
+    default) preserves the old always-run-the-full-budget behavior."""
     from skopt import Optimizer
     from skopt.space import Real
 
@@ -947,6 +955,7 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
     opt.tell([warm[k] for k in order], r["score"])
     best_p, best = warm, r
     print(f"[{n}] warm-start score={r['score']:.3f} {r.get('err', '')}")
+    since_improve = 0
 
     while n < budget:
         x = opt.ask()
@@ -963,6 +972,13 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
             n_screened += 1
         if r["score"] < best["score"] - 1e-4:
             best_p, best = p, r
+            since_improve = 0
+        else:
+            since_improve += 1
+        if patience is not None and since_improve >= patience:
+            print(f"\n=== early stop: {since_improve} evals with no improvement "
+                  f"(patience={patience}) ===", flush=True)
+            break
 
     print(f"\n=== GP SEARCH DONE after {n} evals ({n_screened} screened out before a "
           f"full sweep) === best(coarse)={best['score']:.3f} {best_p}")
