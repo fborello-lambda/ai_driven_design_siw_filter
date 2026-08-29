@@ -250,6 +250,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                y_ext_off_mm: float = 0.0, y_ext2_off_mm: float = 0.0,
                slot_x_mm: float | None = None, slot_y_mm: float = 0.0,
                slot_w_mm: float = 4.0, slot_l_mm: float = 3.0, slot_h_mm: float = 3.0,
+               slot_pec_cap: bool = False,
                **geom_extra) -> dict:
     W, Lt, Lf = _dims(a_mm, w_ms_mm, l_taper_mm, l_feed_mm)
     Xf = Lt + Lf
@@ -605,6 +606,10 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                 pec.append(tag)                               # cavity top ground
             elif any(_in_poly(cx, cy, poly) for poly in trace_polys):
                 pec.append(tag)                                # microstrip trace
+        elif (slot_pec_cap and slot_x_mm is not None and cz > h + 1e-6
+              and abs(cx - slot_x_mm) <= slot_l_mm / 2.0 + 1e-6
+              and abs(cy - slot_y_mm) <= slot_w_mm / 2.0 + 1e-6):
+            pec.append(tag)     # v8 closed-slot variant: cap the air pocket, keep energy reactive
         elif is_boundary:
             absorbing.append(tag)
 
