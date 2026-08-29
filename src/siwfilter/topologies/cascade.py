@@ -21,8 +21,14 @@ from .base import MeshResult, ParamRange
 # for other N since no per-N calibration exists yet -- a reasonable first
 # cut, not a claim of optimality for N!=3.
 _L_INIT, _L_LO, _L_HI = 34.4, 30.0, 40.0
-_W_IRIS = (13.0, 8.0, 15.9)
-_W_EXT = (16.5, 12.0, 26.0)
+# 2026-08-29 (v18): coupling lower bounds extended downward for the same
+# reason as dualmode's (see its _PARAMS comment) -- a narrower passband needs
+# WEAKER coupling, and the old floors (w_iris 8.0, w_ext 12.0) were set for a
+# wide-band design. N=3 targets k12=k23~0.046/Qe~20.6 and N=4 k12=k34~0.0415,
+# k23~0.0329/Qe~22.2, all weaker than the N=2 case, so the inline cascades
+# need at least as much headroom below.
+_W_IRIS = (13.0, 4.0, 15.9)
+_W_EXT = (16.5, 7.0, 26.0)
 _L_TAPER = (15.73, 8.0, 26.0)
 
 

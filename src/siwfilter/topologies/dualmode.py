@@ -26,10 +26,19 @@ from .base import MeshResult, ParamRange
 # searching the original wide box.
 _PARAMS: dict[str, ParamRange] = {
     "a":      (57.21, 55.3, 58.7),
-    "w_iris": (15.26, 12.5, 15.9),
+    # 2026-08-29 (v18): lower bounds on the two COUPLING widths extended well
+    # below the landed design. The old box was centred on the wide-bandwidth
+    # optimum (landed w_iris=15.26 sat just under its own 15.9 ceiling), so a
+    # search for a NARROWER passband could not physically reach the region it
+    # needed: bandwidth scales with both couplings, and narrowing it requires
+    # WEAKER coupling, i.e. smaller w_iris (internal, sets k12) and smaller
+    # w_ext (external, sets Qe). Target for N=2/0.1dB/5%: k12~0.069, Qe~16.9,
+    # versus the landed design's measured 318MHz (11.1% FBW) -- roughly 2.2x
+    # too wide, so real room below is required, not a token margin.
+    "w_iris": (15.26, 6.0, 15.9),
     "x_iris": (28.68, 27.0, 30.4),
     "y_wall": (8.62,  7.5, 13.0),
-    "w_ext":  (16.31, 14.1, 17.6),
+    "w_ext":  (16.31, 8.0, 17.6),
 }
 
 # Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA jack -- the real, sourceable part
