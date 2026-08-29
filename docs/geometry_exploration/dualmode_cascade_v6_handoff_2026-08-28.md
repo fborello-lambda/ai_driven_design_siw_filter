@@ -382,6 +382,69 @@ understood step than continuing to debug dualmode_cascade). Any of these
 is a bigger, unproven redesign and should be scoped as such before
 starting.
 
+## 9. v8: top-copper electric coupling slot -- FIRST CONFIRMED SECOND POLE (2026-08-29)
+
+Literature on cascaded dual-mode SIW/waveguide filters describes inter-cavity
+coupling via TWO distinct mechanisms: a magnetic via-fence window (already in
+this project) plus a separate electric coupling slot cut into the top copper
+at a different position, to reach the mode the magnetic window cannot. This
+project's mesh builder previously had no air region above the cavity at all
+(the top copper was the literal exterior boundary there), so this required
+a genuinely new construction: a local air pocket over a cutout in the top
+ground, added to `palace_dualmode_driven.build_mesh()` as `slot_x_mm/
+slot_y_mm/slot_w_mm/slot_l_mm/slot_h_mm` (+ `slot_pec_cap` for a closed/
+reactive variant), commits `4a3ce86`/`6eddbce`. Both default off
+(regression-verified byte-identical mesh stats).
+
+**Pitfall found and fixed along the way**: the first placement test
+accidentally centred the slot directly over an existing via in the internal
+mode-splitting fence -- that via's own PEC wall blocks the column at every
+z regardless of the top copper, giving BIT-IDENTICAL S11 between the open
+and closed slot variants (verified to full float precision). Always check
+for via overlap before placing a slot; `_via_layout`/`dualmode_cascade`'s
+own via list is the ground truth to check against.
+
+**Single-cavity result (ambiguous but real)**: on the reference dual-mode
+cavity (score 9.31, both modes already well-coupled), a via-free slot
+produced a real, frequency-selective (not uniform-loss) effect: S11
+improved by ~4dB at one known pole (-24.45->-28.76dB) while weakening the
+other slightly, with no new resonance and no frequency shift. Promising
+(clearly not just added loss) but inconclusive, since this cavity's ports
+already reach both its modes -- this test alone can't distinguish "opens a
+new path" from "reactively retunes existing coupling."
+
+**Decisive test: the actual dualmode_cascade.** Same slot placed at the
+REAL inter-cavity boundary (x=a_mm=61.123), in a via-free gap of the SOLID
+part of the inter-cavity fence (y=10.52, between wall vias at y=8.98/12.06 --
+deliberately AWAY from the existing centred magnetic coupling window
+[-5.9,+5.9], to test independent access to a mode the magnetic window
+doesn't reach), on the v5 best design (a=61.123, w_iris=10.716,
+x_iris=30.603, y_wall=10.91, w_ext=17.374, w_inter_mm=11.793,
+w_iris2_mm=10.635, x_iris2_mm=30.315, iris_defect_frac=0.105,
+iris2_defect_frac=0.711, w_ext2_mm=14.063). Same screen-grade mesh/tolerance
+v1-v5 used for this design (so directly comparable to v5's own numbers):
+
+| | s11_best | real S11 minima (<-6dB) |
+|---|---|---|
+| no slot (v5 baseline, reconfirmed) | -14.91dB | 1: (2.828GHz, -14.9dB) |
+| **with slot** | -15.03dB | **2: (2.828GHz, -15.0dB), (2.900GHz, -6.1dB)** |
+
+**A genuinely NEW resonance appears, not present in the baseline at all --
+the first time any v6/v7/v8 intervention has produced more than one real
+null on this topology.** The new null's frequency (2.900GHz) lines up
+closely with the closed-cavity eigenmode ground truth's pole 3 (measured
+2.9000GHz exactly, see sec 6.1's table) -- strong corroborating evidence
+this is the previously-invisible third pole becoming reachable, not a mesh
+artefact or an unrelated resonance.
+
+**Status: confirmed real, not yet strong.** The new null is weak (-6.1dB,
+barely past the 6dB threshold) and pole 4 (eigenmode-predicted 2.932GHz)
+still shows nothing. This is evidence the mechanism WORKS, not yet a
+finished design -- next steps: strengthen the slot (larger footprint,
+position tuning, possibly a second slot for pole 4), fine-mesh confirm
+this specific point, then a short local search seeded from here rather
+than a fresh wide-box GP search (that pattern already failed in v4).
+
 ## 7. How to continue (checklist)
 
 1. Add `y_inter_off_mm`, `y_ext_off_mm`, `y_ext2_off_mm` to
