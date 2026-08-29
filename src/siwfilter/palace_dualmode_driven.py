@@ -209,6 +209,7 @@ def gnd_stitch_layout(X0: float, X1: float, W: float, ym: float, ym_lo: float,
                       gnd_clearance_mm: float = 0.3,
                       cpwg_gap_mm: float | None = None,
                       cpwg_y_gnd_mm: float | None = None,
+                      cpwg_y_out_mm: float | None = None,
                       cpwg_len_mm: float = 3.0,
                       cpwg_taper_mm: float = 4.0,
                       ) -> tuple[list[np.ndarray], list[tuple[float, float]]]:
@@ -247,31 +248,43 @@ def gnd_stitch_layout(X0: float, X1: float, W: float, ym: float, ym_lo: float,
         # characteristic impedance". The earlier version kept the trace at a
         # constant width and let the grounds peel away, which is NOT the same
         # structure and does not sit inside the connector footprint.
-        y_in_start = cpwg_y_gnd_mm if cpwg_y_gnd_mm is not None else (W / 2.0 + cpwg_gap_mm)
-        y_in_end = W / 2.0 + cpwg_gap_mm         # gnd edge once fully microstrip-width
+        # Inner edge = the synthesised 50-ohm gap for the ACTUAL trace width,
+        # so the launch is 50 ohm with a constant-width signal trace (no
+        # signal taper needed: the microstrip width already is the CPWG width
+        # at this gap). Pinning the inner edge to the connector legs instead
+        # (2.62mm) would leave 51.3 ohm AND -- worse -- put the stitch vias
+        # half in the gap, since they sit exactly on that line. At 2.018mm
+        # the 0.6mm vias at +-2.62mm are fully inside the copper with 0.3mm
+        # clearance.
+        y_in = W / 2.0 + cpwg_gap_mm
+        # LOCALISED pad, not a full-width pour: the ground only has to carry
+        # the connector tabs and the stitch vias. Sweeping it to the board
+        # edge (the previous behaviour) added a large, unnecessary coupled
+        # copper area beside the feed for no impedance benefit.
+        y_out = (cpwg_y_out_mm if cpwg_y_out_mm is not None
+                 else gnd_stitch_offset_mm + gnd_via_d_mm / 2.0 + 0.6)
         for x_edge, sign in ((X0, +1.0), (X1, -1.0)):
             x_hold = x_edge + sign * cpwg_len_mm
             x_end = x_hold + sign * cpwg_taper_mm
             for sgn in (+1.0, -1.0):
-                y_far = ym if sgn > 0 else ym_lo
-                if abs(y_far) <= max(y_in_start, y_in_end):
+                y_lim = ym if sgn > 0 else ym_lo
+                if abs(y_lim) <= y_in:
                     continue                    # board too narrow for a CPWG gnd
-                # inner edge: constant across the launch pad, then a linear
-                # convergence to y_in_end as the trace widens, then the ground
-                # ends (board-edge fill beyond).
-                poly = np.array([
-                    (x_edge, sgn * y_in_start),
-                    (x_hold, sgn * y_in_start),
-                    (x_end, sgn * y_in_end),
-                    (x_end, y_far),
-                    (x_edge, y_far),
-                ])
-                polys.append(poly)
+                yo = min(y_out, abs(y_lim))
+                # constant-gap launch section, then the inner edge flares out
+                # to the pad's outer edge so the ground closes off gradually
+                # rather than ending in a step -> plain microstrip beyond.
+                polys.append(np.array([
+                    (x_edge, sgn * y_in),
+                    (x_hold, sgn * y_in),
+                    (x_end, sgn * yo),
+                    (x_edge, sgn * yo),
+                ]))
             for k in range(n_st):
                 xv = x_edge + sign * (rg + pad_margin + k * gnd_stitch_pitch_mm)
                 for sgn in (+1.0, -1.0):
                     yv = sgn * gnd_stitch_offset_mm
-                    if (abs(yv) - rg <= min(y_in_start, y_in_end)
+                    if (abs(yv) - rg < y_in or abs(yv) + rg > y_out
                             or yv + rg > ym or yv - rg < ym_lo):
                         continue
                     centres.append((xv, yv))
@@ -316,6 +329,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                gnd_clearance_mm: float = 0.3,
                cpwg_gap_mm: float | None = None,
                cpwg_y_gnd_mm: float | None = None,
+               cpwg_y_out_mm: float | None = None,
                cpwg_len_mm: float = 3.0,
                cpwg_taper_mm: float = 4.0,
                gnd_via_d_mm: float = VIA_PRESETS["gnd_stitch"]["d_mm"],
@@ -543,6 +557,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             gnd_clearance_mm=gnd_clearance_mm,
             cpwg_gap_mm=cpwg_gap_mm,
             cpwg_y_gnd_mm=cpwg_y_gnd_mm,
+            cpwg_y_out_mm=cpwg_y_out_mm,
             cpwg_len_mm=cpwg_len_mm,
             cpwg_taper_mm=cpwg_taper_mm)
         for poly in gnd_polys:
