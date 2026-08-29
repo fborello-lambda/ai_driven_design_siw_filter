@@ -173,7 +173,8 @@ def face_ty(geometry, vias, xf: float, W: float, half: float,
 def feed_trace_poly(x_in: float, x_taper: float, x_siw: float,
                     W: float, ty_lo: float, ty_hi: float,
                     w_pad: float | None = None,
-                    x_pad_end: float | None = None) -> np.ndarray:
+                    x_pad_end: float | None = None,
+                    x_pad_hold: float | None = None) -> np.ndarray:
     """Deslandes feed outline: constant 50-ohm width W from the port to
     x_taper, then a linear flare to the FULL cavity wall width at x_siw.
 
@@ -193,10 +194,12 @@ def feed_trace_poly(x_in: float, x_taper: float, x_siw: float,
         # 0.76mm pin instead would need a ~0.095mm coplanar gap, below
         # JLCPCB's 0.127mm minimum trace spacing, so it is not buildable here
         # anyway. Defaults keep this off (plain constant-width feed).
+        xh = x_pad_hold if x_pad_hold is not None else x_in
         return np.array([
-            (x_in, +w_pad / 2), (x_pad_end, +W / 2), (x_taper, +W / 2),
-            (x_siw, ty_hi), (x_siw, ty_lo),
-            (x_taper, -W / 2), (x_pad_end, -W / 2), (x_in, -w_pad / 2)])
+            (x_in, +w_pad / 2), (xh, +w_pad / 2), (x_pad_end, +W / 2),
+            (x_taper, +W / 2), (x_siw, ty_hi), (x_siw, ty_lo),
+            (x_taper, -W / 2), (x_pad_end, -W / 2), (xh, -w_pad / 2),
+            (x_in, -w_pad / 2)])
     return np.array([(x_in, +W / 2), (x_taper, +W / 2), (x_siw, ty_hi),
                      (x_siw, ty_lo), (x_taper, -W / 2), (x_in, -W / 2)])
 
@@ -256,36 +259,33 @@ def gnd_stitch_layout(X0: float, X1: float, W: float, ym: float, ym_lo: float,
         # half in the gap, since they sit exactly on that line. At 2.018mm
         # the 0.6mm vias at +-2.62mm are fully inside the copper with 0.3mm
         # clearance.
-        y_in = W / 2.0 + cpwg_gap_mm
-        # LOCALISED pad, not a full-width pour: the ground only has to carry
-        # the connector tabs and the stitch vias. Sweeping it to the board
-        # edge (the previous behaviour) added a large, unnecessary coupled
-        # copper area beside the feed for no impedance benefit.
+        # RECTANGULAR ground pads on the top layer (2026-08-29, per design
+        # review): one plain rectangle per side per port. Its INNER edge sets
+        # the coplanar gap -- and it must sit close to the trace for this to
+        # be a real CPWG at all. With the grounds out at the connector legs
+        # (2.62mm) the line is already essentially microstrip, which is why
+        # the CPWG and microstrip 50-ohm widths differed by only 4% there.
+        # Bringing the inner edge in (cpwg_y_gnd_mm) makes the CPWG feed
+        # genuinely narrower than the microstrip, so the taper between them
+        # is a real transition rather than a cosmetic one.
+        y_in = cpwg_y_gnd_mm if cpwg_y_gnd_mm is not None else (W / 2.0 + cpwg_gap_mm)
         y_out = (cpwg_y_out_mm if cpwg_y_out_mm is not None
                  else gnd_stitch_offset_mm + gnd_via_d_mm / 2.0 + 0.6)
         for x_edge, sign in ((X0, +1.0), (X1, -1.0)):
-            x_hold = x_edge + sign * cpwg_len_mm
-            x_end = x_hold + sign * cpwg_taper_mm
+            # Footprint-sized rectangle ONLY. It must not extend over the
+            # signal taper: the inner edge is fixed, so a widening trace under
+            # it would close the gap to nothing (measured 0.019mm -- touching).
+            x_end = x_edge + sign * cpwg_len_mm
+            xa, xb = sorted([x_edge, x_end])
             for sgn in (+1.0, -1.0):
                 y_lim = ym if sgn > 0 else ym_lo
                 if abs(y_lim) <= y_in:
-                    continue                    # board too narrow for a CPWG gnd
+                    continue
                 yo = min(y_out, abs(y_lim))
-                # constant-gap launch section, then the inner edge flares out
-                # to the pad's outer edge so the ground closes off gradually
-                # rather than ending in a step -> plain microstrip beyond.
-                polys.append(np.array([
-                    (x_edge, sgn * y_in),
-                    (x_hold, sgn * y_in),
-                    (x_end, sgn * yo),
-                    (x_edge, sgn * yo),
-                ]))
+                polys.append(np.array([(xa, sgn * y_in), (xb, sgn * y_in),
+                                       (xb, sgn * yo), (xa, sgn * yo)]))
             for k in range(n_st):
                 xv = x_edge + sign * (rg + pad_margin + k * gnd_stitch_pitch_mm)
-                # Only inside the CONSTANT-gap launch section: past x_hold the
-                # pad's inner edge flares outward, so a via at a fixed y there
-                # ends up straddling the copper edge (found by inspection --
-                # the last two vias were half in the gap).
                 if abs(xv - x_edge) > cpwg_len_mm - (rg + pad_margin):
                     continue
                 for sgn in (+1.0, -1.0):
@@ -506,9 +506,10 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     def trace_surface(x_in: float, x_taper: float, x_siw: float,
                       tlo: float, thi: float,
                       w_pad: float | None = None,
-                      x_pad_end: float | None = None) -> int:
+                      x_pad_end: float | None = None,
+                      x_pad_hold: float | None = None) -> int:
         pts = list(feed_trace_poly(x_in, x_taper, x_siw, W, tlo, thi,
-                                   w_pad, x_pad_end))
+                                   w_pad, x_pad_end, x_pad_hold))
         tags = [occ.addPoint(px, py, h) for px, py in pts]
         lines = [occ.addLine(tags[i], tags[(i + 1) % len(tags)]) for i in range(len(tags))]
         return occ.addPlaneSurface([occ.addCurveLoop(lines)])
@@ -520,8 +521,10 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     _wp = cpwg_w_feed_mm if (cpwg_gap_mm is not None) else None
     _xp_in = X0 + (cpwg_len_mm + cpwg_taper_mm) if _wp is not None else None
     _xp_out = X1 - (cpwg_len_mm + cpwg_taper_mm) if _wp is not None else None
-    trace_in = (2, trace_surface(X0, -Lt, 0.0, ty_in_lo, ty_in_hi, _wp, _xp_in))
-    trace_out = (2, trace_surface(X1, Li + Lt, Li, ty_out_lo, ty_out_hi, _wp, _xp_out))
+    _xh_in = X0 + cpwg_len_mm if _wp is not None else None
+    _xh_out = X1 - cpwg_len_mm if _wp is not None else None
+    trace_in = (2, trace_surface(X0, -Lt, 0.0, ty_in_lo, ty_in_hi, _wp, _xp_in, _xh_in))
+    trace_out = (2, trace_surface(X1, Li + Lt, Li, ty_out_lo, ty_out_hi, _wp, _xp_out, _xh_out))
 
     # ---- connector ground: top-side pour + stitching vias ----
     # The Taoglas EMPCB.SMAFSTJ.B.HT grounds through 4 discrete legs at the
