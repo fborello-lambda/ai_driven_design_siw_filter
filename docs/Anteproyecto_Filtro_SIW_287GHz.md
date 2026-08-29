@@ -57,6 +57,18 @@ header-includes:
     \makeatother
 ---
 
+> **NOTA DE ESTADO (2026-08-29).** Este anteproyecto describe el plan ORIGINAL
+> (N=3, cavidades TE101 en línea, vías de 0.8 mm / paso 1.5 mm). El proyecto
+> evolucionó desde entonces: el diseño que finalmente funcionó es un filtro
+> **N=2 de cavidad única en modo dual** con **vías de 1.5 mm y paso de 3.0 mm**
+> (el sustrato RO4350B de 0.76 mm sí se mantiene). Las dimensiones y el número
+> de cavidades de este documento son contexto histórico, no la configuración
+> vigente. Ver `CLAUDE.md` (sec. 1 y 10) y
+> `docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md` para el
+> estado actual, incluida la investigación (cerrada, con resultados negativos
+> documentados) sobre variantes compactas de orden 4.
+
+
 ```{=latex}
 \begin{IEEEkeywords}
 banda S, filtro pasabanda, guía de onda integrada en sustrato, SIW,

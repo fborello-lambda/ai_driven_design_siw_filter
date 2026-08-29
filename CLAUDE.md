@@ -19,14 +19,34 @@ Python modules, and produce a CST-ready 3D geometry. Read this whole file before
   fast pre-check.
 
 ### Must be VARIABLE parameters (the human asked for these explicitly)
-- **Via diameter** `d_via` (default 0.8 mm).
+- **Via diameter** `d_via` — **current confirmed value: 1.5 mm** (see the
+  CURRENT CONFIRMED CONFIGURATION block at the end of this section).
 - **Substrate** — both material AND thickness. Stock confirmed from datasheets
   (see `SUBSTRATES` in `config.py`, which is the single source of truth):
-  - RO4350B: eps_r = 3.66, tan_d = 0.0037 — h = 1.52 / 0.76 / 0.25 mm
+  - RO4350B: eps_r = 3.66, tan_d = 0.0037 — h = 1.52 / **0.76** / 0.25 mm  ← **0.76 mm is the default**
   - RO4350B 4-mil laminate: eps_r = 3.36 (spec Dk differs), tan_d = 0.0037, h = 0.10 mm
-  - AD250C: eps_r = 2.50, tan_d = 0.0013, h = 1.524 mm  ← **default**
+  - AD250C: eps_r = 2.50, tan_d = 0.0013, h = 1.524 mm  (available, NOT the default)
   - Dielectric loss for openEMS/CST: `kappa = 2*pi*f0*eps0*eps_r*tan_d`.
-- **Via pitch** `p_via` (default 1.5 mm; keep p/d between 0.5 and 2.5, target ~2).
+- **Via pitch** `p_via` — **current confirmed value: 3.0 mm** (p/d = 2.0).
+- **Number of cavities** N (filter order), **cavity length** per cavity,
+  **iris widths** (there are N+1 coupling structures for N cavities), **number of irises**.
+
+> ### CURRENT CONFIRMED CONFIGURATION (2026-08-29) — supersedes older values in this file
+> - **Substrate: `RO4350B_0.76mm`** (eps_r=3.66, tan_d=0.0037, h=0.76 mm). This is
+>   `config.py`'s actual `DEFAULT_SUBSTRATE` and what every real simulation uses via
+>   `FilterSpec()`. Verified: `FilterSpec().substrate.eps_r == 3.66`.
+> - **Vias: d_via = 1.5 mm, p_via = 3.0 mm** (`VIA_PRESETS["siw_fence"]`). NOT arbitrary:
+>   smaller sizes (incl. ~0.8 mm) were searched three separate times under three scoring
+>   methods and never matched 1.5/3.0 mm. See `config.py`'s comment on `VIA_PRESETS`.
+>   Do not shrink for fab reasons alone — it would invalidate the landed design.
+> - A cached `output/data/calibration.json` entry keyed `..._d0.80_p1.50` is a **stale
+>   leftover** from before this via size was locked in. Do not reuse it as current.
+> - **Landed reference design (N=2 dual-mode, single cavity)**: a=57.21, w_iris=15.26,
+>   x_iris=28.68, y_wall=8.62, w_ext=16.31 mm → score 9.31, S11 −17.7 dB, IL −1.42 dB,
+>   board ~119 mm (`output/data/opt_dualmode_best.json`). Built under exactly this
+>   configuration.
+> - **Known open issue on that design: bandwidth is 318 MHz vs the 143.5 MHz (5% FBW)
+>   target — 2.2× too wide.** This is the current top-priority work item.
 - **Number of cavities** N (filter order), **cavity length** per cavity,
   **iris widths** (there are N+1 coupling structures for N cavities), **number of irises**.
 
@@ -214,15 +234,15 @@ Constants: c = 2.998e8 m/s.
 - Frequency-independent (depend only on N, ripple, FBW — VALID for the current
   default): for FBW = 5%, N=3, 0.1 dB -> g1=g3=1.0316, g2=1.1474, g4=1.0;
   k12 = k23 ~ 0.046, Qe ~ 20.6.  (verified by `synthesis.py`.)
-- Geometry numbers below were computed for the ORIGINAL default
-  (2.8 GHz, RO4003C eps_r=3.55, h=0.508mm); they will CHANGE for the new
-  default (2.87 GHz, AD250C eps_r=2.50, h=1.524mm) — lower eps_r => larger
-  a_eff/cavity, thicker h => wider 50-ohm microstrip. Recompute in
-  `siw_geometry.py`, don't trust these verbatim:
-  - Pick f_c ~ 0.7*f0 -> a_eff order ~40 mm, near-square cavity.
-  - p_via ~ 1.5 mm (p/d ~ 1.875).
-  - Estimated mid-band insertion loss a few dB (dielectric-dominated; AD250C
-    tan_d=0.0013 is lower-loss than the old RO4003C example).
+- **STALE — do not use.** The geometry numbers that used to be listed here were
+  computed for long-superseded defaults (RO4003C, then AD250C) and for
+  d_via=0.8/p_via=1.5 mm. The real, current configuration is RO4350B_0.76mm
+  (eps_r=3.66) with d_via=1.5/p_via=3.0 mm (see the CURRENT CONFIRMED
+  CONFIGURATION block in sec 1). **Use the landed design's real, measured
+  numbers instead** — a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62,
+  w_ext=16.31 mm, giving fc≈2.91 GHz, S11 −17.7 dB, IL −1.42 dB, bw 318 MHz
+  (`output/data/opt_dualmode_best.json`). Anything else in this file that
+  quotes AD250C/RO4003C dimensions is historical context, not guidance.
 
 ---
 
@@ -244,7 +264,40 @@ Constants: c = 2.998e8 m/s.
 5. `calibrate.py` + `openems_sim.py` -> real FDTD, refine iris/taper, `compare.py`.
 6. Iterate: each cavity ~50 MHz per 1 mm length; each iris ~5% k per 0.5 mm.
 
-Keep everything parametric and driven from `config.py`. Ask the human to confirm filter
-order N, fractional bandwidth, ripple, and substrate thickness if not already specified.
-**Confirmed defaults (2026-05-30): f0=2.87 GHz, N=3, FBW=5%, ripple=0.1 dB,
-substrate AD250C_1.524mm (eps_r=2.50, tan_d=0.0013), d_via=0.8 mm, p_via=1.5 mm.**
+Keep everything parametric and driven from `config.py`.
+
+**CONFIRMED DEFAULTS (updated 2026-08-29, supersedes the 2026-05-30 line):
+f0=2.87 GHz, FBW=5%, ripple=0.1 dB, substrate `RO4350B_0.76mm` (eps_r=3.66,
+tan_d=0.0037, h=0.76 mm), d_via=1.5 mm, p_via=3.0 mm.** See the CURRENT CONFIRMED
+CONFIGURATION block in sec 1 for the full rationale and the landed design's numbers.
+
+---
+
+## 10. Project status (2026-08-29) — read this before starting new work
+
+**Landed, working deliverable: the N=2 single-cavity dual-mode design**
+(`output/data/opt_dualmode_best.json`, score 9.31, S11 −17.7 dB, IL −1.42 dB,
+~119 mm board, real Taoglas SMA modelled). This is the recommended design.
+
+**Top-priority open item: its bandwidth is 318 MHz vs the 143.5 MHz (5% FBW)
+target — 2.2× too wide.** Both couplings need to be weakened. Synthesis targets
+for N=2/0.1 dB/5% (verified via `synthesize()`): **k12 ≈ 0.069, Qe ≈ 16.9**.
+Neither is currently calibrated for the real configuration —
+`DualModeTopology.calibrate()` already does the k12(w_iris) eigenmode sweep;
+a Qe(w_ext) group-delay calibration does not exist yet and needs writing.
+This is the CLAUDE.md sec 6 procedure applied to a tractable, single-cavity
+problem — do this properly rather than black-box searching.
+
+**N=4 compact: thoroughly investigated, currently closed.** Five structurally
+different mechanisms plus a proper joint GP optimization were tried on a
+2-cavity dual-mode cascade and a 1-cavity quad-mode alternative; all converge
+on the same ceiling (2-of-4 poles, score ~25 vs the N=2's 9.31). A 4-cavity
+single-mode cascade works electrically but needs ~180–206 mm. Full details,
+all raw numbers, and the honest negative results are in
+`docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md` §9–16.
+**Do not restart N=4 geometry variants without reading that document first** —
+several plausible-sounding ideas (offset apertures, corner placement, discrete
+posts, top-copper slots, quad-mode cavities) are already falsified there with
+real simulation data. The one methodological gap, if it is ever revisited:
+no attempt directly measured per-mode external Q; everything was inferred from
+S11 curve shape.

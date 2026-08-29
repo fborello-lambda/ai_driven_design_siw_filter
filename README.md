@@ -1,10 +1,27 @@
 # SIW Bandpass Filter — 2.87 GHz
 
-Parametric **Substrate Integrated Waveguide** bandpass filter: 3 inline TE101
-cavities, inductive-iris coupled, Chebyshev response.
+Parametric **Substrate Integrated Waveguide** bandpass filter. Originally scoped as
+3 inline TE101 cavities; the **landed design is an N=2 single-cavity dual-mode
+filter** (see Status below).
 
-- **f0 = 2.87 GHz**, FBW = 5 %, N = 3, 0.1 dB ripple
-- Substrate **Rogers RO4350B 0.76 mm** (εr 3.66, tanδ 0.0037), vias Ø 0.8 mm, pitch 1.5 mm
+- **f0 = 2.87 GHz**, FBW target = 5 %, 0.1 dB ripple
+- Substrate **Rogers RO4350B 0.76 mm** (εr 3.66, tanδ 0.0037), **vias Ø 1.5 mm, pitch 3.0 mm**
+  (1.5/3.0 mm was chosen over smaller sizes after three separate searches — see
+  `VIA_PRESETS` in `config.py`)
+
+### Status (2026-08-29)
+
+**Landed design**: N=2 single-cavity dual-mode, `output/data/opt_dualmode_best.json`
+— score 9.31, S11 −17.7 dB, IL −1.42 dB, ~119 mm board, real Taoglas SMA modelled.
+
+**Open item**: its bandwidth is 318 MHz vs the 143.5 MHz target (2.2× too wide).
+Fixing this needs a proper k12/Qe coupling calibration (targets: k12 ≈ 0.069,
+Qe ≈ 16.9) rather than black-box search.
+
+**N=4 compact**: extensively investigated and currently closed — five structurally
+different mechanisms plus a joint GP optimization all hit the same ceiling. Full
+negative results in `docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md`
+§9–16. Read that before restarting any N=4 geometry work.
 
 Synthesis → physical geometry → native parametric **CST 2021** model (`.bas` macro).
 **openEMS** (FDTD) is a fast pre-check; **Palace** (FEM) gave the final, optimized
