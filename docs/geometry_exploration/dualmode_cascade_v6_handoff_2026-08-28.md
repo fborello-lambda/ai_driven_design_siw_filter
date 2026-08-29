@@ -721,3 +721,36 @@ deliverable. A compact N=4 filter at this frequency/substrate would need either 
 fundamentally different resonator technology (not SIW cavity modes -- e.g. lumped-
 element loading, a different dielectric, or a different frequency plan) or
 accepting a larger board than currently targeted.
+
+## 15. v10b: relaxed size budget (~180mm), and why the idealized re-search didn't hold up (2026-08-29)
+
+User relaxed the size constraint: OK with the board approaching the single-mode
+N=4 cascade's size (~180-206mm), not just matching the current ~120mm cascade.
+Re-ran Section 14's mode-index search under an L<=180mm budget instead: found a
+much better idealized candidate, **TE105/TE204/TE301/TE302 at a=103.21mm,
+L=177.38mm, idealized spread 5.19%** (right at the FBW target), with 3 of the 4
+predicted modes within 11MHz of each other and only TE302 as an outlier (~140MHz
+high) -- a far more tractable-looking problem than Section 13's ~200MHz, all-4-
+modes-scattered situation.
+
+**Real eigenmode does not confirm this cleanly.** At this larger cavity size and
+higher mode orders, matching predicted-to-real frequencies by proximity became
+ambiguous: some low-order modes in the same spectrum matched idealized math well
+(TE104: 1.8MHz off, TE203: 9.5MHz off), but the 4 TARGET modes showed 53-140MHz
+discrepancies, and appeared to collapse onto only 2 distinct real resonances
+rather than 4 separable ones. Building a calibration/correction table from both
+measured cavities (this one + Section 12's smaller cavity, 15 matched mode pairs)
+showed no clean, learnable pattern (mean real/predicted ratio 1.005, but std 2.5%
+-- comparable in size to the 5% FBW target itself, i.e. too noisy to correct with
+a simple factor). **The idealized rectangular-cavity formula, reliable at low mode
+order, does not reliably predict the specific higher-order modes needed for tight
+clustering at this cavity size** -- likely because real dielectric-loaded SIW via-
+fence cavities deviate from ideal PEC-wall rectangular-cavity math more at higher
+mode density, and/or because frequency-only mode identification becomes genuinely
+ambiguous without field-pattern visualization (not built for this project).
+
+**Pivoted to direct empirical search** (this project's own established
+philosophy -- CLAUDE.md sec 6/7, don't trust closed-form for SIW, calibrate via
+eigenmode): sweeping cavity length L directly and reading the REAL spectrum's
+natural near-f0 clustering, rather than continuing to chase the idealized
+mode-index prediction. In progress -- see next section for results once complete.
