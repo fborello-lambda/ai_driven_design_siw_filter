@@ -109,6 +109,71 @@ def microstrip_guided_wavelength(f: float, eps_eff: float) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Grounded coplanar waveguide (CPWG / conductor-backed CPW) for the SMA launch
+# ---------------------------------------------------------------------------
+# Why this exists (2026-08-29, user-prompted): the real Taoglas
+# EMPCB.SMAFSTJ.B.HT footprint is a CPWG launch -- a centre signal pad with
+# coplanar ground pads either side (legs at +-2.62mm) on the SAME layer, over
+# the bottom ground plane. The cavity feed, however, is a microstrip (no
+# coplanar grounds). Feeding a 50-ohm microstrip directly from a CPWG pad
+# without matching the CPWG section itself leaves an impedance step right at
+# the connector. These functions synthesise the CPWG gap `s` that makes the
+# launch 50 ohm for a given trace width, so the launch -> microstrip
+# transition can then be a smooth taper rather than a step.
+#
+# Formulation: Wadell / Simons conformal mapping for conductor-backed CPW.
+#   k1 = W/(W+2s)                      (upper, coplanar half)
+#   k3 = tanh(pi*W/(4h)) / tanh(pi*(W+2s)/(4h))   (lower, backed half)
+#   eps_eff = (1 + eps_r * q) / (1 + q),  q = [K(k3)/K'(k3)] / [K(k1)/K'(k1)]
+#   Z0 = 60*pi / sqrt(eps_eff) / ( K(k1)/K'(k1) + K(k3)/K'(k3) )
+# K/K' ratio via Hilberg's closed-form approximation (accurate to ~1e-7),
+# avoiding a scipy elliptic-integral dependency in this module.
+def _kkp_ratio(k: float) -> float:
+    """K(k)/K'(k) via Hilberg's approximation (k in (0,1))."""
+    kp = math.sqrt(max(1e-15, 1.0 - k * k))
+    if k <= 1.0 / math.sqrt(2.0):
+        return math.pi / math.log(2.0 * (1.0 + math.sqrt(kp)) / (1.0 - math.sqrt(kp)))
+    return math.log(2.0 * (1.0 + math.sqrt(k)) / (1.0 - math.sqrt(k))) / math.pi
+
+
+def cpwg_impedance(eps_r: float, h: float, W: float, s: float) -> tuple[float, float]:
+    """(Z0, eps_eff) of a grounded CPW: signal width W, gap s each side,
+    substrate thickness h. All lengths in the same units."""
+    k1 = W / (W + 2.0 * s)
+    k3 = math.tanh(math.pi * W / (4.0 * h)) / math.tanh(math.pi * (W + 2.0 * s) / (4.0 * h))
+    r1, r3 = _kkp_ratio(k1), _kkp_ratio(k3)
+    q = r3 / r1
+    eps_eff = (1.0 + eps_r * q) / (1.0 + q)
+    z0 = 60.0 * math.pi / (math.sqrt(eps_eff) * (r1 + r3))
+    return z0, eps_eff
+
+
+def cpwg_gap_50ohm(eps_r: float, h: float, W: float, Z0: float = 50.0,
+                   s_lo: float = 1e-6, s_hi: float = 5e-3) -> float:
+    """Gap `s` (each side) giving Z0 for a CPWG of signal width W.
+
+    Bisection on the monotonic Z0(s): a wider gap weakens the coplanar
+    (capacitive) loading, so Z0 rises with s. Returns metres if inputs are
+    metres. Raises if the target is unreachable in [s_lo, s_hi] -- which is a
+    real design signal (e.g. W far too wide for this substrate), not
+    something to silently clamp."""
+    z_lo, _ = cpwg_impedance(eps_r, h, W, s_lo)
+    z_hi, _ = cpwg_impedance(eps_r, h, W, s_hi)
+    if not (z_lo <= Z0 <= z_hi):
+        raise ValueError(
+            f"Z0={Z0} unreachable for W={W}, h={h}, eps_r={eps_r}: "
+            f"Z0(s={s_lo})={z_lo:.2f}, Z0(s={s_hi})={z_hi:.2f} ohm")
+    for _ in range(200):
+        s_mid = 0.5 * (s_lo + s_hi)
+        z_mid, _ = cpwg_impedance(eps_r, h, W, s_mid)
+        if z_mid < Z0:
+            s_lo = s_mid
+        else:
+            s_hi = s_mid
+    return 0.5 * (s_lo + s_hi)
+
+
+# ---------------------------------------------------------------------------
 # Placeholder coupling maps (REPLACED by calibrate.py)
 # ---------------------------------------------------------------------------
 def iris_width_from_k(k: float, a_eff: float) -> float:
