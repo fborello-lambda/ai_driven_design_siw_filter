@@ -309,6 +309,79 @@ component entirely, not just a shifted version of the same one, or
 accepting the standalone N=2 design (§4.3 fallback) as dualmode_cascade's
 practical outcome.
 
+## 6.4 v7: near-corner coupling, also FALSIFIED -- the aperture-position mechanism is exhausted
+
+Literature search (web search this session) on dual-mode SIW/waveguide
+filters found degenerate-mode coupling structures described as sitting NEAR
+THE CAVITY CORNER, not at a moderate offset -- raising the hypothesis that
+v6's Stage A (§6.3, offsets up to 16mm of a 28.6mm half-width, ~56%) simply
+hadn't pushed far enough, and that the true corner might present a
+qualitatively different (not just weaker) coupling regime.
+
+Tested on the SAME trustworthy full-fidelity reference cavity (real SMA +
+production CPU mesh) at three more offsets, up to 98% of the geometry's own
+clamp ceiling (`_wall_with_gap`'s `max_off`, ~17.45mm for this design):
+
+| y_ext_off_mm | % of max_off | real S11 minima (<-6dB) |
+|---|---|---|
+| 10.47 | 60% | 2: -8.6dB @2.820GHz, -13.6dB @2.960GHz |
+| 14.83 | 85% | 1: -6.5dB @2.990GHz (barely above threshold) |
+| 17.10 | 98% (true corner) | **0** -- S11 never drops below -4.06dB |
+
+Combined with v6's own 0/8/16mm points, this is ONE continuous, fully
+monotonic decay curve, all the way to the physical corner: the reference
+cavity's two KNOWN poles (present and strong at offset 0: -24.2dB and
+-24.5dB) just get steadily weaker and weaker as the aperture moves, until
+by the true corner neither is left. No third pole, no reversal, no
+qualitatively new coupling regime appears anywhere along the path.
+
+**Conclusion: shifting a single wall-gap-style aperture along y -- at any
+distance, including all the way to the true corner -- is not a coupling
+mechanism that reaches new modes on this cavity. It is purely a coupling-
+strength dial that runs from over-coupled through critical to essentially
+disconnected.** Both v6 (moderate offset) and v7 (near-corner) are now
+ruled out by real, full-fidelity simulation, not by argument. The
+literature's "corner-positioned" couplers are very likely discrete
+conductive PROBES/POSTS (a different structure entirely -- a point contact
+breaking BOTH the E- and H-field symmetry at a single localized spot) or
+cross-slot perturbations at the corner of a SOLID cavity wall, not a
+shifted GAP in a via-fence wall (which only removes local confinement,
+it doesn't introduce a new field interaction). Reproducing that literature
+mechanism in this project's via-fence-only construction would need a
+genuinely different element (e.g. a shorting/coupling via post inside the
+cavity, distinct from the via-fence wall vias, or a cross-shaped slot
+cut at the corner) -- a new structural primitive, not a position parameter
+on the existing aperture.
+
+**This closes the aperture-position line of investigation for
+dualmode_cascade.** See §8 for the final recommendation.
+
+## 8. Final status (v1-v7) and recommendation
+
+After seven investigation rounds -- black-box GP search (v1-v5), the
+y-offset-aperture hypothesis (v6), and near-corner coupling (v7) -- the
+N=4 `dualmode_cascade` topology has not produced a working design. The
+root cause (eigenmode ground truth, §6.1) is clear: the closed cavity's 4
+poles exist and are well-placed (within 26MHz of synthesis targets), but
+every aperture geometry tried so far (centered, offset, near-corner)
+couples to only a subset of them.
+
+**Recommendation: ship the standalone N=2 dual-mode design** (a=57.21,
+w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31 -- `output/data/
+opt_dualmode_best.json`, score 9.31, S11 -17.7dB, IL -1.42dB, real Taoglas
+SMA, already fabrication-ready) as the practical filter deliverable.
+
+If an N=4 filter is still wanted, the next real idea is a genuinely
+different coupling TOPOLOGY, not another position/offset variant of the
+current via-fence wall-gap: e.g. a discrete coupling via/post inside the
+cavity (not part of the confinement fence), or a cross-slot corner
+perturbation, or abandoning the two-dual-mode-cavity-in-series idea
+entirely for four single-mode cavities (`cascade.py`, already implemented
+and validated for N=3 -- extending to N=4 is a much smaller, better-
+understood step than continuing to debug dualmode_cascade). Any of these
+is a bigger, unproven redesign and should be scoped as such before
+starting.
+
 ## 7. How to continue (checklist)
 
 1. Add `y_inter_off_mm`, `y_ext_off_mm`, `y_ext2_off_mm` to
