@@ -570,3 +570,43 @@ one dominant pole's frequency/depth, never reveals a second one.** This is now t
 converge on this result, which further reinforces Section 10's conclusion rather
 than changing it. Not pursued further (no fine-mesh confirm run, given the
 consistent coarse-mesh pattern and the already-established conclusion).
+
+## 12. v10: single-cavity quadmode approach -- real but weak lever, open problem (2026-08-29)
+
+User-prompted after Section 10/11's conclusion: is `dualmode_cascade` (2 cavities)
+even the right topology, and can a single, higher-order cavity be both smaller and
+more selective? Literature search found real precedent: single rectangular SIW
+cavities supporting 4 simultaneous modes (TE103/TE104/TE201/TE202), perturbed by
+via-holes at the cavity centre, built single-layer with vias only. Implemented as
+`quadmode_cavity()` (commit `51c6be1`).
+
+**Bare-cavity math**: at the a=L/2 aspect ratio (chosen to bring TE104/TE202 into
+near-degeneracy), TE103/TE201 land 8-19% below f0 -- the idealized rectangular-
+cavity model does NOT naturally cluster all 4 target modes at one ratio.
+
+**Real eigenmode confirms this**: near-f0 modes measured at 2.651, 2.845, 2.996 GHz
+-- a 345MHz spread, vs the ~143.5MHz a single Chebyshev passband needs.
+
+**Perturbation test (3 patterns, eigenmode)**: measuring whether centre-via loading
+can pull the spread together --
+
+| pattern | near-f0 modes (GHz) | spread |
+|---|---|---|
+| bare | 2.651, 2.845, 2.996 | 345 MHz |
+| single post, centre | 2.652, 2.919, 2.996 | 344 MHz (unchanged) |
+| single post, off-centre 10mm | 2.652, 2.865, 2.997 | 345 MHz (unchanged) |
+| cross of 4 vias | 2.669, 2.963, 2.996 | 327 MHz (**-18MHz, first real movement**) |
+
+**Assessment**: small via perturbations do have a real, measurable effect (the cross
+pattern is the first to move an outer bound at all), but the rate is far too slow --
+18MHz from 4 vias, against a ~200MHz gap that needs closing. This is a genuine,
+open, unsolved design problem: either a much more aggressive perturbation (many more
+or much larger vias, or a fundamentally different loading shape/cavity ratio) might
+close the gap, or this single-cavity quad-mode approach may not be reachable with
+via-only, single-layer construction at all -- not yet determined either way.
+
+**Status: paused for direction, not abandoned or solved.** Unlike dualmode_cascade
+(v1-v9), which was tested to a confident, evidence-based conclusion, v10 is an open
+problem with one weak positive data point. Worth continued investment only with a
+concrete escalation plan (e.g. try a much larger/denser via cluster, or a different
+base cavity ratio) rather than more single-via guesses.
