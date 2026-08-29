@@ -148,6 +148,30 @@ def cpwg_impedance(eps_r: float, h: float, W: float, s: float) -> tuple[float, f
     return z0, eps_eff
 
 
+def cpwg_width_50ohm_fixed_gnd(eps_r: float, h: float, y_gnd: float,
+                               Z0: float = 50.0,
+                               w_lo: float = 0.2e-3, w_hi: float = 6e-3) -> float:
+    """Signal width W giving Z0 when the coplanar GROUND EDGE is pinned at
+    `y_gnd` from the trace centreline (so the gap is y_gnd - W/2).
+
+    This is the footprint-constrained case: an edge-launch SMA fixes where the
+    ground pads are (its legs), so the free variable is the trace width, not
+    the gap. Wider trace -> smaller gap AND more capacitance -> lower Z0, so
+    Z0 is monotonically decreasing in W and bisection is well posed."""
+    for _ in range(200):
+        w_mid = 0.5 * (w_lo + w_hi)
+        gap = y_gnd - w_mid / 2.0
+        if gap <= 1e-5:            # trace has eaten the gap: too wide
+            w_hi = w_mid
+            continue
+        z, _ = cpwg_impedance(eps_r, h, w_mid, gap)
+        if z > Z0:
+            w_lo = w_mid           # too narrow / too high Z0 -> widen
+        else:
+            w_hi = w_mid
+    return 0.5 * (w_lo + w_hi)
+
+
 def cpwg_gap_50ohm(eps_r: float, h: float, W: float, Z0: float = 50.0,
                    s_lo: float = 1e-6, s_hi: float = 5e-3) -> float:
     """Gap `s` (each side) giving Z0 for a CPWG of signal width W.
