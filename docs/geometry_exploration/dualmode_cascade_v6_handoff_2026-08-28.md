@@ -610,3 +610,58 @@ via-only, single-layer construction at all -- not yet determined either way.
 problem with one weak positive data point. Worth continued investment only with a
 concrete escalation plan (e.g. try a much larger/denser via cluster, or a different
 base cavity ratio) rather than more single-via guesses.
+
+## 13. v10 final assessment: quad-mode single cavity does not close the gap with vias alone (2026-08-29)
+
+Continuing directly from Section 12's open question, with the confound properly
+isolated (`post_d_via_mm`, commit `9e99dcf`, separates the perturbation vias'
+diameter from the fence's own `d_via_mm`, which otherwise shifts every mode via
+the Cassivi-Wu a_eff correction -- not a real perturbation effect).
+
+**Isolated diameter sweep** (cross4 pattern, fence fixed at 1.5mm):
+
+| perturbation via diameter | low-bound mode | gain vs 1.5mm |
+|---|---|---|
+| 1.5mm (no real perturbation) | 2.6689 GHz | -- |
+| 3.0mm | 2.6800 GHz | +11 MHz |
+| 4.5mm | 2.6929 GHz | +13 MHz (roughly linear, not accelerating) |
+
+**This is much weaker than it first looked.** The earlier same-diameter test
+(fence + perturbation both at 3.0mm) showed +58MHz -- but isolating the two
+effects shows only ~11MHz of that was real perturbation pulling; the rest (~47MHz)
+was the fence via's own diameter shrinking a_eff, an artifact unrelated to the
+perturbation mechanism. Linear extrapolation of the true effect (~8MHz/mm) would
+need a ~16mm-diameter via to close the ~200MHz gap -- physically absurd (bigger
+than the cavity's own internal features).
+
+**Cavity-ratio search**: numerically scanned a/L from 0.3 to 0.8 (not just the
+literature's a=L/2 guess) to see if a different bare-cavity ratio starts the 4
+target modes (TE103/TE104/TE201/TE202) closer together. **a/L=0.5 is confirmed
+as the GLOBAL minimum-spread ratio for this specific mode combination** -- there
+is no better rectangular-cavity ratio available; the choice wasn't a poor guess,
+it's already optimal, and it still doesn't cluster them (idealized spread ~597MHz
+at this ratio; real eigenmode measured ~345MHz, real SIW/dielectric effects
+compress it somewhat but nowhere near enough).
+
+### Conclusion
+
+The single-cavity quad-mode approach, as implemented (via-hole perturbation on a
+rectangular SIW cavity, the literature-described mechanism), does **not** have a
+demonstrated path to closing the required mode-clustering gap. Two independent
+levers were tested and quantified: via count (saturates immediately, cross4 ==
+cross8 once diameter matches) and via diameter (real but weak, linear, ~8MHz/mm --
+would need an impossible via size). The cavity's own aspect ratio is already at
+its analytical optimum for this mode set. This is not proof the general approach
+is impossible -- the literature papers achieve it, likely with either a much
+different perturbation shape (not a simple via cluster), a different mode-index
+combination, or geometry details not reconstructable from search snippets alone
+(the source papers were not accessible in full) -- but it is not a quick win with
+the mechanisms tried here, and continuing to guess at via patterns has clearly
+diminishing returns (confirmed by 3 rounds of escalation, ~7 real data points).
+
+**Recommendation**: this specific v10 direction is paused. If N=4-in-one-cavity
+is still wanted, the next real idea (untried) would be a non-via perturbation
+(e.g. a slot in the top copper, reusing v8's mechanism but applied to this single
+cavity instead of an inter-cavity wall) -- a genuinely different physical
+mechanism, not another via geometry variant. Otherwise, per Sections 10-11, the
+standalone N=2 design remains the practical, proven, compact deliverable.
