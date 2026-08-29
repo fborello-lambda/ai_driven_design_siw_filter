@@ -39,6 +39,16 @@ _PARAMS: dict[str, ParamRange] = {
     "x_iris": (28.68, 27.0, 30.4),
     "y_wall": (8.62,  7.5, 13.0),
     "w_ext":  (16.31, 8.0, 17.6),
+    # 2026-08-29: user-proposed knob. The internal iris row floats between
+    # y=-(half-y_wall) and y=+(half-y_wall) with a centred gap of w_iris;
+    # shifting that gap off y=0 makes the two arms of the floating wall
+    # asymmetric (unequal lengths) without changing w_iris itself -- an
+    # independent lever on k12, tried because w_iris/w_ext alone haven't
+    # reached the narrow-bandwidth target (docs/TUNING_PLAN_2026-08-29.md).
+    # Self-clamped inside palace_dualmode_driven._via_layout (via
+    # geometries._wall_with_gap) so any value here stays geometrically valid
+    # for whatever y_wall/w_iris the search also picks.
+    "y_iris_off": (0.0, -3.0, 3.0),
 }
 
 # Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA jack -- the real, sourceable part
@@ -74,11 +84,12 @@ class DualModeTopology:
         x_iris = p.pop("x_iris", None)
         y_wall = p.pop("y_wall", 3.0)
         w_ext = p.pop("w_ext", None)
+        y_iris_off = p.pop("y_iris_off", 0.0)
         p.setdefault("with_sma", True)
         for k, v in TAOGLAS_SMA.items():   # caller can still override any of these
             p.setdefault(k, v)
         res = _build_mesh(a_mm=a, w_iris_mm=w_iris, x_iris_mm=x_iris, y_wall_mm=y_wall,
-                          w_ext_mm=w_ext, out_name=out_name, **p)
+                          w_ext_mm=w_ext, y_iris_off_mm=y_iris_off, out_name=out_name, **p)
         if "mesh" not in res:
             # render_png=/preview= short-circuit before a real mesh is built
             # (see palace_dualmode_driven.build_mesh) -- nothing to translate.
