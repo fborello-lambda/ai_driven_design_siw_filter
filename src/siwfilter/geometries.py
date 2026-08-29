@@ -779,6 +779,58 @@ def dualmode_cascade_floatinter(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, 
     return _dedupe(vias, r), {"x_iris": x_iris1, "x_iris2": x_iris2, "half": half}
 
 
+def quadmode_cavity(a_mm, d_via_mm, p_via_mm, w_ext_mm=0.0, L_mm=None,
+                    center_via_pattern=None, **_):
+    """v10 (2026-08-29): a SINGLE rectangular SIW cavity intended to support
+    FOUR simultaneous, clustered modes (TE10p/TE20p family, p large enough
+    that adjacent p-indices land near a common target frequency), perturbed
+    by a small via cluster at the geometric centre -- built with vias only,
+    single layer, matching this project's fab constraint exactly.
+
+    Literature-motivated (2026-08-29 session): "Design of Filtering
+    Crossover and Diplexer on SIW Quadruple-Mode Resonators in a Single
+    Cavity" describes exactly this -- 4 perturbed modes (TE103/TE104/TE201/
+    TE202) from via-holes at the centre of a rectangular SIW cavity.
+    Motivation for trying it here: dualmode_cascade (v1-v9, 2 dual-mode
+    cavities in series) plateaued at 2-of-4 real poles across 4 independent
+    coupling mechanisms + a joint search (see dualmode_cascade_v6_handoff_
+    2026-08-28.md sec 9-11) -- a SINGLE cavity carrying all 4 poles sidesteps
+    the mode-localization/inter-cavity-coupling problem entirely (there is
+    no "which cavity is this mode in" question when there's only one), and
+    needs only ONE set of ports/tapers -- smaller board, by construction,
+    not just fewer wasted mm.
+
+    L_mm defaults to 2*a_mm: numerically, this aspect ratio brings TE104 and
+    TE202 into near-degeneracy (verified this session, ~0.02% apart) while
+    TE103/TE201 land further off (~13%) -- consistent with the paper: real
+    clustering needs the centre-via perturbation's loading effect on top of
+    the bare-cavity ratio, not aspect ratio alone. This function returns the
+    BARE cavity (no perturbation) when center_via_pattern is None, for
+    eigenmode calibration sweeps to characterize that loading effect before
+    committing to a specific pattern.
+
+    center_via_pattern: optional list of (dx, dy) offsets from the cavity
+    centre (L/2, 0) -- e.g. [(0,0)] for a single centred post, or a small
+    cross/cluster. Each entry adds exactly one via.
+
+    w_ext_mm=0.0 (default) seals both ends for closed-cavity eigenmode
+    analysis, matching every other layout's convention in this module."""
+    L = L_mm if L_mm is not None else 2.0 * a_mm
+    half = a_mm / 2.0
+    r, p = d_via_mm / 2.0, p_via_mm
+    vias = []
+    for o in _segment(w_ext_mm / 2.0, half, p):
+        vias.append((0.0, o)); vias.append((0.0, -o))
+        vias.append((L, o)); vias.append((L, -o))
+    for xv in np.linspace(0.0, L, max(1, round(L / p)) + 1):
+        vias.append((xv, -half)); vias.append((xv, half))
+    if center_via_pattern:
+        cx = L / 2.0
+        for dx, dy in center_via_pattern:
+            vias.append((cx + dx, dy))
+    return _dedupe(vias, r), {"half": half, "L": L}
+
+
 LAYOUTS = {
     "halfmode": halfmode,
     "circular_cross": circular_cross,
@@ -794,4 +846,5 @@ LAYOUTS = {
     "dualmode_2wall": dualmode_2wall,
     "dualmode_cascade": dualmode_cascade,
     "dualmode_cascade_floatinter": dualmode_cascade_floatinter,
+    "quadmode_cavity": quadmode_cavity,
 }
