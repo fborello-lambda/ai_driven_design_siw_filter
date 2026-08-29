@@ -571,7 +571,7 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
                      w_iris2_mm=None, y_iris_off_mm=0.0, y_iris2_off_mm=0.0,
                      iris_defect_frac=None, iris2_defect_frac=None,
                      w_ext2_mm=None, y_ext_off_mm=0.0, y_ext2_off_mm=0.0,
-                     y_inter_off_mm=0.0, **_):
+                     y_inter_off_mm=0.0, inter_defect_frac=None, **_):
     """TWO dual-mode square cavities in series (N=4: 2 poles/cavity x 2
     cavities), joined by a NEW inter-cavity coupling row -- genuinely new
     mesh topology, not a delta: the single-cavity dualmode builder has no
@@ -676,8 +676,21 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     # continuous side walls the full length (both cavities share the width)
     for xv in np.linspace(0.0, Li, max(1, round(Li / p)) + 1):
         vias.append((xv, -half)); vias.append((xv, half))
-    # inter-cavity coupling wall at the shared boundary
-    for o in _wall_with_gap(w_inter / 2.0, y_inter_off_mm, half, p):
+    # inter-cavity coupling wall at the shared boundary. inter_defect_frac
+    # (2026-08-29, v8 round 2): drop ONE via from the SOLID part of this
+    # wall, same pattern as iris_defect_frac/iris2_defect_frac, to open
+    # extra room for a v8 top-copper coupling slot beyond what fits between
+    # two intact vias at this wall's ~3mm pitch (measured ceiling: slot
+    # half-width capped at ~1.4mm there, and pole-3's revealed null
+    # plateaued at -6.6dB despite otherwise bigger slots -- see
+    # dualmode_cascade_v6_handoff_2026-08-28.md sec 9). Defaults to None,
+    # reproducing the exact original wall (regression-verified).
+    inter_ys = _wall_with_gap(w_inter / 2.0, y_inter_off_mm, half, p)
+    if inter_defect_frac is not None and len(inter_ys) > 0:
+        order = np.sort(inter_ys)
+        drop_y = order[_defect_index(order, inter_defect_frac)]
+        inter_ys = inter_ys[~np.isclose(inter_ys, drop_y)]
+    for o in inter_ys:
         vias.append((a_mm, o))
     # each cavity's own floating internal mode-splitting iris -- off_1/2
     # clamped to +-y_wall_mm so the shifted row stays inside the cavity.
