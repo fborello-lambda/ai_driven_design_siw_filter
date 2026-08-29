@@ -248,6 +248,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                render_hide_air: bool = True,
                show: bool = True, rot_xyz: tuple[float, float, float] = (55, 0, 20),
                y_ext_off_mm: float = 0.0, y_ext2_off_mm: float = 0.0,
+               slot_x_mm: float | None = None, slot_y_mm: float = 0.0,
+               slot_w_mm: float = 4.0, slot_l_mm: float = 3.0, slot_h_mm: float = 3.0,
                **geom_extra) -> dict:
     W, Lt, Lf = _dims(a_mm, w_ms_mm, l_taper_mm, l_feed_mm)
     Xf = Lt + Lf
@@ -362,6 +364,38 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     air_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, Hair))
     air_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, Hair))
 
+    # ---- v8 (2026-08-29): electric coupling slot in the TOP copper ----
+    # A cutout in the top ground plane, distinct from every via-fence
+    # mechanism tried in v1-v7 -- literature on cascaded dual-mode SIW/
+    # waveguide filters describes inter-cavity coupling via TWO separate
+    # elements: a magnetic coupling window (a via-fence gap, what this
+    # project already has) PLUS a separate electric coupling slot cut into
+    # the top plate at a different position, to reach the OTHER mode
+    # independently (see docs/geometry_exploration/
+    # dualmode_cascade_v6_handoff_2026-08-28.md sec 8/v8). v6/v7 exhausted
+    # every variant of moving/widening ONE via-fence aperture and found only
+    # monotonic coupling-strength change, never a second coupling path --
+    # consistent with a via-fence gap being a single (magnetic-only)
+    # mechanism that cannot also realize the electric-coupling role.
+    #
+    # Until this parameter is set, NO new geometry is added and the model
+    # is byte-identical to before (regression-verified): slot_x_mm=None is
+    # the default for every existing caller.
+    #
+    # Physically this is a small, LOCAL air pocket sitting directly above a
+    # slot_l_mm x slot_w_mm hole in the top ground at (slot_x_mm, slot_y_mm),
+    # capped by Absorbing on its own outer faces (not PEC -- kept open/lossy
+    # rather than a closed reactive stub, the simpler and more conservative
+    # first model; a closed PEC cap is a natural v9 refinement if this
+    # shows real coupling but too much radiation loss). The slot must NOT
+    # overlap the existing air_in/air_out volumes (only meaningful for
+    # slot_x_mm well inside [0, Li], away from both port ends) or the cavity
+    # side walls (|slot_y_mm|+slot_w_mm/2 < top_y_hi).
+    air_slot = None
+    if slot_x_mm is not None:
+        air_slot = (3, occ.addBox(slot_x_mm - slot_l_mm / 2.0, slot_y_mm - slot_w_mm / 2.0, h,
+                                  slot_l_mm, slot_w_mm, slot_h_mm))
+
     cyls = [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, r)) for x, y in final]
 
     # ---- microstrip trace: straight 50-ohm feed (width W) from the port to
@@ -470,7 +504,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     cut_out, _ = occ.cut([sub], cyls, removeObject=True, removeTool=True)
     occ.synchronize()
     sub_tags = [(dd, t) for (dd, t) in cut_out if dd == 3]
-    occ.fragment(sub_tags + ptfe_vols + [air_in, air_out],
+    air_boxes = [air_in, air_out] + ([air_slot] if air_slot is not None else [])
+    occ.fragment(sub_tags + ptfe_vols + air_boxes,
                  [trace_in, trace_out] + sma_caps + gnd_surfs)
     occ.synchronize()
 
@@ -560,7 +595,12 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         elif not with_sma and _near(cx, X1) and xmax - xmin < 1e-3:
             wave_out.append(tag)
         elif _near(cz, h):
-            if (0.0 - 1e-6 <= cx <= Li + 1e-6
+            in_slot = (slot_x_mm is not None
+                      and abs(cx - slot_x_mm) <= slot_l_mm / 2.0 + 1e-6
+                      and abs(cy - slot_y_mm) <= slot_w_mm / 2.0 + 1e-6)
+            if in_slot:
+                pass                                           # v8 coupling slot: leave open
+            elif (0.0 - 1e-6 <= cx <= Li + 1e-6
                     and top_y_lo - 1e-6 <= cy <= top_y_hi + 1e-6):
                 pec.append(tag)                               # cavity top ground
             elif any(_in_poly(cx, cy, poly) for poly in trace_polys):
