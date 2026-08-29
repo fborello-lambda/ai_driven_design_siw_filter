@@ -754,3 +754,45 @@ philosophy -- CLAUDE.md sec 6/7, don't trust closed-form for SIW, calibrate via
 eigenmode): sweeping cavity length L directly and reading the REAL spectrum's
 natural near-f0 clustering, rather than continuing to chase the idealized
 mode-index prediction. In progress -- see next section for results once complete.
+
+## 16. CONFIRMED project configuration (2026-08-29) -- resolves a real substrate/via mix-up
+
+A mid-session mix-up surfaced and is now resolved: **the confirmed, locked-in
+configuration for this project is**:
+
+- **Substrate: RO4350B_0.76mm** (eps_r=3.66, tan_d=0.0037, h=0.76mm) -- this IS
+  `config.py`'s actual `DEFAULT_SUBSTRATE` and what every real simulation this
+  session used via `FilterSpec()`'s default (verified directly: `FilterSpec().
+  substrate.eps_r == 3.66`, regardless of N). It was never actually wrong in any
+  Palace/eigenmode run. **Note: this contradicts CLAUDE.md sec 1/9's stated
+  "Confirmed defaults (2026-05-30): substrate AD250C_1.524mm" -- that line is
+  stale relative to the current code and should be treated as superseded by
+  this section, not the other way around.**
+- **Via size: d=1.5mm, p=3.0mm** (`VIA_PRESETS["siw_fence"]` in `config.py`) --
+  this is a deliberately vetted choice, NOT arbitrary: two smaller options
+  (including sizes close to 0.8mm) were searched three separate times under
+  three different scoring methods and never matched 1.5/3.0mm's performance
+  (see `config.py`'s own comment on `VIA_PRESETS`). A cached `calibration.json`
+  entry for `RO4350B_0.76mm_d0.80_p1.50` is a **stale leftover from before this
+  via size was locked in** -- do not reuse it as if it were current.
+  1.5mm is fab-valid on JLCPCB (standard drill, comfortable hole-to-hole
+  spacing), but so is 0.8mm; the reason to keep 1.5/3.0mm is documented
+  performance, not fab necessity.
+- **The landed standalone N=2 design** (`output/data/opt_dualmode_best.json`:
+  a=57.21mm, w_iris=15.26mm, x_iris=28.68mm, y_wall=8.62mm, w_ext=16.31mm,
+  score=9.31, S11=-17.70dB, board~119mm) was built under this exact
+  substrate/via configuration. **No re-verification is needed on this account
+  -- keep this design and configuration as the confirmed baseline for all
+  further work** (including the pending bandwidth-retuning task: measured
+  bw=318MHz vs the 143.5MHz/5% FBW target, still open).
+
+**Correction to Section 12-15's own analysis**: the v10/v10b hand-calculated
+"idealized" mode-frequency predictions used eps_r=2.50 (AD250C) by mistake in
+scratch math, NOT the project's real eps_r=3.66 (RO4350B) that the actual
+eigenmode simulations correctly used throughout. This means part of the
+idealized-vs-real discrepancy reported in Section 15 was an artifact of this
+arithmetic error, not solely a sign that idealized rectangular-cavity math
+breaks down at higher mode order. The real eigenmode results themselves
+(Sections 12-14) remain valid and trustworthy; the idealized comparison points
+that used the wrong eps_r would need to be recomputed with eps_r=3.66 before
+drawing further conclusions from that specific comparison, if revisited.
