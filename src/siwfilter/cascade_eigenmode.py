@@ -34,10 +34,22 @@ def build_closed_mesh(a_mm: float, w_iris_mm: float, x_iris_mm: float, y_wall_mm
                       w_inter_mm: float, d_via_mm: float = 1.5, p_via_mm: float = 3.0,
                       h_mm: float = 0.76, mesh_max: float = 2.5, mesh_min: float = 0.5,
                       out_name: str = "dmcasc_eig.msh", layout_name: str = "dualmode_cascade",
+                      post_d_via_mm: float | None = None,
                       **extra) -> str:
     """`layout_name` selects any cascade-style via-layout from geometries.LAYOUTS
     (e.g. "dualmode_cascade_floatinter") -- `**extra` passes its own structural
-    knobs through (e.g. y_wall_inter_mm)."""
+    knobs through (e.g. y_wall_inter_mm).
+
+    post_d_via_mm (v10, 2026-08-29): if the chosen layout returns
+    meta["post_vias"] (currently only quadmode_cavity's centre-perturbation
+    cluster), those vias are cut with THIS diameter instead of the fence's
+    own d_via_mm -- isolating a perturbation-via-size sweep from the fence's
+    own diameter, which otherwise confounds the effect via the Cassivi-Wu
+    a_eff correction (a bigger FENCE via shrinks a_eff and shifts every
+    mode, not just the ones near the perturbation). Defaults to None, which
+    falls back to d_via_mm for every via including post_vias -- exact prior
+    behaviour (regression-verified: post_d_via_mm=None reproduces the same
+    single-diameter cut every existing layout already gets)."""
     layout_fn = LAYOUTS[layout_name]
     vias, meta = layout_fn(a_mm=a_mm, w_iris_mm=w_iris_mm, x_iris_mm=x_iris_mm,
                            w_ext_mm=0.0, d_via_mm=d_via_mm, p_via_mm=p_via_mm,
@@ -46,12 +58,18 @@ def build_closed_mesh(a_mm: float, w_iris_mm: float, x_iris_mm: float, y_wall_mm
     Li = 2.0 * a_mm
     r = d_via_mm / 2.0
 
+    post_vias = meta.get("post_vias") or []
+    post_r = (post_d_via_mm / 2.0) if post_d_via_mm is not None else r
+    fence_vias = [v for v in vias if v not in post_vias] if (post_vias and post_d_via_mm is not None) else vias
+
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 0)
     gmsh.model.add("dmcasc_eig")
     occ = gmsh.model.occ
     box = occ.addBox(-r, -half - r, 0.0, Li + 2 * r, 2 * half + 2 * r, h_mm)
-    cyls = [(3, occ.addCylinder(x, y, 0.0, 0, 0, h_mm, r)) for x, y in vias]
+    cyls = [(3, occ.addCylinder(x, y, 0.0, 0, 0, h_mm, r)) for x, y in fence_vias]
+    if post_vias and post_d_via_mm is not None:
+        cyls += [(3, occ.addCylinder(x, y, 0.0, 0, 0, h_mm, post_r)) for x, y in post_vias]
     occ.cut([(3, box)], cyls)
     occ.synchronize()
 

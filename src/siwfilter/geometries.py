@@ -824,11 +824,22 @@ def quadmode_cavity(a_mm, d_via_mm, p_via_mm, w_ext_mm=0.0, L_mm=None,
         vias.append((L, o)); vias.append((L, -o))
     for xv in np.linspace(0.0, L, max(1, round(L / p)) + 1):
         vias.append((xv, -half)); vias.append((xv, half))
+    post_vias = []
     if center_via_pattern:
         cx = L / 2.0
         for dx, dy in center_via_pattern:
-            vias.append((cx + dx, dy))
-    return _dedupe(vias, r), {"half": half, "L": L}
+            post_vias.append((cx + dx, dy))
+    # post_vias returned SEPARATELY (not merged into the main fence list) so
+    # callers that support it (cascade_eigenmode.build_closed_mesh's
+    # post_d_via_mm) can cut them with their OWN diameter, isolated from the
+    # fence's d_via_mm -- v10's eigenmode escalation found via DIAMETER, not
+    # count, is the operative lever, but a same-diameter test confounds the
+    # perturbation with the fence's own via size (which sets a_eff via the
+    # Cassivi-Wu correction, shifting every mode, not just a targeted one).
+    # Callers that don't know about post_vias (e.g. any pre-existing driven
+    # mesh builder) still see them via the regular return value below,
+    # merged at the fence's own diameter -- exact prior behaviour preserved.
+    return _dedupe(vias + post_vias, r), {"half": half, "L": L, "post_vias": post_vias}
 
 
 LAYOUTS = {
