@@ -203,23 +203,41 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
     # `iris_defect_frac`/`iris2_defect_frac` kept at their full natural range
     # (already bounded, narrowing a discrete-ish selector doesn't help the
     # way narrowing a continuous dimension does).
+    # 2026-08-29, v8 round 4 -- SURGICAL box, not a fresh wide search. Every
+    # dim the v1-v5 search already tuned is pinned (near-zero-width) at the
+    # exact v5-best point (score 25.551, the best pre-v8 design); only the
+    # NEW v8 slot dims plus the two external couplings (w_ext/w_ext2_mm,
+    # which interact most directly with the slot's own effect on pole 1) are
+    # actually searched. Wide boxes already failed once (v4, 40 evals, zero
+    # survivors); this is the opposite bet -- most of the space is known-
+    # good, only a handful of genuinely new/interacting dims are free.
     "dualmode_cascade": {
-        "a":      (61.18, 58.0, 64.0),
-        "w_iris": (9.89, 8.0, 12.0),
-        "x_iris": (29.74, 27.0, 32.0),
-        "y_wall": (10.42, 8.0, 13.0),
-        "w_ext":  (16.0, 12.0, 22.0),
+        "a":      (61.123, 61.122, 61.124),
+        "w_iris": (10.716, 10.715, 10.717),
+        "x_iris": (30.603, 30.602, 30.604),
+        "y_wall": (10.91, 10.909, 10.911),
+        "w_ext":  (17.374, 15.0, 20.0),
         # NOTE: keys below must be the exact LAYOUTS function kwarg names --
         # unlike a/w_iris/x_iris/y_wall/w_ext, these bypass _kw()'s explicit
         # pop-based renaming and flow through the generic structural-knob
         # passthrough (_extra()), same as wf_mm/n_corners/ring2_frac
         # elsewhere in this dict.
-        "w_inter_mm":         (10.03, 8.0, 13.0),
-        "w_iris2_mm":         (12.92, 10.0, 16.0),
-        "x_iris2_mm":         (30.27, 27.0, 34.0),
-        "iris_defect_frac":   (0.12, -0.1, 1.0),
-        "iris2_defect_frac":  (-0.1, -0.1, 1.0),
-        "w_ext2_mm":          (16.0, 8.0, 36.0),
+        "w_inter_mm":         (11.793, 11.792, 11.794),
+        "w_iris2_mm":         (10.635, 10.634, 10.636),
+        "x_iris2_mm":         (30.315, 30.314, 30.316),
+        "iris_defect_frac":   (0.105, 0.104, 0.106),
+        "iris2_defect_frac":  (0.711, 0.710, 0.712),
+        "w_ext2_mm":          (14.063, 11.0, 17.0),
+        # v8 (see dualmode_cascade_v6_handoff_2026-08-28.md sec 9): the
+        # top-copper electric coupling slot at the inter-cavity boundary.
+        # slot_x_mm pinned to `a` (the real inter-cavity wall location) --
+        # do NOT widen this independently of `a` above, or the slot drifts
+        # off the wall it's meant to couple through.
+        "slot_x_mm":  (61.123, 61.122, 61.124),
+        "slot_y_mm":  (10.52, 7.5, 13.5),
+        "slot_w_mm":  (1.4, 0.8, 1.55),   # ceiling ~1.58mm before hitting the via pitch (no defect this round)
+        "slot_l_mm":  (5.0, 2.0, 7.0),
+        "slot_h_mm":  (8.0, 3.0, 10.0),
     },
     # 2026-08-26, user-prompted: dual-mode's own landed 5D box, unchanged --
     # the second wall (w_iris2_mm, iris_sep_mm) is the structural knob, fixed
