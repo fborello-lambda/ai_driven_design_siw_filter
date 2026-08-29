@@ -213,7 +213,7 @@ def gnd_stitch_layout(X0: float, X1: float, W: float, ym: float, ym_lo: float,
                       cpwg_gap_mm: float | None = None,
                       cpwg_y_gnd_mm: float | None = None,
                       cpwg_y_out_mm: float | None = None,
-                      cpwg_len_mm: float = 3.0,
+                      cpwg_len_mm: float = 5.0,
                       cpwg_taper_mm: float = 4.0,
                       ) -> tuple[list[np.ndarray], list[tuple[float, float]]]:
     """Connector ground pads + stitching via centres (Taoglas footprint).
@@ -337,7 +337,11 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                cpwg_y_gnd_mm: float | None = None,
                cpwg_y_out_mm: float | None = None,
                cpwg_w_feed_mm: float | None = None,
-               cpwg_len_mm: float = 3.0,
+               # 5mm, not 3mm: at the 1.2mm stitch pitch a 3mm-deep pad only
+               # fits 2 vias per side, which is thin for the ground return at
+               # 2.87GHz. 5mm fits 4, and a couple of extra mm of ground pad
+               # is free on a ~119mm board.
+               cpwg_len_mm: float = 5.0,
                cpwg_taper_mm: float = 4.0,
                gnd_via_d_mm: float = VIA_PRESETS["gnd_stitch"]["d_mm"],
                mesh_max: float = 1.5, mesh_min: float = 0.4,
