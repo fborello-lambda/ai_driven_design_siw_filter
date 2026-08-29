@@ -673,3 +673,51 @@ naturally clusters THAT combination, or accepting that the papers' full geometry
 genuinely more effective than a simple via cluster. Both are open-ended research,
 not scoped quick tries. Per Sections 10-11, the standalone N=2 design remains the
 practical, proven, compact deliverable in the meantime.
+
+## 14. v10 open research: mode-index search closes the single-cavity idea on fundamentals (2026-08-29)
+
+Per the user's explicit request to keep going with open research: searched ALL
+combinations of 4 low-order TE_m0p modes (m=1-3, p=1-7, 35 candidates -> thousands
+of 4-mode combinations) across the full a/L ratio range, correctly accounting for
+the physical cavity LENGTH needed to hit f0=2.87GHz (not just fractional spread --
+an earlier version of this search ranked purely by fractional spread and was
+misleading: it surfaced same-m, high-p combinations like TE301-304 with an
+excellent 1.8% spread, but these need p up to 4, which for a fixed f0 requires an
+L_eff of ~600mm+ -- a much BIGGER cavity, the opposite of the goal).
+
+**Correctly ranking by physical board length subject to a practical spread
+ceiling**:
+
+| max spread allowed | best board length (mm) | modes |
+|---|---|---|
+| <10% | 133.0 | TE104, TE203, TE301, TE302 |
+| <8% | 169.1 | TE105, TE204, TE301, TE302 |
+| <6% | 171.4 | TE105, TE204, TE301, TE302 |
+
+**The tradeoff is real and monotonic: tighter required clustering -> bigger
+minimum board.** Even at the loosest practical threshold (10% spread, which would
+still need substantial perturbation help to reach a real 5% FBW passband), the best
+achievable board (133mm) is already LARGER than the current dualmode_cascade
+(~122mm) and the standalone N=2 design (~119mm). There is no hidden win to be found
+by choosing different mode indices -- this is a fundamental physical tradeoff for
+TE_m0p modes in a rectangular SIW cavity at this frequency/substrate combination,
+not an under-explored parameter.
+
+### Final conclusion on the single-cavity quad-mode direction
+
+Between Section 13 (via-based perturbation: real but far too weak a lever, ~8MHz/mm,
+would need an impossible via size) and this section (mode-index/ratio search: no
+combination is both small enough and clusterable enough), the single-cavity
+quad-mode approach does not offer a path to a smaller, higher-order compact filter
+with the physics available in a single-layer, dielectric-loaded rectangular SIW
+cavity at f0=2.87GHz/eps_r=2.50. This is a closed research question for this
+substrate/frequency, not merely unexplored -- Sections 10, 11, 13, and 14 together
+represent a thorough, honest investigation of both the 2-cavity dual-mode approach
+and the 1-cavity quad-mode alternative.
+
+**Standing recommendation unchanged**: the standalone N=2 dual-mode design (score
+9.31, ~119mm, real Taoglas SMA, fabrication-ready) remains the practical
+deliverable. A compact N=4 filter at this frequency/substrate would need either a
+fundamentally different resonator technology (not SIW cavity modes -- e.g. lumped-
+element loading, a different dielectric, or a different frequency plan) or
+accepting a larger board than currently targeted.
