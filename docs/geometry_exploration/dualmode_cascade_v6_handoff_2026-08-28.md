@@ -544,3 +544,29 @@ remain, both bigger, unproven redesigns:
 
 Both require new engineering, not incremental tuning, and should be scoped as such
 before starting.
+
+## 11. v9: discrete standalone post -- also converges on the same result (2026-08-29)
+
+One more genuinely different mechanism tried, per continued exploration after
+Section 10's conclusion: a single discrete via ("post"), not part of any fence,
+dropped inside the previously-empty magnetic coupling window at the inter-cavity
+boundary (`post_x_mm`/`post_y_mm`, commit `7de1dac`, regression-verified). This is
+the PCB-native analogue of the tuning screws/posts classical dual-mode waveguide
+filters use, and structurally distinct from both the via-fence gap variants
+(v1-v7) and the top-copper slot (v8).
+
+Tested at 3 positions inside the window (y=1.5, 3.0, 5.0mm) on the v5-best design,
+screen-mesh, vs the known baseline (1 real null, 2.828GHz/-14.91dB):
+
+| post y | s11_best | real nulls |
+|---|---|---|
+| 1.5mm | -17.73dB | 1 @ 2.876GHz |
+| 3.0mm | -16.29dB | 1 @ 2.876GHz |
+| 5.0mm (near window edge) | -14.91dB | 1 @ 2.828GHz (= exact baseline) |
+
+**Same pattern as every other single-point perturbation this session: retunes the
+one dominant pole's frequency/depth, never reveals a second one.** This is now the
+4th independent mechanism (y-offset, corner, top-copper slot, discrete post) to
+converge on this result, which further reinforces Section 10's conclusion rather
+than changing it. Not pursued further (no fine-mesh confirm run, given the
+consistent coarse-mesh pattern and the already-established conclusion).
