@@ -791,6 +791,20 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
         fmin, fmax, step = fw0 - 0.9 * (fw1 - fw0), fw1 + 0.9 * (fw1 - fw0), cstep
     tag = (f"{tag_prefix}F_" if fine else f"{tag_prefix}_") + "_".join(
         f"{k}{v:.2f}" for k, v in sorted(params.items()))
+    # Filesystem safety: this tag becomes a filename directly (mesh/.json/
+    # postpro dir), and gains a "scr_" prefix + ".msh"/".json" suffix
+    # downstream -- a wide param dict (e.g. v8's 16D box, slot_* dims added
+    # on top of the 11D dualmode_cascade box) pushed the raw descriptive tag
+    # past ext4's 255-byte filename limit, which silently failed every
+    # single eval as a bare "mesh:Unable to open file" screen-out (found
+    # live during the v8 round-4 search -- every eval scored the OLD flat
+    # 1e9 fallback, not a real screen result). Collapse to a short stable
+    # hash once the descriptive tag would risk that ceiling; 120 leaves
+    # comfortable headroom for every prefix/suffix this tag ever gets.
+    if len(tag) > 120:
+        import hashlib
+        digest = hashlib.sha1(tag.encode()).hexdigest()[:12]
+        tag = (f"{tag_prefix}F_" if fine else f"{tag_prefix}_") + digest
     board_len = topology.board_length_mm(spec, **params)
 
     # Screen only the COARSE search, never the fine confirm -- the confirm's
