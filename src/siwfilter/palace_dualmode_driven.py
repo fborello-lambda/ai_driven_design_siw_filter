@@ -282,6 +282,12 @@ def gnd_stitch_layout(X0: float, X1: float, W: float, ym: float, ym_lo: float,
                 ]))
             for k in range(n_st):
                 xv = x_edge + sign * (rg + pad_margin + k * gnd_stitch_pitch_mm)
+                # Only inside the CONSTANT-gap launch section: past x_hold the
+                # pad's inner edge flares outward, so a via at a fixed y there
+                # ends up straddling the copper edge (found by inspection --
+                # the last two vias were half in the gap).
+                if abs(xv - x_edge) > cpwg_len_mm - (rg + pad_margin):
+                    continue
                 for sgn in (+1.0, -1.0):
                     yv = sgn * gnd_stitch_offset_mm
                     if (abs(yv) - rg < y_in or abs(yv) + rg > y_out
@@ -330,6 +336,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                cpwg_gap_mm: float | None = None,
                cpwg_y_gnd_mm: float | None = None,
                cpwg_y_out_mm: float | None = None,
+               cpwg_w_feed_mm: float | None = None,
                cpwg_len_mm: float = 3.0,
                cpwg_taper_mm: float = 4.0,
                gnd_via_d_mm: float = VIA_PRESETS["gnd_stitch"]["d_mm"],
@@ -497,14 +504,24 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     # sitting within this flared footprint (copper overhangs the solid part
     # of the wall). ----
     def trace_surface(x_in: float, x_taper: float, x_siw: float,
-                      tlo: float, thi: float) -> int:
-        pts = list(feed_trace_poly(x_in, x_taper, x_siw, W, tlo, thi))
+                      tlo: float, thi: float,
+                      w_pad: float | None = None,
+                      x_pad_end: float | None = None) -> int:
+        pts = list(feed_trace_poly(x_in, x_taper, x_siw, W, tlo, thi,
+                                   w_pad, x_pad_end))
         tags = [occ.addPoint(px, py, h) for px, py in pts]
         lines = [occ.addLine(tags[i], tags[(i + 1) % len(tags)]) for i in range(len(tags))]
         return occ.addPlaneSurface([occ.addCurveLoop(lines)])
 
-    trace_in = (2, trace_surface(X0, -Lt, 0.0, ty_in_lo, ty_in_hi))
-    trace_out = (2, trace_surface(X1, Li + Lt, Li, ty_out_lo, ty_out_hi))
+    # CPWG launch feed width (2026-08-29): inside the coplanar section the
+    # 50-ohm width is set by the CPWG gap, which is NOT the same as the
+    # 50-ohm microstrip width -- so the feed is built at the CPWG width and
+    # tapered to the microstrip width where the coplanar grounds end.
+    _wp = cpwg_w_feed_mm if (cpwg_gap_mm is not None) else None
+    _xp_in = X0 + (cpwg_len_mm + cpwg_taper_mm) if _wp is not None else None
+    _xp_out = X1 - (cpwg_len_mm + cpwg_taper_mm) if _wp is not None else None
+    trace_in = (2, trace_surface(X0, -Lt, 0.0, ty_in_lo, ty_in_hi, _wp, _xp_in))
+    trace_out = (2, trace_surface(X1, Li + Lt, Li, ty_out_lo, ty_out_hi, _wp, _xp_out))
 
     # ---- connector ground: top-side pour + stitching vias ----
     # The Taoglas EMPCB.SMAFSTJ.B.HT grounds through 4 discrete legs at the
