@@ -445,6 +445,34 @@ position tuning, possibly a second slot for pole 4), fine-mesh confirm
 this specific point, then a short local search seeded from here rather
 than a fresh wide-box GP search (that pattern already failed in v4).
 
+### 9.1 Round 2/3: size scaling confirmed, placement does NOT separate poles, and a real tradeoff found
+
+All still on the same v5-best cascade design, same screen-grade mesh, coarse "auto" device:
+
+| variant | s11_best | real minima (freq/dB) |
+|---|---|---|
+| baseline (no slot) | -14.91dB | 1: (2.828, -14.9) |
+| original slot (w=1.0,l=2.0,h=3.0 @ inter-cavity boundary) | -15.03dB | 2: (2.828,-15.0), (2.900,-6.1) |
+| v8_closed (same size, PEC-capped) | -15.03dB | 2: same (real 0.0016dB diff -- confirmed genuine, not the earlier via-overlap bug: at this small size open vs closed barely matters) |
+| v8_bigger (w=1.4,l=2.8,h=5.0) | -16.67dB | 2: (2.828,-16.7), (2.908,-6.6) |
+| bigger2 (w=1.4,l=5.0,h=8.0) | **-18.76dB** | 2: (2.828,-18.8), (2.908,-6.6) -- pole 3 plateaued, pole 1 kept improving |
+| cav2_only (slot relocated INSIDE cavity 2, x=76/y=25, same size as v8_bigger, tested alone) | -17.91dB | 2: (2.828,-17.9), (2.908,-6.3) -- **same pole as the inter-cavity slot**, not a different one |
+| widedefect (`inter_defect_frac=0.6` removes one via, opens slot to w=4.0) | -13.15dB | 2: (2.82,-13.2), (2.9,-7.2) -- pole 3 only +0.6dB, pole 1 **cost -5.6dB** |
+
+**Three real findings:**
+
+1. **Slot size genuinely scales the effect monotonically** (bigger -> deeper pole-1 match), confirming this is a real physical coupling mechanism, not noise.
+2. **Placement does not separate poles 3 and 4.** Moving the same-size slot to a completely different location (inside cavity 2 instead of the inter-cavity wall) revealed the SAME pole (~2.90-2.91GHz) at a similar depth, not pole 4. Working interpretation: among the 3 originally-invisible poles, pole 3 has the weakest coupling barrier, so almost any small local perturbation nudges it into visibility first -- it is not that different locations address different poles. Pole 4 likely needs either a much stronger/larger perturbation, or a location/shape chosen from actual field data (mode shapes), not just position guessing. `cascade_eigenmode.py` currently returns only eigenfrequencies, not field patterns; extracting mode shapes would need a real Palace field-export step, not yet built.
+3. **Widening via a fence defect is not a clean win.** `inter_defect_frac` (new, committed `ca85c73`) successfully opens more slot width, but removing a via ALSO measurably perturbs the existing (already-good) pole-1 coupling -- a real design tradeoff, not a free lever. `bigger2` (no defect, w capped at 1.4mm by via pitch, but generous l/h) remains the best design found so far: **2 real nulls, -18.76dB / -6.6dB.**
+
+**Given these findings, further single-slot position/size tuning shows diminishing and mixed returns.** The natural next steps (not yet done): (a) a genuinely bigger/different intervention for pole 4 specifically (multi-slot build_mesh support does not exist yet -- current build_mesh takes exactly one slot), (b) parallel investigation of the single-mode `cascade.py` topology extended to N=4 as a lower-risk alternative (see sec 9.2).
+
+### 9.2 Parallel track: CascadeTopology is ALREADY N-general (N=4 untested, not unbuilt)
+
+Good news found while planning the "extend cascade.py to N=4" fallback: `topologies/cascade.py`'s `CascadeTopology` was written generically over N from the start (`_n_len_params`, `_mirror`, `_len_keys` all take `N` as a parameter; `param_space`/`build_mesh` read `spec.N` directly). **N=4 requires no new code** -- it was simply never exercised or calibrated (the module docstring already flags per-cavity params as "reused... since no per-N calibration exists yet").
+
+Practical wrinkle found by smoke-testing: at N=4 the board is ~200mm long with 262 vias, and the resulting mesh is **~470-479k tets regardless of the mesh_max/mesh_min coarseness setting** (tried 3.5/0.6 up to 8.0/1.2 -- tet count barely moved, ~469k-479k throughout). The dominant driver is via count + board length, not the coarse/fine cap that works for smaller topologies. Palace's own runtime estimate flags ~7.4GB peak at Order 1, right at this project's documented single-process ceiling -- but that estimate appears to predate routine `-np 4` domain-decomposed runs; system has 16 cores/15GB RAM (12GB available), so per-rank memory under `-np 4` should be well under that ceiling in practice. A feasibility test (3-point driven sweep, CPU np=4) is the next check before trusting this topology's cost at N=4.
+
 ## 7. How to continue (checklist)
 
 1. Add `y_inter_off_mm`, `y_ext_off_mm`, `y_ext2_off_mm` to
