@@ -571,7 +571,8 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
                      w_iris2_mm=None, y_iris_off_mm=0.0, y_iris2_off_mm=0.0,
                      iris_defect_frac=None, iris2_defect_frac=None,
                      w_ext2_mm=None, y_ext_off_mm=0.0, y_ext2_off_mm=0.0,
-                     y_inter_off_mm=0.0, inter_defect_frac=None, **_):
+                     y_inter_off_mm=0.0, inter_defect_frac=None,
+                     post_x_mm=None, post_y_mm=0.0, **_):
     """TWO dual-mode square cavities in series (N=4: 2 poles/cavity x 2
     cavities), joined by a NEW inter-cavity coupling row -- genuinely new
     mesh topology, not a delta: the single-cavity dualmode builder has no
@@ -710,6 +711,22 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
             if i == drop2:
                 continue
             vias.append((x_iris2, o + off2)); vias.append((x_iris2, -o + off2))
+    # v9 (2026-08-29): a single DISCRETE, standalone via -- a "post", not
+    # part of any fence -- droppable anywhere, e.g. inside the open
+    # magnetic coupling window (y in [-w_inter/2, +w_inter/2] at x=a_mm,
+    # currently completely via-free). Genuinely different mechanism from
+    # every via-fence variant tried in v1-v7 (those all moved/widened a
+    # GAP in a continuous barrier) and from v8's top-copper slot (a cutout
+    # in the OPPOSITE conductor, needing new air-volume mesh work): this is
+    # simply one extra localized scatterer, the PCB-native analogue of the
+    # tuning screws/posts classical dual-mode waveguide filters use for
+    # asymmetric inter-mode coupling. post_y_mm is NOT mirrored -- a single
+    # off-axis post is the point (breaks y-mirror symmetry directly,
+    # unlike every existing element which is either exactly centred or
+    # mirrored about y=0). Defaults to None: no post added, exact prior
+    # via list (regression-verified)."""
+    if post_x_mm is not None:
+        vias.append((post_x_mm, post_y_mm))
     return _dedupe(vias, r), {"x_iris": x_iris1, "x_iris2": x_iris2, "half": half}
 
 
