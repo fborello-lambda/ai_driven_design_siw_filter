@@ -504,7 +504,7 @@ investigation. Summary of everything tried, with real, verified results:
 | v6 | Shift the port/inter-cavity via-fence gap off-centre (y-offset) | **Falsified.** Full-fidelity test: monotonic detuning as offset grows, no new resonance, ever. |
 | v7 | Push the same gap all the way to the true physical corner | **Falsified.** Same monotonic decay continues to the corner; zero real minima there. |
 | v8 | NEW top-copper electric coupling slot at the inter-cavity boundary (genuinely new structural element, not a via-fence variant) | **Confirmed real.** First-ever 2nd S11 null on this topology, matching the eigenmode-predicted pole 3 frequency almost exactly. But the effect is weak and plateaus: manual size/position tuning topped out at score 24.899 (2 nulls, -18.76dB/-6.6dB). |
-| v8 round 4 | Proper 30-eval GP-guided joint search (surgical box: 11 known-good dims pinned, only w_ext/w_ext2_mm + slot geometry free) over the v8 mechanism, to rule out "just needs better tuning" | **Confirms the plateau is real, not under-exploration.** Best found: score 25.047 (barely 0.5% better than pre-v8 baseline), still 2-of-4 real poles, pole 4 never appeared. A real infrastructure bug (eval tags exceeding the filesystem's 255-byte filename limit) was found and fixed along the way (commit `097b197`) -- the search genuinely ran, this is not an artefact of a broken search. |
+| v8 round 4 | Proper 30-eval GP-guided joint search (surgical box: 11 known-good dims pinned, only w_ext/w_ext2_mm + slot geometry free) over the v8 mechanism, to rule out "just needs better tuning" | **Confirms the plateau is real, not under-exploration -- and the coarse-mesh "improvement" doesn't survive fidelity.** Coarse best: score 25.047 (barely 0.5% better than pre-v8 baseline). **Fine-mesh confirm (production density, the trustworthy number): score 25.978, s11w=-1.88dB, bw=36MHz, il=-5.12dB -- WORSE than the pre-v8 baseline (25.551).** The coarse mesh was overestimating this design's match quality; once confirmed at real fidelity, v8 round 4's "best" design is not an improvement at all. A real infrastructure bug (eval tags exceeding the filesystem's 255-byte filename limit) was found and fixed along the way (commit `097b197`) -- the search itself genuinely ran; the coarse-vs-fine gap is a separate, known meshing-fidelity effect, not a search artefact. |
 | Placement test | Moving the same slot to a completely different location (inside cavity 2 vs the inter-cavity wall) | Revealed the SAME pole (~2.90GHz), not a different one -- position doesn't select which pole appears; pole 3 apparently has the weakest coupling barrier of the three originally-missing poles. |
 | Parallel: single-mode N=4 | `topologies/cascade.py`'s `CascadeTopology`, already N-general, tested at N=4 with zero calibration | Electrically very promising (S11 -17 to -21dB untuned) but **ruled out on size**: board is ~200mm (cavity length alone, 137.6mm, already exceeds the dual-mode cascade's entire ~122mm board) vs the user's explicit "I want something small" requirement. |
 
@@ -514,9 +514,13 @@ Across three independent coupling mechanisms (y-offset, corner placement, and a
 genuinely new top-copper electric slot) plus a properly-run joint optimization,
 `dualmode_cascade` has not produced a competitive compact N=4 filter. The v8 slot
 mechanism is real physics -- it does open a second coupling path -- but it caps out
-around score ~25 (vs. the standalone design's 9.31) with only 2 of 4 poles ever
+around score ~25-26 (vs. the standalone design's 9.31) with only 2 of 4 poles ever
 becoming usable, and a proper GP search confirms this is a genuine ceiling for the
-mechanisms tried, not a tuning shortfall.
+mechanisms tried, not a tuning shortfall. At production mesh fidelity the joint
+search's own "best" design does not even beat the pre-v8 baseline (25.978 vs
+25.551) -- the coarse-mesh number that looked like a small win was itself partly a
+meshing artefact, making the ceiling, if anything, slightly firmer than first
+reported.
 
 ### Recommendation
 
