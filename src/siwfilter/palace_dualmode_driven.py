@@ -191,6 +191,9 @@ def gnd_stitch_layout(X0: float, X1: float, W: float, ym: float, ym_lo: float,
                       gnd_stitch_pitch_mm: float = VIA_PRESETS["gnd_stitch"]["p_mm"],
                       gnd_via_d_mm: float = VIA_PRESETS["gnd_stitch"]["d_mm"],
                       gnd_clearance_mm: float = 0.3,
+                      cpwg_gap_mm: float | None = None,
+                      cpwg_len_mm: float = 3.0,
+                      cpwg_taper_mm: float = 4.0,
                       ) -> tuple[list[np.ndarray], list[tuple[float, float]]]:
     """Connector ground pads + stitching via centres (Taoglas footprint).
 
@@ -204,6 +207,47 @@ def gnd_stitch_layout(X0: float, X1: float, W: float, ym: float, ym_lo: float,
     n_st = max(0, n_gnd_stitch)
     polys: list[np.ndarray] = []
     centres: list[tuple[float, float]] = []
+
+    # ---- CPWG launch (2026-08-29) -------------------------------------
+    # When cpwg_gap_mm is given, the coplanar grounds are modelled as a real
+    # CPWG: a ground plane on the signal layer whose INNER edge sits exactly
+    # cpwg_gap_mm from the trace edge, held for cpwg_len_mm, then flared
+    # linearly away to the board edge over cpwg_taper_mm so the line becomes
+    # plain microstrip. Previously these were only small pads sized around
+    # the stitch vias with a placeholder 0.3mm clearance -- geometrically
+    # plausible but NOT impedance-matched, leaving a step right at the
+    # connector (the very thing the CPWG synthesis in siw_geometry.py
+    # exists to remove). cpwg_gap_mm=None reproduces the old pad-only
+    # behaviour exactly.
+    if cpwg_gap_mm is not None:
+        y_in = W / 2.0 + cpwg_gap_mm            # inner edge of coplanar gnd
+        for x_edge, sign in ((X0, +1.0), (X1, -1.0)):
+            x_hold = x_edge + sign * cpwg_len_mm
+            x_end = x_hold + sign * cpwg_taper_mm
+            for sgn in (+1.0, -1.0):
+                y_far = ym if sgn > 0 else ym_lo
+                if abs(y_far) <= y_in:
+                    continue                    # board too narrow for a CPWG gnd
+                xs = sorted([x_edge, x_hold])
+                # constant-gap section, then a flare that retracts the inner
+                # edge out to the board edge (grounds "peel away" -> microstrip)
+                poly = np.array([
+                    (xs[0], sgn * y_in), (xs[1], sgn * y_in),
+                    (x_end, y_far), (xs[1], y_far), (xs[0], y_far),
+                ]) if sign > 0 else np.array([
+                    (xs[1], sgn * y_in), (xs[0], sgn * y_in),
+                    (x_end, y_far), (xs[0], y_far), (xs[1], y_far),
+                ])
+                polys.append(poly)
+            for k in range(n_st):
+                xv = x_edge + sign * (rg + pad_margin + k * gnd_stitch_pitch_mm)
+                for sgn in (+1.0, -1.0):
+                    yv = sgn * gnd_stitch_offset_mm
+                    if (abs(yv) - rg <= y_in or yv + rg > ym or yv - rg < ym_lo):
+                        continue
+                    centres.append((xv, yv))
+        return polys, centres
+
     for x_edge, sign in ((X0, +1.0), (X1, -1.0)):
         x_first = x_edge + sign * (rg + pad_margin)
         x_last = x_first + sign * max(0, n_st - 1) * gnd_stitch_pitch_mm
@@ -241,6 +285,9 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                gnd_stitch_offset_mm: float = 2.62,
                gnd_stitch_pitch_mm: float = VIA_PRESETS["gnd_stitch"]["p_mm"],
                gnd_clearance_mm: float = 0.3,
+               cpwg_gap_mm: float | None = None,
+               cpwg_len_mm: float = 3.0,
+               cpwg_taper_mm: float = 4.0,
                gnd_via_d_mm: float = VIA_PRESETS["gnd_stitch"]["d_mm"],
                mesh_max: float = 1.5, mesh_min: float = 0.4,
                out_name: str = "dualmode_driven.msh",
@@ -444,34 +491,33 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         # the fence size wasted pad area and capped the via count -- smaller
         # barrels let several fit per pad, which is the point: more parallel
         # vias = lower ground-return inductance at the launch.
+        # 2026-08-29: this used to duplicate gnd_stitch_layout()'s geometry
+        # inline; now it CALLS it, so the meshed model and every 2D drawing
+        # are guaranteed to agree (same reason feed_trace_poly/_via_layout are
+        # shared). That also makes the CPWG launch (cpwg_gap_mm) reach the
+        # actual simulation, not only the drawings.
+        #
+        # NOTE on the pour-vs-pads caveat above: with cpwg_gap_mm set, the
+        # grounds ARE a coplanar plane rather than isolated pads -- but that
+        # is now deliberate and impedance-matched (gap synthesised for 50 ohm
+        # by siw_geometry.cpwg_gap_50ohm), which is exactly what the real SMA
+        # footprint is. The old warning applies to an UNMATCHED pour, which
+        # is what a naive full-width pour at 0.3mm clearance would have been.
         rg = gnd_via_d_mm / 2.0
-        pad_margin = 0.25                      # copper beyond the via barrel
-        y_lo = gnd_stitch_offset_mm - rg - pad_margin
-        y_hi = gnd_stitch_offset_mm + rg + pad_margin
-        n_st = max(0, n_gnd_stitch)
-        for x_edge, sign in ((X0, +1.0), (X1, -1.0)):
-            x_first = x_edge + sign * (rg + pad_margin)
-            x_last = x_first + sign * max(0, n_st - 1) * gnd_stitch_pitch_mm
-            xa, xb = sorted([x_edge, x_last + sign * (rg + pad_margin)])
-            for sgn in (+1.0, -1.0):
-                ys = sorted([sgn * y_lo, sgn * y_hi])
-                if min(abs(ys[0]), abs(ys[1])) <= W / 2.0 + gnd_clearance_mm:
-                    continue          # would encroach on the trace clearance
-                if max(ys) > ym or min(ys) < ym_lo:
-                    continue          # off the board
-                poly = np.array([(xa, ys[0]), (xb, ys[0]), (xb, ys[1]), (xa, ys[1])])
-                gnd_polys.append(poly)
-                pts = [occ.addPoint(px, py, h) for px, py in poly]
-                ln = [occ.addLine(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
-                gnd_surfs.append((2, occ.addPlaneSurface([occ.addCurveLoop(ln)])))
-            for k in range(n_st):
-                xv = x_first + sign * k * gnd_stitch_pitch_mm
-                for sgn in (+1.0, -1.0):
-                    yv = sgn * gnd_stitch_offset_mm
-                    if (abs(yv) - rg <= W / 2.0 + gnd_clearance_mm
-                            or yv + rg > ym or yv - rg < ym_lo):
-                        continue
-                    gnd_via_centres.append((xv, yv))
+        gnd_polys, gnd_via_centres = gnd_stitch_layout(
+            X0, X1, W, ym, ym_lo,
+            n_gnd_stitch=n_gnd_stitch,
+            gnd_stitch_offset_mm=gnd_stitch_offset_mm,
+            gnd_stitch_pitch_mm=gnd_stitch_pitch_mm,
+            gnd_via_d_mm=gnd_via_d_mm,
+            gnd_clearance_mm=gnd_clearance_mm,
+            cpwg_gap_mm=cpwg_gap_mm,
+            cpwg_len_mm=cpwg_len_mm,
+            cpwg_taper_mm=cpwg_taper_mm)
+        for poly in gnd_polys:
+            pts = [occ.addPoint(px, py, h) for px, py in poly]
+            ln = [occ.addLine(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
+            gnd_surfs.append((2, occ.addPlaneSurface([occ.addCurveLoop(ln)])))
         cyls += [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, rg)) for x, y in gnd_via_centres]
 
     # ---- SMA coax launch stubs (same construction as palace_driven.py) ----
