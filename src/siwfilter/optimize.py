@@ -561,6 +561,28 @@ S11_FLOOR_DB = -25.0
 FC_DEADBAND_MHZ = 15.0
 
 
+#: v18 acceptance spec (2026-08-29, user-specified): worst-case in-band return
+#: loss target. "approx -16 dB" -- treated as a hinge, not a hard gate, so the
+#: optimizer is still guided by how far short it falls rather than being told
+#: only pass/fail.
+S11_SPEC_DB = -16.0
+
+#: How much insertion loss above the pure-dielectric floor is acceptable.
+#: dielectric_il_db() is an OPTIMISTIC lower bound (it ignores conductor, via
+#: leakage and radiation loss -- measured 2.65-3.84x higher on real designs
+#: this project has built), so this allowance is what turns that floor into a
+#: usable target: "the dielectric loss and a little bit more".
+IL_ALLOWANCE_DB = 1.0
+
+#: Weights for the three spec terms. Chosen so a design missing S11 by ~5 dB,
+#: or IL by ~2 dB, or badly lopsided, pays a penalty comparable to a large
+#: shape-fit error -- enough to steer the search, not so much that it ignores
+#: the curve shape entirely.
+W_S11_SPEC = 0.8
+W_IL_SPEC = 1.5
+W_ASYM = 8.0
+
+
 def score(spec: FilterSpec, r: dict, board_length_mm: float,
          w_board: float = 0.01,
          s11_floor_db: float = S11_FLOOR_DB, w_fc: float = 0.05,
@@ -612,9 +634,37 @@ def score(spec: FilterSpec, r: dict, board_length_mm: float,
     bw_target = spec.FBW * f0_mhz
     bw_err = abs(r["bw"] - bw_target) / bw_target if bw_target > 0 else 0.0
 
+    # --- v18 spec terms (2026-08-29, user-specified acceptance criteria) ---
+    # The terms above are FIT terms (RMSE against an ideal curve). They do not
+    # directly enforce the three things the design is actually judged on, so a
+    # design could win on average curve shape while failing every one of them:
+    #
+    #   1. worst-case in-band S11 <= -16 dB (a hard-ish spec, not an average)
+    #   2. IL no worse than the dielectric floor + a modest allowance
+    #   3. a SYMMETRIC response -- passband centred, skirts balanced
+    #
+    # All three are one-sided hinges: zero cost once met, growing cost beyond.
+    # Scaled to be comparable to the RMSE terms (which run ~1-20) so they steer
+    # without swamping the shape fit.
+    s11_spec = max(0.0, r["s11w"] - S11_SPEC_DB)          # s11w is the in-band WORST
+    il_floor = dielectric_il_db(spec)
+    il_spec = max(0.0, abs(r["il"]) - (il_floor + IL_ALLOWANCE_DB))
+
+    # Symmetry: compare how far the -3dB edges sit from the peak on each side.
+    # A lopsided response (one skirt far out, one tight) scores badly even if
+    # its centre and width happen to land right.
+    f_lo, f_hi, fc_pk = r.get("f_lo"), r.get("f_hi"), r.get("fc")
+    if f_lo and f_hi and fc_pk and not r.get("band_truncated"):
+        lo_arm, hi_arm = fc_pk - f_lo, f_hi - fc_pk
+        denom = max(1e-9, lo_arm + hi_arm)
+        asym = abs(hi_arm - lo_arm) / denom      # 0 = perfectly symmetric
+    else:
+        asym = 0.0
+
     return (1.0 * s11_rmse + 0.5 * s21_rmse + 0.15 * abs(r["il"])
            + w_fc * fc_err + w_bw * bw_err
-           + w_board * board_length_mm)
+           + w_board * board_length_mm
+           + W_S11_SPEC * s11_spec + W_IL_SPEC * il_spec + W_ASYM * asym)
 
 
 def _to_dict(order: list[str], x: list[float]) -> dict:
