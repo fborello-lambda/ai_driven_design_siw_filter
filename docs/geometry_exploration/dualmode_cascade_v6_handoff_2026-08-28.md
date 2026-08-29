@@ -492,3 +492,51 @@ Practical wrinkle found by smoke-testing: at N=4 the board is ~200mm long with 2
 6. Stage C vector-fit polish (scikit-rf `VectorFitting`, per-pole objective).
 7. Decision gate: if Stage A cannot reach the target eigenfrequency pattern, fall back
    per §4.3 and close the topology out honestly.
+
+## 10. FINAL CONCLUSION (2026-08-29, after v6-v8 + joint search)
+
+This section closes out the multi-day, multi-hypothesis `dualmode_cascade` N=4
+investigation. Summary of everything tried, with real, verified results:
+
+| Round | Mechanism | Result |
+|---|---|---|
+| v1-v5 | Black-box GP search over the via-fence geometry (widths, positions, defects) | Best score 25.551, 1 real S11 null. Established the reference point everything else compares against. |
+| v6 | Shift the port/inter-cavity via-fence gap off-centre (y-offset) | **Falsified.** Full-fidelity test: monotonic detuning as offset grows, no new resonance, ever. |
+| v7 | Push the same gap all the way to the true physical corner | **Falsified.** Same monotonic decay continues to the corner; zero real minima there. |
+| v8 | NEW top-copper electric coupling slot at the inter-cavity boundary (genuinely new structural element, not a via-fence variant) | **Confirmed real.** First-ever 2nd S11 null on this topology, matching the eigenmode-predicted pole 3 frequency almost exactly. But the effect is weak and plateaus: manual size/position tuning topped out at score 24.899 (2 nulls, -18.76dB/-6.6dB). |
+| v8 round 4 | Proper 30-eval GP-guided joint search (surgical box: 11 known-good dims pinned, only w_ext/w_ext2_mm + slot geometry free) over the v8 mechanism, to rule out "just needs better tuning" | **Confirms the plateau is real, not under-exploration.** Best found: score 25.047 (barely 0.5% better than pre-v8 baseline), still 2-of-4 real poles, pole 4 never appeared. A real infrastructure bug (eval tags exceeding the filesystem's 255-byte filename limit) was found and fixed along the way (commit `097b197`) -- the search genuinely ran, this is not an artefact of a broken search. |
+| Placement test | Moving the same slot to a completely different location (inside cavity 2 vs the inter-cavity wall) | Revealed the SAME pole (~2.90GHz), not a different one -- position doesn't select which pole appears; pole 3 apparently has the weakest coupling barrier of the three originally-missing poles. |
+| Parallel: single-mode N=4 | `topologies/cascade.py`'s `CascadeTopology`, already N-general, tested at N=4 with zero calibration | Electrically very promising (S11 -17 to -21dB untuned) but **ruled out on size**: board is ~200mm (cavity length alone, 137.6mm, already exceeds the dual-mode cascade's entire ~122mm board) vs the user's explicit "I want something small" requirement. |
+
+### Bottom line
+
+Across three independent coupling mechanisms (y-offset, corner placement, and a
+genuinely new top-copper electric slot) plus a properly-run joint optimization,
+`dualmode_cascade` has not produced a competitive compact N=4 filter. The v8 slot
+mechanism is real physics -- it does open a second coupling path -- but it caps out
+around score ~25 (vs. the standalone design's 9.31) with only 2 of 4 poles ever
+becoming usable, and a proper GP search confirms this is a genuine ceiling for the
+mechanisms tried, not a tuning shortfall.
+
+### Recommendation
+
+**Ship the standalone N=2 dual-mode design** (`output/data/opt_dualmode_best.json`:
+a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31; score 9.31, S11
+-17.7dB, IL -1.42dB, real Taoglas SMA, ~119mm board) as the practical deliverable.
+It is small, it works, and it is already fabrication-ready.
+
+If an N=4 filter is still wanted in a compact form factor, the honest next step is
+NOT another variant of what's been tried (via-fence position, top-copper slot
+position/size have all been explored thoroughly). Two genuinely different avenues
+remain, both bigger, unproven redesigns:
+
+1. **A different coupling primitive entirely** -- e.g. a discrete conductive
+   probe/post (not a via-fence gap, not a top-copper cutout) reaching into the
+   cavity interior, closer to what classical dual-mode waveguide filter literature
+   actually uses for inter-cavity coupling between two dual-mode cavities.
+2. **Accept a partial result** -- a 2-3 pole compact filter (using the v8
+   mechanism's real 2-pole capability) as a deliberately reduced-order compromise,
+   if a true N=4 response isn't required.
+
+Both require new engineering, not incremental tuning, and should be scoped as such
+before starting.
