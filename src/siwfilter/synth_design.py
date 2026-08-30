@@ -203,6 +203,16 @@ def run_pipeline(spec: FilterSpec, device: str = "auto", np_ranks: int = 4,
             # index convention as _len_keys
             if i < len(len_keys):
                 d["params"][len_keys[i]] = r["l_cav"]
+            last_l = r["l_cav"]
+        # There are ceil((N-1)/2) irises but ceil(N/2) cavity lengths, so for
+        # odd N the loop above leaves the trailing length untouched. Carry the
+        # last refined value into it: leaving the stale first-pass number there
+        # produced an unintended 0.08mm split (l_cav1=37.59 vs l_cav2=37.51)
+        # that no physics asked for. A genuine end-vs-middle difference has to
+        # come from the DRIVEN correction, which can see the external
+        # apertures a closed-cavity eigenmode cannot.
+        for lk in len_keys[len(iris_keys):]:
+            d["params"][lk] = last_l
         print(f"[pipeline] refined -> {d['params']}", flush=True)
     return d
 
