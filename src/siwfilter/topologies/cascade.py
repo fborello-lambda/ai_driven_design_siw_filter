@@ -166,9 +166,165 @@ class CascadeTopology:
         xmin, xmax, _, _ = g.board
         return (xmax - xmin) * 1e3
 
-    def calibrate(self, spec: FilterSpec) -> dict | None:
-        # No cheap eigenmode pre-pass wired up for the cascade topology yet
-        # (palace_geometry.py's 2-cavity eigenmode exists but isn't plumbed
-        # into a w(k) fit the way dualmode's is) -- explicitly out of scope
-        # for this pass, see HANDOFF.md.
-        return None
+    def calibrate(self, spec: FilterSpec, w_irises: list[float] | None = None,
+                  l_cav_mm: float | None = None,
+                  mesh_max: float = 2.0, mesh_min: float = 0.35,
+                  n_modes: int = 6, window: float = 0.6,
+                  device: str = "GPU", np_ranks: int = 1) -> dict | None:
+        """EM k(w_iris) calibration for the inline cascade -- CLAUDE.md sec.6.
+
+        Two identical closed SIW cavities sharing one iris split into an
+        even/odd pair; the internal coupling follows from the split:
+
+            k = (f2^2 - f1^2) / (f2^2 + f1^2)
+
+        Sweeping w_iris and fitting w(k) inverts the relation, so a synthesized
+        k can be turned straight into a physical iris width instead of being
+        hunted for by a driven-solve search.
+
+        This existed for dualmode but was a `return None` stub here, which is
+        the direct cause of the cascade searches failing: with no calibrated
+        design region, the box stayed centred on `_L_INIT = 34.4` (documented
+        in docs/sma_connector/README.md as the "old (mismatch-blind)" design
+        that measures -4.6 dB against a real connector), and the GP was left
+        doing blind global search in 5-6D. Measured screen-out rates tell the
+        story: dualmode 34-37% (19 informative points, converges) versus
+        cascade 57-83% (2-9 informative points, cannot).
+
+        Closed-cavity eigenmode solves are far cheaper than the driven+SMA
+        sweeps the search uses, so a ~6-point sweep costs a fraction of one
+        30-eval search.
+
+        Runs on GPU at np_ranks=1 by default (same configuration dualmode's
+        calibrate() uses): this mesh is just two dielectric cavities -- no SMA
+        stub, no air box, no taper -- so it fits a 6GB card comfortably, while
+        >1 rank would OOM because each MPI rank opens its own CUDA context.
+        Falls back to CPU per point if the GPU solve produces no eigenvalues,
+        so a card that cannot take a particular mesh costs one retry rather
+        than a hole in the sweep.
+        """
+        import json
+        import os
+        import shutil
+        import subprocess
+
+        import numpy as np
+
+        from ..config import find_palace, out_data
+        from ..optimize import GPU_ENV, has_gpu
+        from ..palace_geometry import build_mesh as _build_2cav
+        from ..siw_geometry import build_geometry
+
+        if device == "GPU" and not has_gpu():
+            device = "CPU"
+        if device == "GPU" and np_ranks != 1:
+            # One CUDA context per rank; >1 rank OOMs a single card.
+            np_ranks = 1
+
+        g = build_geometry(spec)
+        l_cav = l_cav_mm if l_cav_mm is not None else g.L_cav * 1e3
+        # Span the synthesized k for N=3..4 with margin on both sides; the fit
+        # is only trusted by calibrated_iris_width() INSIDE the swept range.
+        w_irises = w_irises if w_irises is not None else [6.0, 9.0, 12.0, 15.0, 18.0, 21.0]
+
+        results: dict[float, dict] = {}
+        palace = find_palace()
+        for w in w_irises:
+            tag = f"cascal_wi{w:.2f}_L{l_cav:.2f}"
+            mesh = tag + ".msh"
+            try:
+                _build_2cav(iris_mm=w, mesh_max=mesh_max, mesh_min=mesh_min,
+                            show_stats=False, spec=spec, l_cav_mm=l_cav,
+                            out_name=mesh)
+            except Exception as e:
+                results[w] = {"ok": False, "err": f"mesh:{e}"}
+                continue
+            def _solve(dev: str, ranks: int) -> str | None:
+                cfg = {
+                    "Problem": {"Type": "Eigenmode", "Verbose": 1,
+                                "Output": f"postpro/{tag}"},
+                    "Model": {"Mesh": mesh, "L0": 1.0e-3},
+                    "Domains": {"Materials": [
+                        {"Attributes": [1], "Permeability": 1.0,
+                         "Permittivity": spec.substrate.eps_r,
+                         "LossTan": spec.substrate.tan_d}]},
+                    "Boundaries": {"PEC": {"Attributes": [2]}},
+                    "Solver": {"Device": dev,
+                               "Eigenmode": {"N": n_modes, "Save": 0,
+                                             "Target": spec.f0 / 1e9 - window,
+                                             "TargetUpper": spec.f0 / 1e9 + window,
+                                             "Tol": 1e-8, "Type": "SLEPc"}},
+                }
+                cfgp = out_data(f"{tag}.json")
+                json.dump(cfg, open(cfgp, "w"), indent=2)
+                env = dict(os.environ,
+                           PATH=f"{os.path.dirname(palace)}:{os.environ['PATH']}")
+                if dev == "GPU":
+                    # Disables MFEM's pooled device allocator, whose fixed
+                    # ~4GiB request alone exhausts a 6GB card (see GPU_ENV).
+                    env.update(GPU_ENV)
+                logp = out_data(f"{tag}.log")
+                # A stale eig.csv from a previous attempt would read as success.
+                shutil.rmtree(out_data(f"postpro/{tag}"), ignore_errors=True)
+                subprocess.run([palace, "-np", str(ranks), os.path.basename(cfgp)],
+                               cwd=out_data(""), env=env, stdout=open(logp, "w"),
+                               stderr=subprocess.STDOUT, check=False)
+                csvp = out_data(f"postpro/{tag}/eig.csv")
+                if not os.path.exists(csvp):
+                    return None
+                d = np.genfromtxt(csvp, delimiter=",", names=True,
+                                  deletechars="", replace_space="")
+                return np.sort(np.atleast_1d(d[d.dtype.names[1]]))
+
+            freqs = _solve(device, np_ranks)
+            # A TRUNCATED result counts as failure, not just a missing file:
+            # on a 6GB card this mesh converges all N eigenvalues and then
+            # OOMs in postprocessing (cudaMalloc failed), leaving a
+            # valid-looking eig.csv with a single row. Silently accepting that
+            # would drop the split pair and poison the fit.
+            if (freqs is None or len(freqs) < 2) and device == "GPU":
+                print(f"[{tag}] GPU eigenmode gave "
+                      f"{0 if freqs is None else len(freqs)} mode(s) "
+                      f"(needs >=2) -> retrying on CPU", flush=True)
+                freqs = _solve("CPU", 4)
+            if freqs is None or len(freqs) < 2:
+                results[w] = {"ok": False,
+                              "freqs": [] if freqs is None else freqs.tolist(),
+                              "err": f"<2 modes (see {out_data(f'{tag}.log')})"}
+                continue
+            # Select the even/odd pair by PROXIMITY TO f0, not by smallest
+            # gap. Palace returns N converged eigenvalues near the target
+            # without hard-clipping them to [Target, TargetUpper], so the list
+            # also carries higher-order modes -- and those cluster far more
+            # tightly than the split pair we want. Measured at w_iris=13mm:
+            #   2.9026  3.0770 | 4.6021 4.6492 4.6621 | 5.0653
+            #   gaps:   0.174    1.525  0.047  0.013    0.403
+            # A smallest-gap rule picks the 0.013 GHz pair at ~4.65 GHz (a
+            # higher-order family) instead of the real TE101 pair at
+            # 2.90/3.08, silently producing a meaningless k. Restrict to the
+            # requested window around f0 first, then take the two lowest --
+            # the fundamental's even/odd split.
+            f0_ghz = spec.f0 / 1e9
+            in_win = freqs[np.abs(freqs - f0_ghz) <= window]
+            if len(in_win) < 2:
+                results[w] = {"ok": False, "freqs": freqs.tolist(),
+                              "err": f"<2 modes within +-{window} GHz of f0"}
+                continue
+            f1, f2 = float(in_win[0]), float(in_win[1])
+            k = abs(f2**2 - f1**2) / (f2**2 + f1**2)
+            results[w] = {"ok": True, "f1": f1, "f2": f2, "k": k,
+                          "fc": (f1 + f2) / 2.0}
+            try:
+                os.remove(out_data(mesh))
+            except OSError:
+                pass
+
+        ok = [(w, r["k"]) for w, r in results.items() if r.get("ok")]
+        fit = k_fit = None
+        if len(ok) >= 3:
+            ws, ks = zip(*ok)
+            fit = np.polyfit(ks, ws, 2).tolist()     # w(k), same convention as calibrate.py
+            k_fit = np.polyfit(ws, ks, 3).tolist()   # k(w), for reporting/plots
+        return {"points": results, "w_of_k": fit, "k_of_w": k_fit,
+                "l_cav_mm": l_cav, "a_siw_mm": g.a_siw * 1e3,
+                "d_via_mm": spec.d_via * 1e3, "p_via_mm": spec.p_via * 1e3}

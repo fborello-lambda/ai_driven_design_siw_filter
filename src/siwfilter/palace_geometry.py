@@ -24,13 +24,20 @@ from .siw_geometry import build_geometry
 
 
 def build_mesh(iris_mm: float | None = None, mesh_max: float = 2.0,
-               mesh_min: float = 0.35, show_stats: bool = True) -> str:
-    g = build_geometry(SPEC)
+               mesh_min: float = 0.35, show_stats: bool = True,
+               spec=None, l_cav_mm: float | None = None,
+               out_name: str = "siw_2cav.msh") -> str:
+    """spec/l_cav_mm/out_name (2026-08-30) exist so this can be SWEPT: the
+    k(w_iris) calibration needs many irises meshed under one spec, each to
+    its own file. All three default to the previous behaviour exactly
+    (module-global SPEC, build_geometry's own L_cav, siw_2cav.msh)."""
+    spec = spec if spec is not None else SPEC
+    g = build_geometry(spec)
     a = g.a_siw * 1e3           # mm
-    L = g.L_cav * 1e3
-    r = SPEC.d_via / 2 * 1e3
-    p = SPEC.p_via * 1e3
-    h = SPEC.substrate.h * 1e3
+    L = l_cav_mm if l_cav_mm is not None else g.L_cav * 1e3
+    r = spec.d_via / 2 * 1e3
+    p = spec.p_via * 1e3
+    h = spec.substrate.h * 1e3
     iris = iris_mm if iris_mm is not None else g.iris_widths[0] * 1e3
     half = a / 2.0
     Ltot = 2 * L                # two cavities along x
@@ -82,7 +89,7 @@ def build_mesh(iris_mm: float | None = None, mesh_max: float = 2.0,
     gmsh.option.setNumber("Mesh.Algorithm3D", 1)             # Delaunay
     gmsh.model.mesh.generate(3)
 
-    out = out_data("siw_2cav.msh")
+    out = out_data(out_name)
     gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)        # MFEM/Palace-friendly
     gmsh.write(out)
 
