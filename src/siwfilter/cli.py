@@ -278,7 +278,7 @@ def cmd_synth_design(args) -> int:
 
     spec = _make_spec(args)
     d = run_pipeline(spec, device=args.device, np_ranks=args.np,
-                     cache=not args.no_cache)
+                     cache=not args.no_cache, refine=not args.no_refine)
     if args.no_confirm:
         return 0
     topo = CascadeTopology()
@@ -408,6 +408,13 @@ def main(argv: list[str] | None = None) -> int:
     p_syn.add_argument("--no-cache", action="store_true",
                        help="recompute the EM calibrations instead of reusing "
                             "the cached curves for this substrate/via/f0")
+    p_syn.add_argument("--no-refine", action="store_true",
+                       help="skip the joint (k, fc) refinement and emit the raw "
+                            "first pass. The first pass inverts k at the "
+                            "calibration's cavity length then corrects that "
+                            "length for fc, but the two are coupled -- measured, "
+                            "k fell 17%% when the length moved -- so the raw pass "
+                            "is an estimate, not a converged design.")
     p_syn.add_argument("--no-confirm", action="store_true",
                        help="assemble the design but skip the fine-mesh confirm")
     p_syn.set_defaults(func=cmd_synth_design)

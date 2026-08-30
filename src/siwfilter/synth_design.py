@@ -140,7 +140,7 @@ def design_from_calibration(spec: FilterSpec, k_cal: dict, qe_cal: dict,
 def run_pipeline(spec: FilterSpec, device: str = "auto", np_ranks: int = 4,
                  w_irises: list[float] | None = None,
                  w_exts: list[float] | None = None,
-                 cache: bool = True) -> dict:
+                 cache: bool = True, refine: bool = True) -> dict:
     """Full physics chain for the cascade topology. Returns the design dict.
 
     Calibrations are cached per (substrate, vias, f0) so the expensive part is
@@ -180,5 +180,77 @@ def run_pipeline(spec: FilterSpec, device: str = "auto", np_ranks: int = 4,
     d = design_from_calibration(spec, entry["k"], entry["qe"])
     print(f"[pipeline] N={spec.N} targets k={[round(x,5) for x in d['targets']['k']]} "
           f"Qe={d['targets']['Qe']:.2f}", flush=True)
-    print(f"[pipeline] -> {d['params']}", flush=True)
+    print(f"[pipeline] first pass -> {d['params']}", flush=True)
+
+    if refine:
+        # The first pass inverts k at the CALIBRATION's cavity length and then
+        # corrects the length for fc -- but those are coupled, so the corrected
+        # length invalidates the k it was derived from (measured: k fell 17%
+        # when the length moved to fix fc). Refine each independent iris
+        # jointly against (k, fc); ~3 cheap eigenmodes apiece.
+        print("[pipeline] joint (k, fc) refinement ...", flush=True)
+        iris_keys = _iris_keys(spec.N)
+        len_keys = _len_keys(spec.N)
+        for i, ik in enumerate(iris_keys):
+            k_t = float(d["targets"]["k"][i])
+            r = refine_joint(spec, topo, k_t, d["params"][ik],
+                             d["params"][len_keys[0]])
+            status = "converged" if r.get("ok") else f"NOT converged ({r.get('err')})"
+            print(f"[pipeline]   {ik}: w_iris {d['params'][ik]} -> {r['w_iris']}, "
+                  f"l_cav -> {r['l_cav']}  [{status}]", flush=True)
+            d["params"][ik] = r["w_iris"]
+            # cavity i sits against iris i; mirrored lengths follow the same
+            # index convention as _len_keys
+            if i < len(len_keys):
+                d["params"][len_keys[i]] = r["l_cav"]
+        print(f"[pipeline] refined -> {d['params']}", flush=True)
     return d
+
+def refine_joint(spec: FilterSpec, topo, k_target: float, w0: float, L0: float,
+                 k_tol_rel: float = 0.03, fc_tol_mhz: float = 15.0,
+                 max_it: int = 6, dkdw_seed: float = 0.0103,
+                 device: str = "GPU", np_ranks: int = 1) -> dict:
+    """Solve (w_iris, l_cav) JOINTLY against (k, fc). Needed because the two
+    are COUPLED and sequential one-shot corrections do not converge.
+
+    Measured: inverting k at the calibration's own cavity length gave
+    w_iris=13.85 with k on target, but fc 140 MHz high; correcting the length
+    to 37.51mm fixed fc to +8 MHz and simultaneously dropped k to 0.0382
+    (-17%). Lengthening the cavity weakens the coupling, so the iris has to
+    grow to compensate -- a 2x2 root find, not two independent fixes. The
+    converged answer for N=3 was w_iris=14.81, l_cav=37.59.
+
+    Each iteration costs ONE closed-cavity eigenmode (the split gives k, its
+    mean gives fc), so a full solve is far cheaper than a single driven sweep.
+    Damped secant on dk/dw, seeded from the calibration curve's slope.
+    """
+    import numpy as np
+
+    w, L = w0, L0
+    hist = []
+    for _ in range(max_it):
+        r = topo.calibrate(spec, w_irises=[round(w, 2)],
+                           l_cav_mm=round(L, 2))["points"].get(round(w, 2), {})
+        if not r.get("ok"):
+            return {"ok": False, "err": r.get("err"), "w_iris": round(w, 2),
+                    "l_cav": round(L, 2)}
+        k, fc = r["k"], r["fc"]
+        dk_rel = (k - k_target) / k_target
+        dfc_mhz = (fc - spec.f0 / 1e9) * 1000
+        hist.append((w, L, k, fc))
+        if abs(dk_rel) < k_tol_rel and abs(dfc_mhz) < fc_tol_mhz:
+            return {"ok": True, "w_iris": round(w, 2), "l_cav": round(L, 2),
+                    "k": k, "fc": fc, "iters": len(hist), "history": hist}
+        dkdw = dkdw_seed
+        if len(hist) >= 2:
+            (w1, _, k1, _), (w2, _, k2, _) = hist[-2], hist[-1]
+            if abs(w2 - w1) > 1e-6:
+                sl = (k2 - k1) / (w2 - w1)
+                if sl > 1e-5:            # keep it physical: k rises with w
+                    dkdw = sl
+        w_new = float(np.clip(w + (k_target - k) / dkdw, 4.0, 24.0))
+        L_new = correct_l_cav(spec, fc, L)
+        # damp, so the two coupled updates do not chase each other
+        w, L = w + 0.7 * (w_new - w), L + 0.7 * (L_new - L)
+    return {"ok": False, "err": "not converged", "w_iris": round(w, 2),
+            "l_cav": round(L, 2), "history": hist}
