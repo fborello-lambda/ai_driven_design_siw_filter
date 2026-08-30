@@ -269,8 +269,15 @@ class FilterSpec:
     substrate_name: str = DEFAULT_SUBSTRATE
 
     # --- SIW physical parameters ---
-    d_via: float = 0.8e-3       # via diameter [m]
-    p_via: float = 1.5e-3       # via pitch (center-to-center) [m]
+    # 2026-08-30: was 0.8mm/1.5mm, a stale leftover from before the via size
+    # was locked in (see CLAUDE.md sec.1's "CURRENT CONFIRMED CONFIGURATION").
+    # Every actual mesh (cascade, dualmode) already builds with
+    # VIA_PRESETS["siw_fence"] = 1.5mm/3.0mm; these defaults now match, so
+    # synthesize()/build_geometry()'s a_eff/cavity-length/iris-width
+    # estimates are computed for the SAME via fence that gets simulated,
+    # not a smaller one.
+    d_via: float = 1.5e-3       # via diameter [m]
+    p_via: float = 3.0e-3       # via pitch (center-to-center) [m]
     fc_ratio: float = 0.7       # f_c10 / f0 target (operate near 1.4*f_c)
 
     @property
