@@ -48,6 +48,13 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
                w_ext_mm: float | None = None, w_ms_mm: float | None = None,
                l_taper_mm: float | None = None, l_feed_mm: float | None = None,
                l_cavs_mm: list[float] | None = None,
+               # Per-iris widths (one per internal iris, input->output order).
+               # w_iris_mm sets every iris to the SAME width, which cannot
+               # express the asymmetric coupling profile Chebyshev needs at
+               # N>=4 (k23 is 26% weaker than k12/k34) -- see
+               # topologies/cascade._n_iris_params. Takes precedence over
+               # w_iris_mm when both are given.
+               w_irises_mm: list[float] | None = None,
                with_sma: bool = False, sma_len_mm: float = 6.0,
                sma_rin_mm: float = 0.35, sma_rout_mm: float = 1.164,
                sma_eps_r: float = 2.08, sma_tand: float = 4.0e-4,
@@ -89,14 +96,21 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     spec = spec or SPEC
     g = build_geometry(spec)
     # ---- tuning overrides: reset dimensions then rebuild via/taper primitives ----
-    _ovr = (l_cav_mm, w_iris_mm, w_ext_mm, w_ms_mm, l_taper_mm, l_feed_mm, l_cavs_mm)
+    _ovr = (l_cav_mm, w_iris_mm, w_ext_mm, w_ms_mm, l_taper_mm, l_feed_mm,
+            l_cavs_mm, w_irises_mm)
     if any(v is not None for v in _ovr):
         from .siw_geometry import _build_primitives
         if l_cavs_mm is not None:
             g.L_cavs = [v * 1e-3 for v in l_cavs_mm]
         if l_cav_mm is not None:
             g.L_cav = l_cav_mm * 1e-3
-        if w_iris_mm is not None:
+        if w_irises_mm is not None:
+            if len(w_irises_mm) != len(g.iris_widths):
+                raise ValueError(
+                    f"w_irises_mm has {len(w_irises_mm)} entries but this "
+                    f"geometry has {len(g.iris_widths)} internal irises")
+            g.iris_widths = [v * 1e-3 for v in w_irises_mm]
+        elif w_iris_mm is not None:
             g.iris_widths = [w_iris_mm * 1e-3] * len(g.iris_widths)
         if w_ext_mm is not None:
             g.w_ext = w_ext_mm * 1e-3

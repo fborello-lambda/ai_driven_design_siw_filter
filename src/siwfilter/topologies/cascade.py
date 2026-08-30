@@ -46,6 +46,35 @@ def _len_keys(N: int) -> list[str]:
     return [f"l_cav{i + 1}" for i in range(_n_len_params(N))]
 
 
+def _n_iris_params(N: int) -> int:
+    """Independent iris widths for an N-cavity inline cascade.
+
+    There are N-1 internal irises, mirror-symmetric about the centre, so
+    ceil((N-1)/2) of them are independent -- the same counting `_n_len_params`
+    does for cavity lengths.
+
+    2026-08-30: this used to be hard-coded to ONE shared width for every
+    iris, which silently made the N=4 Chebyshev spec unrealizable. N=4 needs
+    k = [0.0415, 0.0329, 0.0415]: the middle coupling is 26% WEAKER than the
+    outer two, and identical irises can only produce k12 = k23 = k34. The
+    N=4 search could therefore never satisfy its own target no matter how
+    many evaluations it spent -- a missing degree of freedom, not a search
+    failure. (N=3 is unaffected: its k = [0.046, 0.046] really are equal, so
+    ceil(2/2) = 1 reproduces the old single-width behaviour exactly.)
+    """
+    return math.ceil((N - 1) / 2)
+
+
+def _iris_keys(N: int) -> list[str]:
+    """Iris parameter names. N<=3 keeps the historical single "w_iris" name so
+    existing configs, logs, warm-starts and cached results keep working
+    unchanged; N>=4 splits into w_iris1..w_irisM."""
+    m = _n_iris_params(N)
+    if m <= 1:
+        return ["w_iris"]
+    return [f"w_iris{i + 1}" for i in range(m)]
+
+
 class CascadeTopology:
     name = "cascade"
     poles_per_cavity = 1
@@ -55,8 +84,10 @@ class CascadeTopology:
             k: (_L_INIT, _L_LO, _L_HI) for k in _len_keys(spec.N)
         }
         w_ms0 = round(microstrip_width_50ohm(spec.substrate.eps_r, spec.substrate.h) * 1e3, 4)
+        # One entry per INDEPENDENT iris (see _n_iris_params): for N>=4 the
+        # inner coupling must be realizable separately from the outer ones.
+        space.update({k: _W_IRIS for k in _iris_keys(spec.N)})
         space.update({
-            "w_iris": _W_IRIS,
             "w_ext": _W_EXT,
             "l_taper": _L_TAPER,
             # NOT searched by the optimizer by convention (see palace_opt_sma.py:
@@ -72,19 +103,35 @@ class CascadeTopology:
         values = [params[k] for k in keys]
         return _mirror(values, spec.N)
 
+    def _iris_widths_mm(self, spec: FilterSpec, params: dict) -> list[float] | None:
+        """The N-1 internal iris widths, mirrored from the independent ones.
+        Returns None if the caller supplied no iris parameter at all (keeps
+        build_geometry's own analytical widths, as before)."""
+        keys = _iris_keys(spec.N)
+        values = [params[k] for k in keys if params.get(k) is not None]
+        if not values:
+            return None
+        n_iris = max(1, spec.N - 1)
+        # _mirror indexes with min(i, n-1-i), which is exactly the symmetric
+        # pairing the iris row needs too (iris i and iris n_iris-1-i share a
+        # width), so reuse it rather than repeating the index arithmetic.
+        return _mirror(values, n_iris)
+
     def build_mesh(self, spec: FilterSpec, out_name: str, **params) -> MeshResult:
         p = dict(params)
         l_cavs_mm = self._l_cavs_mm(spec, p)
+        iris_widths_mm = self._iris_widths_mm(spec, p)
         for k in _len_keys(spec.N):
             p.pop(k, None)
-        w_iris = p.pop("w_iris", None)
+        for k in _iris_keys(spec.N):
+            p.pop(k, None)
         w_ext = p.pop("w_ext", None)
         l_taper = p.pop("l_taper", None)
         w_ms = p.pop("w_ms", None)
         p.setdefault("with_sma", True)  # real connector by default (see HANDOFF)
         res = _build_mesh(spec=spec, out_name=out_name, l_cavs_mm=l_cavs_mm,
-                          w_iris_mm=w_iris, w_ext_mm=w_ext, l_taper_mm=l_taper,
-                          w_ms_mm=w_ms, **p)
+                          w_irises_mm=iris_widths_mm, w_ext_mm=w_ext,
+                          l_taper_mm=l_taper, w_ms_mm=w_ms, **p)
         if "mesh" not in res:
             # render_png=/preview= short-circuit before a real mesh is built
             # (see palace_driven.build_mesh) -- nothing to translate.
@@ -97,8 +144,9 @@ class CascadeTopology:
         g = build_geometry(spec)
         l_cavs_mm = self._l_cavs_mm(spec, params)
         g.L_cavs = [v * 1e-3 for v in l_cavs_mm]
-        if params.get("w_iris") is not None:
-            g.iris_widths = [params["w_iris"] * 1e-3] * len(g.iris_widths)
+        iris_widths_mm = self._iris_widths_mm(spec, params)
+        if iris_widths_mm is not None:
+            g.iris_widths = [v * 1e-3 for v in iris_widths_mm]
         if params.get("w_ext") is not None:
             g.w_ext = params["w_ext"] * 1e-3
         if params.get("l_taper") is not None:
