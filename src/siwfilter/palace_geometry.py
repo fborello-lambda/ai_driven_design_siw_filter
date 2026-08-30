@@ -53,9 +53,16 @@ def build_mesh(iris_mm: float | None = None, mesh_max: float = 2.0,
     for x in (0.0, Ltot):                              # end walls (closed)
         for y in ys:
             vias.append((x, y))
-    for y in ys:                                       # middle iris (gap=iris)
-        if abs(y) > iris / 2.0:
-            vias.append((L, y))
+    # Middle iris: arms SPAN [iris/2, half] rather than being filtered out of
+    # the fixed `ys` grid, so the iris width is continuous. Filtering made it
+    # quantized in ~p steps -- measured here, w_iris 6/9, 12/15 and 18/21 mm
+    # each produced bit-identical meshes and identical k, collapsing a 6-point
+    # calibration sweep onto 3 real points. See _build_primitives in
+    # siw_geometry.py for the full note.
+    from .siw_geometry import _segment_positions
+    for y in _segment_positions(iris / 2.0, half, p):
+        vias.append((L, +y))
+        vias.append((L, -y))
     # dedupe overlapping corners
     kept: list[tuple[float, float]] = []
     for x, y in vias:

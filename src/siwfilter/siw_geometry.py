@@ -40,6 +40,23 @@ IRIS_C = 0.60
 # ---------------------------------------------------------------------------
 # Core SIW design equations (CLAUDE.md sec. 7)
 # ---------------------------------------------------------------------------
+def _segment_positions(lo: float, hi: float, p: float) -> np.ndarray:
+    """Evenly-spaced positions spanning EXACTLY [lo, hi] inclusive at pitch ~p.
+
+    The endpoints move continuously with lo/hi, so a gap-width parameter that
+    sets `lo` takes effect smoothly rather than only when it crosses a point
+    of some fixed grid. Same construction (and same motivation) as
+    palace_dualmode_driven._segment_vias -- see the iris comment in
+    _build_primitives for the measured quantization this removes.
+
+    Returns an empty array when the gap has swallowed the whole arm (hi <= lo).
+    """
+    if hi <= lo:
+        return np.array([])
+    n = max(1, round((hi - lo) / p))
+    return np.linspace(lo, hi, n + 1)
+
+
 def a_eff_from_a_siw(a_siw: float, d: float, p: float) -> float:
     """Cassivi-Wu equivalent width: a_eff = a_siw - d^2/(0.95*p)."""
     return a_siw - d**2 / (0.95 * p)
@@ -403,11 +420,31 @@ def _build_primitives(g: Geometry) -> None:
 
     # N-1 internal transverse walls (irises) on the shared side columns.
     # Endpoint vias at y = +/-half coincide with the side wall -> deduped below.
+    #
+    # 2026-08-30: the arm vias SPAN [w/2, half] instead of being filtered out
+    # of the fixed y_grid. Filtering made w_iris QUANTIZED: a via only appears
+    # or disappears when w/2 crosses a grid point, i.e. in ~p-sized steps of w.
+    # Measured here (a_siw=39.79, p=3.0 -> grid step 3.06mm), six calibration
+    # irises collapsed onto three distinct geometries:
+    #     w_iris  6.0 and  9.0 -> identical mesh, k=0.01424
+    #     w_iris 12.0 and 15.0 -> identical mesh, k=0.05828
+    #     w_iris 18.0 and 21.0 -> identical mesh, k=0.12657
+    # The cascade search's whole w_iris range (4.0-15.9mm) therefore spanned
+    # only ~2 distinct structures, so the GP was tuning a coupling knob that
+    # mostly did nothing -- the direct cause of its high screen-out rate and
+    # failure to converge. w_ext never had this problem (it places offsets
+    # from w_ext/2 outward, already continuous), which is why only the
+    # internal coupling was crippled.
+    #
+    # This is the same defect palace_dualmode_driven._segment_vias was written
+    # to fix ("...makes gap-width parameters genuinely continuous instead of
+    # only taking effect in ~p-sized steps when a threshold crosses a fixed
+    # grid point"); dual-mode got the fix, cascade never did.
     for i, x_wall in enumerate(wall_x):
         w = g.iris_widths[i]
-        for y in y_grid:
-            if abs(y) > w / 2.0:               # leave centred gap of width w
-                vias.append((x_wall, y))
+        for y in _segment_positions(w / 2.0, half, p):
+            vias.append((x_wall, +y))
+            vias.append((x_wall, -y))
 
     g.vias = _dedupe_vias(vias, min_sep=0.9 * spec.d_via)
 
