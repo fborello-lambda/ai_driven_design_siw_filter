@@ -165,6 +165,17 @@ calibrate.py     # (Important, see sec 6) k-vs-iris-width and Qe-vs-taper sweeps
 
 Run modules with `uv run python -m siwfilter.<module>` (or the orchestrator `siw`).
 
+> **2026-08-30 — design orchestration now lives in the CLI, not in scratch scripts.**
+> `siw calibrate`, `siw synth-design`, and `siw design --seed/--span/--patience`
+> cover both the calibrate-and-invert route and both optimizer modes (global and
+> local). Prefer calling these over writing new one-off drivers: during the session
+> that built them, EVERY bug hit was in throwaway orchestration scripts (a loop
+> variable shadowing collapsed N=3 and N=4 onto one solver tag so they silently
+> overwrote each other's results on disk; a cavity-length mapping raised KeyError for
+> N=3; a correction loop carried the next UNMEASURED extrapolation forward instead of
+> its best measured point) while the library code held up. New modules:
+> `synth_design.py` (pipeline) and `optimize.local_topology()` (seeded local box).
+
 ---
 
 ## 5. CST `.bas` requirements (the make-or-break deliverable)
@@ -193,6 +204,44 @@ Execution by the human (no live link needed): CST -> Macros -> open `siw_filter.
 ---
 
 ## 6. The one numerically critical step: iris-width <-> k calibration
+
+> **IMPLEMENTED 2026-08-30 for the cascade topology — use it, do not re-derive.**
+>
+> ```bash
+> siw calibrate --what both --N 3   # k(w_iris) + Qe(w_ext), cached per (substrate, via, f0)
+> siw synth-design --N 3            # invert both -> assemble -> fine confirm
+> siw design --topology cascade --seed <params> --span 2 --patience 14   # local polish
+> ```
+>
+> - `CascadeTopology.calibrate()` — k(w_iris) from a 2-cavity closed eigenmode.
+> - `CascadeTopology.calibrate_qe()` — Qe(w_ext) from ONE driven cavity (N=1: two
+>   feeds, no internal iris = symmetric doubly-loaded resonator), `Qe = 2/(1/Q_L - 1/Qu)`
+>   with `Q_L` from the −3 dB width. This is the section's "external Q" step; the
+>   loaded-Q form is used rather than group delay because the same driven sweep
+>   already yields it.
+> - `synth_design.py` — `invert_k` / `invert_qe` / `correct_l_cav` / `run_pipeline`.
+>
+> **WHY THIS AND NOT BLACK-BOX SEARCH (measured, not assumed).** A *global* GP over
+> the assembled cascade never beat −5 dB S11 in 60+ driven evals. Its objective
+> contains the passband width, which is **discontinuous** in w_ext: below a coupling
+> threshold only the centre pole clears −3 dB so the band measures one pole; above it
+> all N poles merge and the band jumps — 16/22/36/65/215 MHz on N=3, with the
+> 143.5 MHz target *inside* the jump. GPs model smooth functions. Calibrations measure
+> a smooth observable on a small structure and converged in ~3 solves each. Use the GP
+> only as a LOCAL polish (`--seed`), the regime it already works in for dual-mode.
+>
+> **Five bugs found 2026-08-30 that independently invalidated every earlier cascade
+> search** — all fixed, all worth knowing before trusting old cascade numbers:
+> `w_iris` was QUANTIZED (arms filtered from a fixed grid → the whole search box
+> spanned ~2 distinct geometries, `ea44a21`); N≥4 could not express its asymmetric
+> coupling profile (`fc0dcbd`); `FilterSpec` vias were stale 0.8/1.5 mm (`a58dbc9`);
+> `CascadeTopology.calibrate()` was a `return None` stub (`a5877cd`); the eigenmode
+> pair-selection picked the smallest gap, which is a higher-order mode cluster, giving
+> k=0.0028 instead of 0.0583 (21× error, same commit).
+>
+> Caveat: `calibrate_qe` takes Qu as the dielectric limit `1/tan_d` (270.3, matching
+> the closed-cavity eigenmode Q), so it ignores conductor/via-leakage/radiation loss
+> and slightly OVER-estimates Qe.
 
 DO NOT trust any closed-form iris-width formula for SIW — it is the #1 source of first-design
 failure. Build a calibration:
@@ -273,7 +322,36 @@ CONFIGURATION block in sec 1 for the full rationale and the landed design's numb
 
 ---
 
-## 10. Project status (2026-08-29) — read this before starting new work
+## 10. Project status — read this before starting new work
+
+> ### 2026-08-30 UPDATE — cascade reworked; all earlier cascade numbers VOID
+>
+> Five bugs were found, each of which **independently** invalidated every prior
+> cascade (N=3/N=4) search. Do not trust any cascade result dated before
+> 2026-08-30, including ones quoted elsewhere in this file:
+>
+> | bug | effect | fix |
+> |---|---|---|
+> | `w_iris` QUANTIZED (arms filtered from a fixed grid) | search box spanned ~2 distinct geometries; the GP tuned a knob that did nothing | `ea44a21` |
+> | N≥4 had ONE shared iris width | could not express k=[.0415,.0329,.0415]; N=4 spec unreachable by construction | `fc0dcbd` |
+> | `FilterSpec` vias stale 0.8/1.5 mm | cascade simulated the wrong via fence (dual-mode unaffected — it uses its own constants) | `a58dbc9` |
+> | `CascadeTopology.calibrate()` = `return None` | no calibrated design region, so the box stayed on the documented mismatch-blind point | `a5877cd` |
+> | eigenmode pair = smallest gap | picked a higher-order cluster: k=0.0028 instead of 0.0583 (21× error) | `a5877cd` |
+>
+> **Method changed as a result** — see sec. 6. Calibrate-and-invert (`siw
+> synth-design`) is now the primary route for the cascade; the GP is a LOCAL polish
+> (`--seed`) only. Solved so far: internal coupling (within 2 %), cavity resonance,
+> centre frequency (N=4 exactly 2.870 GHz). **Still open**: S11 (−5 dB vs −16) and
+> bandwidth (215 vs 143.5 MHz), both traced to external coupling; N=3's S11 shows the
+> right number of reflection zeros but unevenly spaced with −6…−11 dB ripple, the
+> signature of k and Qe mismatched with k already verified.
+>
+> Also note: the "N=3 cascade" entry in `cli.BASELINES` (l_cav 32.81/33.86, w_iris 13.0,
+> w_ext 16.5) is the design `docs/sma_connector/README.md` records at −15.98 dB. Its
+> fine-confirmed value when re-measured this session was ≈ −4.3 dB. Re-verify before
+> citing it.
+
+## 10b. Earlier status (2026-08-29)
 
 **Landed, working deliverable: the N=2 single-cavity dual-mode design**
 (`output/data/opt_dualmode_best.json`, score 9.31, S11 −17.7 dB, IL −1.42 dB,
