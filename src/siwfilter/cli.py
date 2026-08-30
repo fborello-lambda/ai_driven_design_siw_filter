@@ -251,6 +251,71 @@ def cmd_design(args) -> int:
     return 0
 
 
+def cmd_synth_design(args) -> int:
+    """Physics-derived cascade design: calibrate -> invert -> assemble.
+
+    Replaces black-box search as the primary route for the cascade. See
+    synth_design.py for why: calibrations measure smooth observables on small
+    structures and converge in ~3 solves; searches measure the assembled
+    filter's bandwidth, which is DISCONTINUOUS in w_ext, and did not.
+    """
+    from .synth_design import run_pipeline
+    from .optimize import evaluate
+    from .topologies.cascade import CascadeTopology
+
+    spec = _make_spec(args)
+    d = run_pipeline(spec, device=args.device, np_ranks=args.np,
+                     cache=not args.no_cache)
+    if args.no_confirm:
+        return 0
+    topo = CascadeTopology()
+    r = evaluate(topo, spec, d["params"], fine=True,
+                 tag_prefix=f"synthN{spec.N}", device=args.device,
+                 np_ranks=args.np, screen=False)
+    if r.get("ok"):
+        print(f"\nFINE CONFIRM: fc={r['fc']:.3f} GHz  s11w={r['s11w']:.2f} dB  "
+              f"bw={r['bw']:.0f} MHz  il={r['il']:.2f} dB  score={r['score']:.3f}")
+        print(f"  vs spec: S11 -16 dB | bw {spec.FBW*spec.f0/1e6:.1f} MHz | "
+              f"fc {(r['fc']-spec.f0/1e9)*1000:+.0f} MHz")
+        _artifacts(topo, spec, d["params"], f"synth_cascade_N{spec.N}", r)
+    else:
+        print(f"\nFINE CONFIRM FAILED: {r.get('err')}")
+        return 1
+    return 0
+
+
+def cmd_calibrate(args) -> int:
+    """Run (and cache) the k(w_iris) and/or Qe(w_ext) EM calibrations."""
+    import json as _json
+    from .topologies import REGISTRY
+    from .config import out_data
+
+    topo = REGISTRY[args.topology]
+    spec = _make_spec(args)
+    out = {}
+    if args.what in ("k", "both"):
+        out["k"] = topo.calibrate(spec)
+        pts = out["k"].get("points", {})
+        for w, r in sorted(pts.items(), key=lambda t: float(t[0])):
+            if r.get("ok"):
+                print(f"  w_iris={float(w):6.2f} -> k={r['k']:.5f}  fc={r['fc']:.4f} GHz")
+    if args.what in ("qe", "both"):
+        if not hasattr(topo, "calibrate_qe"):
+            print(f"calibrate_qe not implemented for topology {topo.name!r}")
+            return 1
+        out["qe"] = topo.calibrate_qe(spec, device=args.device, np_ranks=args.np)
+        for w, r in sorted(out["qe"].get("points", {}).items(),
+                           key=lambda t: float(t[0])):
+            if r.get("ok"):
+                print(f"  w_ext={float(w):6.2f} -> Qe={r['Qe']:8.2f}  "
+                      f"Q_L={r['Q_L']:7.2f}  bw={r['bw']:6.1f} MHz")
+    p = out_data(f"calibration_{topo.name}_N{spec.N}.json")
+    _json.dump(out, open(p, "w"), indent=2,
+               default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o))
+    print(f"WROTE {p}")
+    return 0
+
+
 def cmd_layout(args) -> int:
     from .topologies import REGISTRY
     topo = REGISTRY[args.topology]
@@ -318,6 +383,33 @@ def main(argv: list[str] | None = None) -> int:
                        help=_DEVICE_HELP)
     p_cmp.add_argument("--np", type=int, default=4, help="MPI ranks (CPU only; GPU always uses 1)")
     p_cmp.set_defaults(func=cmd_compare_baselines)
+
+    p_syn = sub.add_parser(
+        "synth-design",
+        help="physics-derived cascade design (calibrate -> invert -> assemble)")
+    _add_spec_args(p_syn)
+    p_syn.add_argument("--device", default="auto", choices=["auto", "CPU", "GPU"],
+                       help=_DEVICE_HELP)
+    p_syn.add_argument("--np", type=int, default=4,
+                       help="MPI ranks (CPU only; GPU always uses 1)")
+    p_syn.add_argument("--no-cache", action="store_true",
+                       help="recompute the EM calibrations instead of reusing "
+                            "the cached curves for this substrate/via/f0")
+    p_syn.add_argument("--no-confirm", action="store_true",
+                       help="assemble the design but skip the fine-mesh confirm")
+    p_syn.set_defaults(func=cmd_synth_design)
+
+    p_cal = sub.add_parser("calibrate",
+                           help="run the EM calibrations (k and/or Qe) and cache them")
+    _add_spec_args(p_cal)
+    p_cal.add_argument("--topology", default="cascade", choices=_TOPOLOGY_CHOICES)
+    p_cal.add_argument("--what", default="both", choices=["k", "qe", "both"],
+                       help="k: iris coupling; qe: external coupling; both (default)")
+    p_cal.add_argument("--device", default="auto", choices=["auto", "CPU", "GPU"],
+                       help=_DEVICE_HELP)
+    p_cal.add_argument("--np", type=int, default=4,
+                       help="MPI ranks (CPU only; GPU always uses 1)")
+    p_cal.set_defaults(func=cmd_calibrate)
 
     p_des = sub.add_parser("design", help="Bayesian search for a new design")
     p_des.add_argument("--topology", required=True, choices=_TOPOLOGY_CHOICES)

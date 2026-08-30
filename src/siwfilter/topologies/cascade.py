@@ -335,3 +335,83 @@ class CascadeTopology:
         return {"points": results, "w_of_k": fit, "k_of_w": k_fit,
                 "l_cav_mm": l_cav, "a_siw_mm": g.a_siw * 1e3,
                 "d_via_mm": spec.d_via * 1e3, "p_via_mm": spec.p_via * 1e3}
+
+    def calibrate_qe(self, spec: FilterSpec, w_exts: list[float] | None = None,
+                     l_cav_mm: float = 34.46, device: str = "auto",
+                     np_ranks: int = 4) -> dict:
+        """EM Qe(w_ext) external-coupling calibration -- CLAUDE.md sec.6.
+
+        The counterpart to calibrate()'s k(w_iris). A SINGLE driven cavity
+        (N=1: two feeds, no internal iris) is a symmetric doubly-loaded
+        resonator, so its -3 dB bandwidth gives the loaded Q and
+
+            1/Q_L = 1/Qu + 2/Qe    ->    Qe = 2 / (1/Q_L - 1/Qu)
+
+        WHY A SINGLE RESONATOR AND NOT A w_ext SWEEP ON THE WHOLE FILTER:
+        the assembled filter's passband width is DISCONTINUOUS in w_ext --
+        below a coupling threshold only the centre pole clears -3 dB so the
+        measured band is one pole, above it all N poles merge and the band
+        leaps. Measured on the N=3 cascade: 16 / 22 / 36 / 65 / 215 MHz, with
+        the 143.5 MHz target falling inside the jump. A GP objective
+        containing that bandwidth has the same problem, since GPs model
+        smooth functions. One resonator has no poles to merge, so its loaded
+        Q is smooth and monotonic in w_ext.
+
+        Qu is taken as the dielectric limit 1/tan_d, which the closed-cavity
+        eigenmode independently measured (Q=270.3 vs 1/0.0037=270.3). It
+        therefore ignores conductor, via-leakage and radiation loss, so the
+        returned Qe is a slight OVER-estimate of a real board's.
+
+        Returns {points, w_of_logQe, Qu, ...}; w_of_logQe inverts a target Qe
+        to a physical w_ext via numpy.polyval(fit, log(Qe)).
+        """
+        import numpy as np
+
+        from ..config import FilterSpec as _FS
+        from ..optimize import run_driven, band_edges, _mesh_preset
+
+        spec1 = _FS(N=1, f0=spec.f0, FBW=spec.FBW, ripple_db=spec.ripple_db,
+                    substrate_name=spec.substrate_name,
+                    d_via=spec.d_via, p_via=spec.p_via, fc_ratio=spec.fc_ratio)
+        qu = 1.0 / spec1.substrate.tan_d
+        w_exts = w_exts if w_exts is not None else [8.0, 10.0, 12.0, 14.0,
+                                                    16.0, 18.0, 20.0, 22.0]
+        mmax, mmin, hair = _mesh_preset(self.name, "CPU")
+        f0 = spec1.f0 / 1e9
+
+        points: dict[float, dict] = {}
+        for we in w_exts:
+            p = dict(l_cav1=l_cav_mm, w_ext=we, l_taper=15.73,
+                     w_ms=round(microstrip_width_50ohm(spec1.substrate.eps_r,
+                                                       spec1.substrate.h) * 1e3, 4))
+            r = run_driven(self, spec1, p, f"qecal_we{we:.1f}",
+                           f0 - 0.6, f0 + 0.6, 0.005, mmax, mmin, hair,
+                           device=device, np_ranks=np_ranks)
+            if not r.get("ok"):
+                points[we] = {"ok": False, "err": r.get("err")}
+                continue
+            e = band_edges(r["f"], r["s21_db"])
+            bw = float(e.get("bw", 0.0))                     # MHz
+            fc = e.get("fc_3db") or float(r["f"][int(np.argmax(r["s21_db"]))])
+            if bw <= 0:
+                points[we] = {"ok": False, "err": "no -3dB band"}
+                continue
+            q_l = (fc * 1000.0) / bw
+            inv = 1.0 / q_l - 1.0 / qu
+            points[we] = {"ok": True, "fc": fc, "bw": bw, "Q_L": q_l,
+                          "Qe": (2.0 / inv) if inv > 0 else float("inf"),
+                          "il": float(r["s21_db"].max())}
+
+        ok = [(w, m["Qe"]) for w, m in points.items()
+              if m.get("ok") and np.isfinite(m["Qe"])]
+        fit = None
+        if len(ok) >= 3:
+            ws = np.array([w for w, _ in ok])
+            qs = np.array([q for _, q in ok])
+            # Qe falls steeply as the aperture opens; fit in log(Qe) for a
+            # well-conditioned inverse.
+            fit = np.polyfit(np.log(qs), ws, 2).tolist()
+        return {"points": points, "w_of_logQe": fit, "Qu": qu,
+                "l_cav_mm": l_cav_mm,
+                "Qe_range": [float(min(q for _, q in ok)),
+                             float(max(q for _, q in ok))] if ok else None}
