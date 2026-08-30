@@ -278,7 +278,8 @@ def cmd_synth_design(args) -> int:
 
     spec = _make_spec(args)
     d = run_pipeline(spec, device=args.device, np_ranks=args.np,
-                     cache=not args.no_cache, refine=not args.no_refine)
+                     cache=not args.no_cache, refine=not args.no_refine,
+                     fc_trim=not args.no_fc_trim)
     if args.no_confirm:
         return 0
     topo = CascadeTopology()
@@ -415,6 +416,11 @@ def main(argv: list[str] | None = None) -> int:
                             "length for fc, but the two are coupled -- measured, "
                             "k fell 17%% when the length moved -- so the raw pass "
                             "is an estimate, not a converged design.")
+    p_syn.add_argument("--no-fc-trim", action="store_true",
+                       help="skip the final DRIVEN centre-frequency trim. The "
+                            "closed-cavity stages cannot see the external "
+                            "apertures, which pull fc down ~140 MHz, so without "
+                            "this trim the assembled filter is detuned.")
     p_syn.add_argument("--no-confirm", action="store_true",
                        help="assemble the design but skip the fine-mesh confirm")
     p_syn.set_defaults(func=cmd_synth_design)

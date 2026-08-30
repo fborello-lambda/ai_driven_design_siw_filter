@@ -140,7 +140,8 @@ def design_from_calibration(spec: FilterSpec, k_cal: dict, qe_cal: dict,
 def run_pipeline(spec: FilterSpec, device: str = "auto", np_ranks: int = 4,
                  w_irises: list[float] | None = None,
                  w_exts: list[float] | None = None,
-                 cache: bool = True, refine: bool = True) -> dict:
+                 cache: bool = True, refine: bool = True,
+                 fc_trim: bool = True) -> dict:
     """Full physics chain for the cascade topology. Returns the design dict.
 
     Calibrations are cached per (substrate, vias, f0) so the expensive part is
@@ -214,6 +215,14 @@ def run_pipeline(spec: FilterSpec, device: str = "auto", np_ranks: int = 4,
         for lk in len_keys[len(iris_keys):]:
             d["params"][lk] = last_l
         print(f"[pipeline] refined -> {d['params']}", flush=True)
+
+    if fc_trim:
+        # Final stage: centre fc against a DRIVEN solve. Everything above is
+        # closed-cavity, which cannot see the external apertures -- measured,
+        # the N=3 refined design assembled at 2.727 GHz, 143 MHz low, despite
+        # every eigenmode-level target being met.
+        d["params"] = driven_fc_trim(spec, topo, d["params"], np_ranks=np_ranks)
+        print(f"[pipeline] fc-trimmed -> {d['params']}", flush=True)
     return d
 
 def refine_joint(spec: FilterSpec, topo, k_target: float, w0: float, L0: float,
@@ -264,3 +273,74 @@ def refine_joint(spec: FilterSpec, topo, k_target: float, w0: float, L0: float,
         w, L = w + 0.7 * (w_new - w), L + 0.7 * (L_new - L)
     return {"ok": False, "err": "not converged", "w_iris": round(w, 2),
             "l_cav": round(L, 2), "history": hist}
+
+
+def driven_fc_trim(spec: FilterSpec, topo, params: dict,
+                   fc_tol_mhz: float = 10.0, max_it: int = 5,
+                   np_ranks: int = 4) -> dict:
+    """Centre fc against a DRIVEN solve -- the last stage of the chain.
+
+    The closed-cavity eigenmode the k calibration and joint refinement use
+    cannot see the EXTERNAL apertures, and those load the end cavities and
+    pull the resonance DOWN. Measured on the N=3 refined design: the assembled
+    filter came out at 2.727 GHz, 143 MHz below f0, even though every
+    eigenmode-level target was met. So the final trim has to be made against
+    the real, fed structure.
+
+    Scales every cavity length by a common factor (f ~ 1/L locally), secant-
+    refined once two points exist so the modelling error in that relation
+    calibrates itself away.
+
+    fc is measured as the -3 dB BAND CENTRE, not argmax(S21): an N-pole
+    passband has N peaks and the argmax HOPS between them, which made an
+    earlier version of this loop read -140/-80/+140/-50/-40 MHz -- a 3x swing
+    in apparent sensitivity that is not physical. The band centre uses the
+    edges and is stable. Sweep step is 5 MHz, since steering on a 10 MHz grid
+    while chasing a <10 MHz tolerance is unresolvable by construction.
+
+    Returns the trimmed params; the caller should fine-confirm afterwards.
+    """
+    from .optimize import (run_driven, band_edges, _mesh_preset,
+                           SCREEN_MESH_PRESETS)
+
+    len_keys = _len_keys(spec.N)
+    mmax, mmin, hair = SCREEN_MESH_PRESETS.get(topo.name,
+                                               _mesh_preset(topo.name, "CPU"))
+    f0 = spec.f0 / 1e9
+    p = dict(params)
+    hist: list[tuple[float, float]] = []
+    best_p, best_err = dict(p), None
+
+    for it in range(1, max_it + 1):
+        r = run_driven(topo, spec, p, f"fctrim_N{spec.N}_it{it}",
+                       f0 - 0.30, f0 + 0.30, 0.005, mmax, mmin, hair,
+                       device="CPU", np_ranks=np_ranks)
+        if not r.get("ok"):
+            print(f"[fc-trim] it{it}: FAILED {r.get('err')}", flush=True)
+            break
+        e = band_edges(r["f"], r["s21_db"])
+        fc = e.get("fc_3db") or float(r["f"][int(np.argmax(r["s21_db"]))])
+        d_mhz = (fc - f0) * 1000
+        print(f"[fc-trim] it{it}: l_cav={[p[k] for k in len_keys]} -> "
+              f"fc={fc:.4f} ({d_mhz:+.1f} MHz)", flush=True)
+        # keep the best MEASURED point: a loop that exhausts its budget must
+        # not carry forward the next, never-simulated extrapolation
+        if best_err is None or abs(d_mhz) < best_err:
+            best_p, best_err = dict(p), abs(d_mhz)
+        if abs(d_mhz) < fc_tol_mhz:
+            print(f"[fc-trim] centred", flush=True)
+            return best_p
+        hist.append((p[len_keys[0]], fc))
+        factor = fc / f0
+        if len(hist) >= 2 and abs(hist[-1][1] - hist[-2][1]) > 1e-6:
+            (l1, f1), (l2, f2) = hist[-2], hist[-1]
+            dfdl = (f2 - f1) / (l2 - l1)
+            if abs(dfdl) > 1e-9:
+                factor = (l2 + (f0 - f2) / dfdl) / l2
+        factor = float(np.clip(factor, 0.90, 1.10))
+        for k in len_keys:
+            p[k] = round(p[k] * factor, 2)
+
+    print(f"[fc-trim] best measured: {best_err:.1f} MHz err" if best_err is not None
+          else "[fc-trim] no usable measurement", flush=True)
+    return best_p
