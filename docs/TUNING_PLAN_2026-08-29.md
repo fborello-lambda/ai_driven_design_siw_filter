@@ -1,5 +1,18 @@
 # Tuning plan — narrow-bandwidth filters at N=2 / N=3 / N=4
 
+> ## ⚠ SUPERSEDED by `docs/ROADMAP_2026-08-30.md`
+>
+> **Section 2 (the CPWG/SMA launch geometry) is still valid and unchanged** —
+> the solved 50-ohm numbers there remain the reference.
+>
+> **The tuning strategy is not.** This plan assumes Bayesian search over the
+> assembled filter. On 2026-08-30 five bugs were found that each independently
+> invalidated every cascade search behind it (quantized w_iris, missing N>=4 iris
+> DOF, stale via defaults, unimplemented calibrate(), 21x-wrong eigenmode mode
+> selection), and the method was replaced by calibrate-and-invert with the GP as
+> a local polish only. Any cascade NUMBER quoted below is void.
+
+
 Date: 2026-08-29. **This is the working document for the tuning phase.**
 Everything needed to resume after a session compaction is here.
 

@@ -1,5 +1,29 @@
 # Handoff — moving to the GPU machine
 
+> ## ⚠ HISTORICAL — plan COMPLETED. Do not read the TL;DR below as live work.
+>
+> All three TL;DR items are done:
+> 1. **unified AI-driven design CLI** — built (`siw design / compare-baselines /
+>    layout / sweep`, `topologies/`, `optimize.py`).
+> 2. **real Taoglas EMPCB.SMAFSTJ.B.HT connector** — modelled (`TAOGLAS_SMA` in
+>    `topologies/dualmode.py`), including the pin-radius meshing cliff this
+>    document warned about.
+> 3. **explore new structures for the paper** — ongoing; that thread continues in
+>    **`docs/ROADMAP_2026-08-30.md`**, which is the current working plan.
+>
+> **Kept, not deleted**, because the architectural rationale in
+> "Architecture: unified AI-driven design CLI" is cited by comments in
+> `topologies/base.py`, `topologies/__init__.py`, `cli.py`, `config.py`,
+> `topologies/cascade.py` and `topologies/dualmode.py`. The environment-setup
+> section is also still accurate.
+>
+> **Superseded within it:** the design METHOD. The CLI this document specifies
+> centres on Bayesian search; 2026-08-30 established that a global search over an
+> assembled cascade cannot work (its objective is discontinuous) and replaced it
+> with calibrate-and-invert, with the GP kept only as a local polish. See
+> `CLAUDE.md` §6 and the roadmap. The "Current results" and "Branch / PR status"
+> sections below are stale.
+
 Written at the end of a session on branch `sma_conn`. This is the pickup
 document — read this first, then `docs/dualmode_cavity/README.md` and
 `docs/sma_connector/README.md` for the full technical history.
