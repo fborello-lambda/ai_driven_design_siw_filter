@@ -107,11 +107,18 @@ class CascadeTopology:
         """The N-1 internal iris widths, mirrored from the independent ones.
         Returns None if the caller supplied no iris parameter at all (keeps
         build_geometry's own analytical widths, as before)."""
+        n_iris = spec.N - 1
+        if n_iris <= 0:
+            # A SINGLE cavity has no internal irises. N=1 is a legitimate
+            # configuration -- it is the resonator the Qe(w_ext) calibration
+            # measures -- and _iris_keys() still reports "w_iris" for it, so
+            # without this the caller passes one width for zero irises and
+            # build_mesh's length guard rejects the mesh.
+            return None
         keys = _iris_keys(spec.N)
         values = [params[k] for k in keys if params.get(k) is not None]
         if not values:
             return None
-        n_iris = max(1, spec.N - 1)
         # _mirror indexes with min(i, n-1-i), which is exactly the symmetric
         # pairing the iris row needs too (iris i and iris n_iris-1-i share a
         # width), so reuse it rather than repeating the index arithmetic.
