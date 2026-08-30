@@ -237,12 +237,25 @@ def cmd_design(args) -> int:
             else topo.calibrate(spec)
         print(f"calibrate(): {cal}" if cal is not None else "calibrate(): not implemented for this topology")
 
+    # --seed turns the GLOBAL search into a LOCAL polish around a known point.
+    # That distinction decided the cascade work: a global GP never beat -5 dB
+    # S11 in 60+ evals (its objective contains the passband width, which is
+    # discontinuous in w_ext), while the same optimizer works locally around a
+    # physics-derived seed -- the regime it already succeeds in for dualmode.
+    # Pair with `siw synth-design` to generate that seed.
+    if args.seed:
+        from .optimize import local_topology
+        seed = _parse_params(args.seed)
+        topo = local_topology(topo, seed, default_span=args.span)
+        print(f"local search around {seed} (span +-{args.span} mm)")
+        print(f"  box: {topo.param_space(spec)}")
+
     fine_sweep = None
     if args.fine_sweep is not None:
         f0, f1, step_hz = args.fine_sweep
         fine_sweep = (f0 / 1e9, f1 / 1e9, step_hz / 1e9)
     result = optimize(topo, spec, budget=args.evals, device=args.device, np_ranks=args.np,
-                      fine_sweep=fine_sweep)
+                      fine_sweep=fine_sweep, patience=args.patience)
     print(f"\nBest design: {result['params']}")
     from .optimize import evaluate
     r = evaluate(topo, spec, result["params"], fine=True, tag_prefix="designfinal",
@@ -418,6 +431,17 @@ def main(argv: list[str] | None = None) -> int:
     p_des.add_argument("--fine-sweep", type=float, nargs=3, default=None,
                        metavar=("FMIN_HZ", "FMAX_HZ", "STEP_HZ"),
                        help="override the fine-confirm frequency sweep, e.g. 2.5e9 3.0e9 1e7")
+    p_des.add_argument("--seed", default=None, metavar="K=V,...",
+                       help="warm-start a LOCAL search in a tight box around these "
+                            "params (e.g. from `siw synth-design`). Without it the "
+                            "search is global, which for the cascade never beat "
+                            "-5 dB S11 in 60+ evals -- its objective contains the "
+                            "passband width, discontinuous in w_ext.")
+    p_des.add_argument("--span", type=float, default=2.5, metavar="MM",
+                       help="half-width of the local box around --seed (default 2.5mm)")
+    p_des.add_argument("--patience", type=int, default=None, metavar="N",
+                       help="stop after N consecutive non-improving evals "
+                            "(default: run the full budget)")
     p_des.add_argument("--calibrate", action="store_true", help="run the cheap eigenmode pre-pass first")
     p_des.add_argument("--calibrate-device", default=None, choices=["CPU", "GPU"],
                        help="device for the --calibrate eigenmode pre-pass. Default: auto -- GPU "

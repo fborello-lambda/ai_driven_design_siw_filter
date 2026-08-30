@@ -1066,3 +1066,56 @@ def plot_comparison(designs: dict[str, dict], spec: FilterSpec, out_path: str,
     plt.close(fig)
     print(f"Wrote {out_path}")
     return out_path
+
+
+def local_topology(topology: Topology, seed: dict[str, float],
+                   spans: dict[str, float] | None = None,
+                   default_span: float = 2.5,
+                   floors: dict[str, float] | None = None):
+    """Wrap `topology` so its param_space becomes a TIGHT box around `seed`.
+
+    Turns the global Bayesian search into a LOCAL polish. That distinction
+    decided this project's cascade work: a global GP over the assembled
+    filter never beat -5 dB S11 in 60+ driven evaluations, because its
+    objective contains the passband width, which is DISCONTINUOUS in the
+    external coupling (below a threshold only the centre pole clears -3 dB so
+    the band measures one pole; above it all N poles merge and the band
+    jumps -- measured 16/22/36/65/215 MHz on N=3). GPs model smooth
+    functions, so a global search inherits that. Around a physics-derived
+    seed the surface is locally smooth and the same optimizer behaves, which
+    is the regime it already works in for the dual-mode topology.
+
+    Parameters whose seed value is absent keep the parent's own range, and
+    any parameter the parent pins (lo == hi, e.g. w_ms at the true 50-ohm
+    width) stays pinned -- letting w_ms float re-creates the
+    self-normalising-port artefact documented in palace_opt_sma.py.
+    """
+    spans = spans or {}
+    floors = floors or {}
+    parent = topology
+
+    class _Local:
+        name = parent.name
+        poles_per_cavity = getattr(parent, "poles_per_cavity", 1)
+
+        def param_space(self, spec):
+            base = parent.param_space(spec)
+            out = {}
+            for k, rng in base.items():
+                init, lo, hi = rng
+                if lo >= hi or k not in seed:      # pinned, or not seeded
+                    out[k] = rng
+                    continue
+                v = float(seed[k])
+                s = float(spans.get(k, default_span))
+                out[k] = (v, max(floors.get(k, lo), v - s), min(hi, v + s)) \
+                    if hi > lo else rng
+                # keep the box non-degenerate even if the seed sits on a bound
+                if out[k][1] >= out[k][2]:
+                    out[k] = (v, v - s, v + s)
+            return out
+
+        def __getattr__(self, item):
+            return getattr(parent, item)
+
+    return _Local()
