@@ -684,7 +684,21 @@ def score(spec: FilterSpec, r: dict, board_length_mm: float,
     # Symmetry: compare how far the -3dB edges sit from the peak on each side.
     # A lopsided response (one skirt far out, one tight) scores badly even if
     # its centre and width happen to land right.
-    f_lo, f_hi, fc_pk = r.get("f_lo"), r.get("f_hi"), r.get("fc")
+    #
+    # fc_pk MUST be an estimate of the true passband centre that is
+    # INDEPENDENT of f_lo/f_hi -- fc_3db is their arithmetic midpoint by
+    # construction, so using it here would make lo_arm==hi_arm ALWAYS and
+    # this term identically zero, not a fix. The previous choice, argmax(S21),
+    # is independent but unstable on a multi-pole response: it hops between
+    # whichever ripple peak happens to be numerically taller depending on
+    # where the sweep grid lands, which measured as a 5-point score swing on
+    # the exact same ideal filter at different grid offsets (adversarial
+    # review, 2026-08-31). The mean of the S11 reflection zeros is also
+    # independent of f_lo/f_hi and, being an average over N points instead of
+    # a single sampled maximum, is far less sensitive to grid placement.
+    f_lo, f_hi = r.get("f_lo"), r.get("f_hi")
+    zeros_ghz = pole_shape(r["f"], r["s11_db"], spec.N)["zeros_ghz"]
+    fc_pk = (sum(zeros_ghz) / len(zeros_ghz)) if zeros_ghz else r.get("fc")
     if f_lo and f_hi and fc_pk and not r.get("band_truncated"):
         lo_arm, hi_arm = fc_pk - f_lo, f_hi - fc_pk
         denom = max(1e-9, lo_arm + hi_arm)
