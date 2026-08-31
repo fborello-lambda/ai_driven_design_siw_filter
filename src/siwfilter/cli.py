@@ -67,12 +67,14 @@ STAGES = dict(LIGHT + HEAVY)
 # Landed baseline designs (see docs/dualmode_cavity/README.md,
 # docs/sma_connector/README.md) -- used by `siw compare-baselines`.
 BASELINES = {
-    "N=3 cascade": {
-        "topology": "cascade",
-        "N": 3,
-        "params": {"l_cav1": 32.81, "l_cav2": 33.86, "w_iris": 13.0,
-                   "w_ext": 16.5, "l_taper": 15.73, "w_ms": 1.664},
-    },
+    # No cascade entry: neither N=3 nor N=4 has a design that both meets
+    # spec and was measured under the real CPWG launch cascade now defaults
+    # to (see CLAUDE.md sec 1b/10). The old N=3 entry here (l_cav1=32.81,
+    # l_cav2=33.86, w_iris=13.0, w_ext=16.5) predates the 2026-08-30 bugfixes
+    # and the CPWG launch -- documented at -15.98dB, re-measured at -4.3dB
+    # this session, and would just burn a driven solve on every
+    # compare-baselines run. Add a fresh entry once siw synth-design lands
+    # one worth keeping (golden/cascade_N3|N4/ per golden/README.md).
     "N=2 dualmode (1.5/3.0mm)": {
         "topology": "dualmode",
         "N": 2,
@@ -217,6 +219,15 @@ def cmd_compare_baselines(args) -> int:
         if r.get("ok"):
             print(f"  fc={r.get('fc_3db', r['fc']):.3f}GHz  IL={r['il']:.2f}dB  "
                  f"BW={r['bw']:.0f}MHz  S11w={r['s11w']:.2f}dB  board={board:.1f}mm")
+            from .optimize import pole_shape
+            import numpy as _np
+            # cfg["N"] is the filter ORDER (total pole count) regardless of
+            # topology -- for dualmode a single cavity IS N=2, not 1 cavity
+            # x poles_per_cavity=2 (that would double-count).
+            shape = pole_shape(_np.array(r["f"]), _np.array(r["s11_db"]), cfg["N"])
+            flag = "OK" if shape["matches_order"] else "MISMATCH"
+            print(f"  SHAPE CHECK [{flag}]: {shape['n_zeros']} S11 zeros (want {cfg['N']}), "
+                 f"{shape['n_peaks']} ripple peaks (want {cfg['N'] - 1})")
             _artifacts(topo, spec, cfg["params"], label.replace(" ", "_").replace("/", "-"), r)
         else:
             print(f"  FAILED: {r.get('err')}")
@@ -291,6 +302,16 @@ def cmd_synth_design(args) -> int:
               f"bw={r['bw']:.0f} MHz  il={r['il']:.2f} dB  score={r['score']:.3f}")
         print(f"  vs spec: S11 -16 dB | bw {spec.FBW*spec.f0/1e6:.1f} MHz | "
               f"fc {(r['fc']-spec.f0/1e9)*1000:+.0f} MHz")
+        from .optimize import pole_shape
+        import numpy as _np
+        shape = pole_shape(_np.array(r["f"]), _np.array(r["s11_db"]), spec.N)
+        flag = "OK" if shape["matches_order"] else "MISMATCH"
+        print(f"  SHAPE CHECK [{flag}]: {shape['n_zeros']} S11 zeros "
+              f"(want {spec.N}), {shape['n_peaks']} ripple peaks (want {spec.N - 1})"
+              f"  zeros@{[round(z, 3) for z in shape['zeros_ghz']]} GHz")
+        if not shape["matches_order"]:
+            print(f"  -> this is NOT a real order-{spec.N} response despite the score/S11 "
+                  f"numbers above -- do not treat this design as landed.")
         _artifacts(topo, spec, d["params"], f"synth_cascade_N{spec.N}", r)
     else:
         print(f"\nFINE CONFIRM FAILED: {r.get('err')}")
@@ -381,6 +402,13 @@ def cmd_sweep(args) -> int:
     print(f"fc={r.get('fc_3db', r['fc']):.3f}GHz IL={r['il']:.2f}dB "
           f"BW={r['bw']:.0f}MHz S11w={r['s11w']:.2f}dB")
     plot_comparison({f"{args.topology} sweep": r}, spec, out_img(f"sweep_{args.topology}.png"))
+    from .config import out_data
+    sparams_path = out_data(f"sweep_{args.topology}_sparams.json")
+    json.dump({"f_ghz": list(r["f"]), "s11_db": list(r["s11_db"]),
+              "s21_db": list(r["s21_db"]), "params": params,
+              "fmin": args.fmin, "fmax": args.fmax, "step": args.step},
+             open(sparams_path, "w"), indent=2)
+    print(f"Wrote {sparams_path}")
     return 0
 
 

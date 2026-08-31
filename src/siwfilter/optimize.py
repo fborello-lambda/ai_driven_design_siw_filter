@@ -335,6 +335,37 @@ def band_edges(f: np.ndarray, s21_db: np.ndarray) -> dict:
             "f_lo": f_lo, "f_hi": f_hi, "band_truncated": trunc}
 
 
+def pole_shape(f: np.ndarray, s11_db: np.ndarray, n_expected: int,
+              zero_thresh_db: float = -8.0, peak_max_db: float = -1.0) -> dict:
+    """Count S11 reflection zeros and in-band ripple peaks and compare against
+    the order the design is SUPPOSED to be.
+
+    A Chebyshev bandpass of order N has exactly N reflection zeros (S11 dips)
+    and N-1 ripple peaks between them. This is the acceptance check the score
+    alone does not give you: `score()` and `s11w` can both look reasonable on
+    a response that is structurally the wrong order (2 zeros/1 peak reported
+    as an "N=3" design -- the missing-middle-resonator bug -- or the reverse,
+    extra structure reading as a higher order than what was actually
+    synthesized). Always check this before trusting a fine-confirm's numbers.
+
+    Zeros: local minima of S11 below `zero_thresh_db`. Peaks: local maxima of
+    S11 between two zeros, below `peak_max_db` (so a maximum that never really
+    dips back down between two supposed poles -- i.e. two poles that merged
+    into one -- doesn't get counted as a separating ripple).
+    """
+    zeros_idx = [i for i in range(1, len(s11_db) - 1)
+                if s11_db[i] < s11_db[i - 1] and s11_db[i] < s11_db[i + 1]
+                and s11_db[i] < zero_thresh_db]
+    peaks_idx = [i for i in range(1, len(s11_db) - 1)
+                if s11_db[i] > s11_db[i - 1] and s11_db[i] > s11_db[i + 1]
+                and s11_db[i] < peak_max_db]
+    n_zeros, n_peaks = len(zeros_idx), len(peaks_idx)
+    return {"n_zeros": n_zeros, "n_peaks": n_peaks,
+            "zeros_ghz": [float(f[i]) for i in zeros_idx],
+            "matches_order": (n_zeros == n_expected and n_peaks == max(0, n_expected - 1)),
+            "n_expected": n_expected}
+
+
 #: Krylov solve tolerance for the COARSE search. Palace/MFEM is compiled in
 #: FP64 (single precision would need a rebuild), so the runtime knob for
 #: "cheaper but less exact" is the linear-solver tolerance, not the float
