@@ -228,7 +228,16 @@ def cmd_compare_baselines(args) -> int:
             flag = "OK" if shape["matches_order"] else "MISMATCH"
             print(f"  SHAPE CHECK [{flag}]: {shape['n_zeros']} S11 zeros (want {cfg['N']}), "
                  f"{shape['n_peaks']} ripple peaks (want {cfg['N'] - 1})")
-            _artifacts(topo, spec, cfg["params"], label.replace(" ", "_").replace("/", "-"), r)
+            slug = label.replace(" ", "_").replace("/", "-")
+            from .config import out_data
+            result_path = out_data(f"baseline_{slug}_result.json")
+            json.dump({"topology": cfg["topology"], "N": cfg["N"], "params": cfg["params"],
+                      "metrics": {k: v for k, v in r.items() if k not in ("f", "s11_db", "s21_db")},
+                      "shape": shape, "board_length_mm": board,
+                      "f_ghz": list(r["f"]), "s11_db": list(r["s11_db"]), "s21_db": list(r["s21_db"])},
+                     open(result_path, "w"), indent=2)
+            print(f"  Wrote {result_path}")
+            _artifacts(topo, spec, cfg["params"], slug, r)
         else:
             print(f"  FAILED: {r.get('err')}")
 
