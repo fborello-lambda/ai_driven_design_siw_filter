@@ -364,8 +364,8 @@ def driven_fc_trim(spec: FilterSpec, topo, params: dict,
 
 
 def correct_middle_cavity(spec: FilterSpec, topo, params: dict,
-                          spacing_tol_mhz: float = 15.0, max_it: int = 5,
-                          np_ranks: int = 4) -> dict:
+                          spacing_tol_mhz: float = 15.0, max_it: int = 6,
+                          np_ranks: int = 4, damping: float = 0.5) -> dict:
     """Separate the middle cavity's length from the end cavities', driven by
     a real fed structure -- physics driven_fc_trim cannot supply, since it
     scales every length by ONE common factor and so can never move the
@@ -387,14 +387,21 @@ def correct_middle_cavity(spec: FilterSpec, topo, params: dict,
     of the INNER zero(s), using the same TE101 f~1/L relation
     driven_fc_trim's sibling correct_l_cav already uses (correct_l_cav_to),
     applied ONLY to the middle cavity's length key so the ends stay where
-    fc-trim put them. If the response has fewer than N zeros (fully
-    collapsed -- no inner zero exists to target), there is no gradient
-    signal available from pole_shape alone, so instead alternately nudge the
-    middle length by a fixed fraction, on the physical expectation that the
-    collapse comes from the end and middle electrical lengths sitting too
-    close together under real loading; each measurement is kept only if it
-    improves (or reaches) matches_order, via the same best-measured pattern
-    driven_fc_trim uses.
+    fc-trim put them -- but DAMPED (like refine_joint's 0.7 damping on its
+    own coupled correction): a full undamped TE101 jump overshot past the
+    target on the first real run (34.93mm, 3 zeros/bad spacing -> 33.94mm,
+    collapsed to 2 zeros), because the linearized relation is only a local
+    model near the CURRENT operating point, not valid over the whole jump.
+
+    If the zero COUNT changes between two consecutive measurements (crossing
+    from a full N-zero response to a collapsed one, or back), the true
+    threshold lies between those two lengths -- bisect there instead of
+    trusting either point's local linear model, since one of them is by
+    construction on the wrong side of a real structural transition.
+
+    Each measurement is kept only if it improves (or reaches) matches_order
+    via the same best-measured pattern driven_fc_trim uses, so a run that
+    exhausts its budget still returns its best point, not the last one.
 
     No-op for N<3 (dualmode's N=2 has no middle cavity to separate; a plain
     2-cavity cascade likewise has none).
@@ -410,6 +417,7 @@ def correct_middle_cavity(spec: FilterSpec, topo, params: dict,
     f0 = spec.f0 / 1e9
     mmax, mmin, hair = SCREEN_MESH_PRESETS.get(topo.name, _mesh_preset(topo.name, "CPU"))
     best_p, best_score = dict(p), None
+    hist: list[tuple[float, int]] = []          # (L, n_zeros) per iteration
 
     for it in range(1, max_it + 1):
         r = run_driven(topo, spec, p, f"midtrim_N{spec.N}_it{it}",
@@ -420,7 +428,8 @@ def correct_middle_cavity(spec: FilterSpec, topo, params: dict,
             break
         shape = pole_shape(np.asarray(r["f"]), np.asarray(r["s11_db"]), spec.N)
         zeros = sorted(shape["zeros_ghz"])
-        print(f"[mid-trim] it{it}: l_cav_mid={p[mid_key]}  "
+        L = p[mid_key]
+        print(f"[mid-trim] it{it}: l_cav_mid={L}  "
               f"zeros={[round(z, 4) for z in zeros]} (n={len(zeros)}, want {spec.N}) "
               f"peaks={shape['n_peaks']}", flush=True)
 
@@ -438,15 +447,21 @@ def correct_middle_cavity(spec: FilterSpec, topo, params: dict,
             print("[mid-trim] shape matches order -- done", flush=True)
             return best_p
 
-        if err_mhz is not None and abs(err_mhz) > spacing_tol_mhz:
-            p[mid_key] = round(correct_l_cav_to(spec, actual, p[mid_key], target), 2)
+        hist.append((L, len(zeros)))
+        if len(hist) >= 2 and hist[-1][1] != hist[-2][1]:
+            # Zero count changed since the last try: the real threshold sits
+            # between these two lengths, so bisect there rather than trust
+            # a local linear model that a structural transition just broke.
+            L_new = 0.5 * (hist[-1][0] + hist[-2][0])
+        elif err_mhz is not None and abs(err_mhz) > spacing_tol_mhz:
+            L_lin = correct_l_cav_to(spec, actual, L, target)
+            L_new = L + damping * (L_lin - L)
         else:
-            # Collapsed shape (fewer than N zeros): no inner-zero gradient to
-            # follow. Alternate direction each iteration so a bad first guess
-            # doesn't run the length away monotonically; best_p above still
-            # only ever keeps the best-scoring measurement.
-            step = 0.01 * p[mid_key] * (1 if it % 2 else -1)
-            p[mid_key] = round(p[mid_key] + step, 2)
+            # No count history and no usable spacing signal (first iteration
+            # already collapsed): a small probe step, alternating so a bad
+            # first guess doesn't run the length away monotonically.
+            L_new = L + 0.01 * L * (1 if it % 2 else -1)
+        p[mid_key] = round(L_new, 2)
 
     print(f"[mid-trim] best measured shape score {best_score}" if best_score is not None
           else "[mid-trim] no usable measurement", flush=True)
