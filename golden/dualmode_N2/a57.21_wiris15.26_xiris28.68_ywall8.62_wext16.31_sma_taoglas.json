@@ -1,0 +1,46 @@
+{
+  "_comment": "Golden design constants. See golden/README.md for the naming convention and CLAUDE.md 'Golden designs' for how this fits the project. Do not hand-edit numbers here without re-running the CLI and re-deriving them.",
+  "topology": "dualmode",
+  "N": 2,
+  "spec": {
+    "f0_hz": 2.87e9,
+    "FBW": 0.05,
+    "ripple_db": 0.1,
+    "substrate": "RO4350B_0.76mm",
+    "eps_r": 3.66,
+    "tan_d": 0.0037,
+    "h_mm": 0.76,
+    "d_via_mm": 1.5,
+    "p_via_mm": 3.0
+  },
+  "params": {
+    "a": 57.21,
+    "w_iris": 15.26,
+    "x_iris": 28.68,
+    "y_wall": 8.62,
+    "w_ext": 16.31
+  },
+  "launch": {
+    "model": "sma_taoglas",
+    "description": "Real Taoglas EMPCB.SMAFSTJ.B.HT SMA (with_sma=True) + its 4 discrete coplanar ground-leg pads and stitching vias (gnd_stitch=True). This is PAD-ONLY ground stitching (cpwg_gap_mm=None in topologies/dualmode.py's TAOGLAS_SMA) -- NOT the impedance-matched CPWG gap. Do not tag this 'cpwg_taoglas': that name is reserved for a run that actually used cpwg_gap_mm (the gap-matched launch cascade now defaults to, and which a separate 0-8GHz check of this same geometry confirmed still stays well-matched, but which was NOT what produced the metrics below -- see docs/TUNING_PLAN_2026-08-29.md sec 2 and output/data/v20_dualmode_broadband.npz)."
+  },
+  "metrics": {
+    "fc_ghz": 2.917125,
+    "fc_3db_ghz": 2.910575789571924,
+    "s11w_db": -17.69610289771,
+    "bw_mhz": 318.30446003929455,
+    "il_db": -1.424174872778,
+    "il_band_db": -1.595860476091,
+    "score": 9.309804653400604,
+    "board_length_mm": 119.05919265765944,
+    "band_truncated": false
+  },
+  "known_open_item": "Bandwidth 318 MHz vs the 143.5 MHz (5% FBW) target -- not yet fixed. Needs a Qe(w_ext)/k12 recalibration for this topology the same way cascade's was done, not a black-box search (see CLAUDE.md sec 6/10b).",
+  "provenance": {
+    "source_file": "output/data/opt_dualmode_best.json",
+    "source_dated": "2026-08-24",
+    "reproduce_with": "siw compare-baselines   (BASELINES['N=2 dualmode (1.5/3.0mm)'] in cli.py)",
+    "git_commit_when_saved": "51cb5a4",
+    "saved": "2026-08-31"
+  }
+}

@@ -52,6 +52,33 @@ Python modules, and produce a CST-ready 3D geometry. Read this whole file before
 
 ---
 
+## 1b. Golden designs — the authoritative source of confirmed values
+
+> **2026-08-31.** Curated, validated design constants + their measured S11/S21
+> now live in **`golden/<topology>_N<order>/`**, one JSON pair per design
+> (`<stem>.json` = params/spec/metrics/provenance, `<stem>.s11s21.json` =
+> standalone f/S11/S21 arrays). See `golden/README.md` for the naming
+> convention (params encoded directly in the filename, e.g.
+> `a57.21_wiris15.26_..._sma_taoglas.json`) and the `sma_taoglas` vs
+> `cpwg_taoglas` launch-tag distinction — get that tag wrong and you
+> reproduce exactly the kind of picture/physics mismatch this project
+> already hit once (cascade's launch model silently not matching what was
+> drawn/assumed).
+>
+> **Currently populated: `golden/dualmode_N2/` only** — the landed N=2
+> design (a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31),
+> both under its actual `sma_taoglas` EM default and, separately, a real
+> `cpwg_taoglas` broadband (0–8GHz) check of the same geometry. **No
+> `cascade_N3`/`cascade_N4` entry exists yet** — neither order has a design
+> that both meets spec and was measured under the (now-default) real CPWG
+> launch; add one only once `siw synth-design` lands a design worth keeping.
+> Prose values elsewhere in this file (sec 1's CURRENT CONFIRMED
+> CONFIGURATION block, sec 7/9's cookbook numbers) may drift — `golden/` is
+> the one place guaranteed to match an actual CLI-reproducible run; prefer it
+> when the two disagree.
+
+---
+
 ## 2. Current environment state (DO NOT re-build the C++ core)
 
 - OS: Linux. User home: `/home/fd`.
