@@ -79,25 +79,33 @@ def invert_qe(cal: dict, qe: float) -> float:
     return float(np.polyval(fit, math.log(qe)))
 
 
-def correct_l_cav(spec: FilterSpec, fc_meas_ghz: float, l_cav_mm: float) -> float:
-    """Cavity length that moves a measured resonance onto f0.
+def correct_l_cav_to(spec: FilterSpec, fc_meas_ghz: float, l_cav_mm: float,
+                     f_target_ghz: float) -> float:
+    """Cavity length that moves a measured resonance onto an arbitrary target
+    frequency (generalizes correct_l_cav, which always targets spec.f0).
 
     Backs the EFFECTIVE transverse dimension out of the measured (fc, l_cav)
     pair -- which folds in whatever loading was present -- then re-solves the
-    TE101 relation at f0 holding it fixed:
+    TE101 relation at f_target holding it fixed:
 
         (1/a_eff)^2 = (2*fc*sqrt(eps_r)/c)^2 - (1/L)^2
-        (1/L_new)^2 = (2*f0*sqrt(eps_r)/c)^2 - (1/a_eff)^2
+        (1/L_new)^2 = (2*f_target*sqrt(eps_r)/c)^2 - (1/a_eff)^2
+    """
+    eps = spec.substrate.eps_r
+    fc, L = fc_meas_ghz * 1e9, l_cav_mm * 1e-3
+    inv_a2 = (2 * fc * math.sqrt(eps) / C0) ** 2 - (1.0 / L) ** 2
+    rhs = (2 * f_target_ghz * 1e9 * math.sqrt(eps) / C0) ** 2 - inv_a2
+    return l_cav_mm if rhs <= 0 else (1.0 / math.sqrt(rhs)) * 1e3
+
+
+def correct_l_cav(spec: FilterSpec, fc_meas_ghz: float, l_cav_mm: float) -> float:
+    """Cavity length that moves a measured resonance onto f0.
 
     Verified to +8 MHz on the first application; the residual is closed by
     iterating against a DRIVEN solve, since a closed cavity cannot see the
     external apertures (they pull fc down ~100 MHz).
     """
-    eps = spec.substrate.eps_r
-    fc, L = fc_meas_ghz * 1e9, l_cav_mm * 1e-3
-    inv_a2 = (2 * fc * math.sqrt(eps) / C0) ** 2 - (1.0 / L) ** 2
-    rhs = (2 * spec.f0 * math.sqrt(eps) / C0) ** 2 - inv_a2
-    return l_cav_mm if rhs <= 0 else (1.0 / math.sqrt(rhs)) * 1e3
+    return correct_l_cav_to(spec, fc_meas_ghz, l_cav_mm, spec.f0 / 1e9)
 
 
 def design_from_calibration(spec: FilterSpec, k_cal: dict, qe_cal: dict,
@@ -141,7 +149,7 @@ def run_pipeline(spec: FilterSpec, device: str = "auto", np_ranks: int = 4,
                  w_irises: list[float] | None = None,
                  w_exts: list[float] | None = None,
                  cache: bool = True, refine: bool = True,
-                 fc_trim: bool = True) -> dict:
+                 fc_trim: bool = True, mid_trim: bool = True) -> dict:
     """Full physics chain for the cascade topology. Returns the design dict.
 
     Calibrations are cached per (substrate, vias, f0) so the expensive part is
@@ -223,6 +231,15 @@ def run_pipeline(spec: FilterSpec, device: str = "auto", np_ranks: int = 4,
         # every eigenmode-level target being met.
         d["params"] = driven_fc_trim(spec, topo, d["params"], np_ranks=np_ranks)
         print(f"[pipeline] fc-trimmed -> {d['params']}", flush=True)
+
+    if mid_trim and len(_len_keys(spec.N)) >= 2:
+        # fc_trim only ever scales every cavity length by ONE common factor,
+        # so it can centre the band but can never separate the middle
+        # cavity's length from the ends' -- the physics behind the missing-
+        # pole / skewed-zero-spacing failures (see correct_middle_cavity).
+        print("[pipeline] middle-cavity correction ...", flush=True)
+        d["params"] = correct_middle_cavity(spec, topo, d["params"], np_ranks=np_ranks)
+        print(f"[pipeline] middle-trimmed -> {d['params']}", flush=True)
     return d
 
 def refine_joint(spec: FilterSpec, topo, k_target: float, w0: float, L0: float,
@@ -343,4 +360,94 @@ def driven_fc_trim(spec: FilterSpec, topo, params: dict,
 
     print(f"[fc-trim] best measured: {best_err:.1f} MHz err" if best_err is not None
           else "[fc-trim] no usable measurement", flush=True)
+    return best_p
+
+
+def correct_middle_cavity(spec: FilterSpec, topo, params: dict,
+                          spacing_tol_mhz: float = 15.0, max_it: int = 5,
+                          np_ranks: int = 4) -> dict:
+    """Separate the middle cavity's length from the end cavities', driven by
+    a real fed structure -- physics driven_fc_trim cannot supply, since it
+    scales every length by ONE common factor and so can never move the
+    middle relative to the ends.
+
+    Root cause: only the two end cavities see the external aperture and get
+    pulled by it; the closed-cavity eigenmode calibration has no aperture at
+    all and so cannot see this pull, and every stage downstream of it
+    (design_from_calibration, refine_joint, driven_fc_trim) inherits
+    identical end/middle lengths as a result. Measured failure modes: a
+    fully collapsed 2-pole response (end pair pulled together, middle pole
+    absent -- the original bug) or, once the real CPWG launch changed the
+    external coupling, a 3-zero response with two zeros nearly merged at one
+    edge and a shallow, badly-matched centre hump instead of a clean third
+    zero -- same defect, different symptom.
+
+    Correction: while the assembled response has N zeros (a real inner zero
+    to grab onto), target the midpoint of the OUTER two zeros with the mean
+    of the INNER zero(s), using the same TE101 f~1/L relation
+    driven_fc_trim's sibling correct_l_cav already uses (correct_l_cav_to),
+    applied ONLY to the middle cavity's length key so the ends stay where
+    fc-trim put them. If the response has fewer than N zeros (fully
+    collapsed -- no inner zero exists to target), there is no gradient
+    signal available from pole_shape alone, so instead alternately nudge the
+    middle length by a fixed fraction, on the physical expectation that the
+    collapse comes from the end and middle electrical lengths sitting too
+    close together under real loading; each measurement is kept only if it
+    improves (or reaches) matches_order, via the same best-measured pattern
+    driven_fc_trim uses.
+
+    No-op for N<3 (dualmode's N=2 has no middle cavity to separate; a plain
+    2-cavity cascade likewise has none).
+    """
+    from .optimize import run_driven, pole_shape, _mesh_preset, SCREEN_MESH_PRESETS
+    import numpy as np
+
+    len_keys = _len_keys(spec.N)
+    if len(len_keys) < 2:
+        return params
+    mid_key = len_keys[1]
+    p = dict(params)
+    f0 = spec.f0 / 1e9
+    mmax, mmin, hair = SCREEN_MESH_PRESETS.get(topo.name, _mesh_preset(topo.name, "CPU"))
+    best_p, best_score = dict(p), None
+
+    for it in range(1, max_it + 1):
+        r = run_driven(topo, spec, p, f"midtrim_N{spec.N}_it{it}",
+                       f0 - 0.30, f0 + 0.30, 0.005, mmax, mmin, hair,
+                       device="CPU", np_ranks=np_ranks)
+        if not r.get("ok"):
+            print(f"[mid-trim] it{it}: FAILED {r.get('err')}", flush=True)
+            break
+        shape = pole_shape(np.asarray(r["f"]), np.asarray(r["s11_db"]), spec.N)
+        zeros = sorted(shape["zeros_ghz"])
+        print(f"[mid-trim] it{it}: l_cav_mid={p[mid_key]}  "
+              f"zeros={[round(z, 4) for z in zeros]} (n={len(zeros)}, want {spec.N}) "
+              f"peaks={shape['n_peaks']}", flush=True)
+
+        err_mhz = None
+        if len(zeros) >= max(3, spec.N):
+            target = 0.5 * (zeros[0] + zeros[-1])
+            inner = zeros[1:-1]
+            actual = sum(inner) / len(inner)
+            err_mhz = (actual - target) * 1000
+
+        score = 0.0 if shape["matches_order"] else (abs(err_mhz) if err_mhz is not None else 1e9)
+        if best_score is None or score < best_score:
+            best_p, best_score = dict(p), score
+        if shape["matches_order"]:
+            print("[mid-trim] shape matches order -- done", flush=True)
+            return best_p
+
+        if err_mhz is not None and abs(err_mhz) > spacing_tol_mhz:
+            p[mid_key] = round(correct_l_cav_to(spec, actual, p[mid_key], target), 2)
+        else:
+            # Collapsed shape (fewer than N zeros): no inner-zero gradient to
+            # follow. Alternate direction each iteration so a bad first guess
+            # doesn't run the length away monotonically; best_p above still
+            # only ever keeps the best-scoring measurement.
+            step = 0.01 * p[mid_key] * (1 if it % 2 else -1)
+            p[mid_key] = round(p[mid_key] + step, 2)
+
+    print(f"[mid-trim] best measured shape score {best_score}" if best_score is not None
+          else "[mid-trim] no usable measurement", flush=True)
     return best_p

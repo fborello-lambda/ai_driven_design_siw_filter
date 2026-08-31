@@ -299,7 +299,7 @@ def cmd_synth_design(args) -> int:
     spec = _make_spec(args)
     d = run_pipeline(spec, device=args.device, np_ranks=args.np,
                      cache=not args.no_cache, refine=not args.no_refine,
-                     fc_trim=not args.no_fc_trim)
+                     fc_trim=not args.no_fc_trim, mid_trim=not args.no_mid_trim)
     if args.no_confirm:
         return 0
     topo = CascadeTopology()
@@ -462,6 +462,12 @@ def main(argv: list[str] | None = None) -> int:
                             "closed-cavity stages cannot see the external "
                             "apertures, which pull fc down ~140 MHz, so without "
                             "this trim the assembled filter is detuned.")
+    p_syn.add_argument("--no-mid-trim", action="store_true",
+                       help="skip the middle-cavity independent-length correction "
+                            "(N>=3 only). fc-trim can only scale every cavity length "
+                            "by one common factor, so without this the middle cavity "
+                            "keeps the same length as the ends -- the cause of both "
+                            "the collapsed-2-pole and skewed-zero-spacing failures.")
     p_syn.add_argument("--no-confirm", action="store_true",
                        help="assemble the design but skip the fine-mesh confirm")
     p_syn.set_defaults(func=cmd_synth_design)
