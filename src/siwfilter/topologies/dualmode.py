@@ -59,6 +59,23 @@ TAOGLAS_SMA: dict[str, float | bool | int] = {
     "gnd_stitch_offset_mm": 2.62,
 }
 
+# Real impedance-matched CPWG launch, solved 50-ohm (docs/TUNING_PLAN_2026-08-29.md
+# sec 2). Drawing-only overlay: the landed design's numbers (S11 -17.7dB,
+# IL -1.42dB, bw 318MHz in opt_dualmode_best.json) were measured under the
+# pad-only TAOGLAS_SMA above, NOT this matched gap, so this is not merged
+# into TAOGLAS_SMA/build_mesh -- doing that would silently change what
+# build_mesh simulates and invalidate those landed numbers. Use only for
+# plot_layout_2d's footprint picture (verified separately not to break the
+# match well outside f0: output/data/v20_dualmode_broadband.npz).
+TAOGLAS_CPWG_VISUAL: dict[str, float | bool | int] = {
+    **TAOGLAS_SMA,
+    "n_gnd_stitch": 6,
+    "cpwg_gap_mm": 0.2512,
+    "cpwg_y_gnd_mm": 0.8512,
+    "cpwg_y_out_mm": 3.6,
+    "cpwg_w_feed_mm": 1.2,
+}
+
 
 class DualModeTopology:
     name = "dualmode"
@@ -97,7 +114,8 @@ class DualModeTopology:
         w_ext = p.pop("w_ext", None)
         p.pop("with_sma", None)
         return _plot_layout_2d(a_mm=a, w_iris_mm=w_iris, x_iris_mm=x_iris,
-                               y_wall_mm=y_wall, w_ext_mm=w_ext, path=path, **p)
+                               y_wall_mm=y_wall, w_ext_mm=w_ext, path=path,
+                               launch=TAOGLAS_CPWG_VISUAL, **p)
 
     def board_length_mm(self, spec: FilterSpec, **params) -> float:
         a = params.get("a", A_SIW_MM)

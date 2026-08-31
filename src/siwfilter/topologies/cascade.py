@@ -31,6 +31,32 @@ _W_IRIS = (13.0, 4.0, 15.9)
 _W_EXT = (16.5, 7.0, 26.0)
 _L_TAPER = (15.73, 8.0, 26.0)
 
+# CPWG launch, matched 50-ohm (docs/TUNING_PLAN_2026-08-29.md sec 2, solved
+# not guessed): signal 1.2mm, coplanar gap 0.2512mm, ground inner edge
+# 0.8512mm -> 50.00 ohm (cpwg_gap_50ohm, Wadell/Simons conformal mapping).
+# Ground pads 0.851->3.6mm, 5mm deep; 6 stitch vias/side at +-2.62mm, fully
+# inside the copper. Real, sourceable part: Taoglas EMPCB.SMAFSTJ.B.HT.
+#
+# 2026-08-31: this was solved and verified in August but never actually
+# turned on as a default anywhere -- cascade only had a bare SMA coax stub
+# (with_sma, no ground plane at all near the launch), and even dualmode's own
+# TAOGLAS_SMA only enabled pad-only ground stitching (cpwg_gap_mm=None),
+# not the impedance-matched gap. This is the first place either topology
+# actually uses the solved CPWG numbers by default.
+TAOGLAS_SMA: dict[str, float | bool | int] = {
+    "sma_rin_mm": 0.38,
+    "sma_rout_mm": 1.2639,
+    "sma_eps_r": 2.08,
+    "sma_tand": 4.0e-4,
+    "gnd_stitch": True,
+    "n_gnd_stitch": 6,
+    "gnd_stitch_offset_mm": 2.62,
+    "cpwg_gap_mm": 0.2512,
+    "cpwg_y_gnd_mm": 0.8512,
+    "cpwg_y_out_mm": 3.6,
+    "cpwg_w_feed_mm": 1.2,
+}
+
 
 def _n_len_params(N: int) -> int:
     return math.ceil(N / 2)
@@ -136,6 +162,8 @@ class CascadeTopology:
         l_taper = p.pop("l_taper", None)
         w_ms = p.pop("w_ms", None)
         p.setdefault("with_sma", True)  # real connector by default (see HANDOFF)
+        for k, v in TAOGLAS_SMA.items():   # caller can still override any of these
+            p.setdefault(k, v)
         res = _build_mesh(spec=spec, out_name=out_name, l_cavs_mm=l_cavs_mm,
                           w_irises_mm=iris_widths_mm, w_ext_mm=w_ext,
                           l_taper_mm=l_taper, w_ms_mm=w_ms, **p)
@@ -165,7 +193,7 @@ class CascadeTopology:
 
     def plot_layout_2d(self, spec: FilterSpec, path: str, **params) -> str:
         g = self._geometry(spec, params)
-        plot_layout(g, path)
+        plot_layout(g, path, launch=TAOGLAS_SMA)
         return path
 
     def board_length_mm(self, spec: FilterSpec, **params) -> float:

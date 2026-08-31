@@ -31,8 +31,9 @@ import math
 import gmsh
 import numpy as np
 
-from .config import SPEC, FilterSpec, out_data
+from .config import SPEC, FilterSpec, out_data, VIA_PRESETS
 from .siw_geometry import build_geometry
+from .palace_dualmode_driven import feed_trace_poly, gnd_stitch_layout
 
 MM = 1e3
 
@@ -58,6 +59,17 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
                with_sma: bool = False, sma_len_mm: float = 6.0,
                sma_rin_mm: float = 0.35, sma_rout_mm: float = 1.164,
                sma_eps_r: float = 2.08, sma_tand: float = 4.0e-4,
+               gnd_stitch: bool = False, n_gnd_stitch: int = 3,
+               gnd_stitch_offset_mm: float = 2.62,
+               gnd_stitch_pitch_mm: float = VIA_PRESETS["gnd_stitch"]["p_mm"],
+               gnd_via_d_mm: float = VIA_PRESETS["gnd_stitch"]["d_mm"],
+               gnd_clearance_mm: float = 0.3,
+               cpwg_gap_mm: float | None = None,
+               cpwg_y_gnd_mm: float | None = None,
+               cpwg_y_out_mm: float | None = None,
+               cpwg_w_feed_mm: float | None = None,
+               cpwg_len_mm: float = 5.0,
+               cpwg_taper_mm: float = 4.0,
                preview: bool = False, render_png: str | None = None,
                spec: FilterSpec | None = None) -> dict:
     """
@@ -92,6 +104,16 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     why grounding matters: a wave port dropped straight on the microstrip
     self-normalizes to whatever the local trace impedance is, so it can't
     reveal a true 50-ohm mismatch).
+
+    gnd_stitch=True adds the connector's coplanar ground pads + stitching vias
+    (Taoglas EMPCB.SMAFSTJ.B.HT footprint), same construction as
+    palace_dualmode_driven.build_mesh -- see gnd_stitch_layout for the
+    geometry. cpwg_gap_mm (+ cpwg_y_gnd_mm/cpwg_y_out_mm/cpwg_w_feed_mm) turns
+    the pads into a real impedance-matched CPWG launch instead of a pad-only
+    approximation; the solved 50-ohm values are in
+    docs/TUNING_PLAN_2026-08-29.md sec 2 (gap 0.2512mm, ground inner edge
+    0.8512mm, feed 1.2mm). Both default off/None: with them unset the model
+    is byte-identical to before.
     """
     spec = spec or SPEC
     g = build_geometry(spec)
@@ -150,19 +172,57 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
             for x, y in via_xy]
 
     # ---- microstrip trace sheets at z=h (taper+feed merged outline) ----
-    def trace_surface(sign_out: float, x_in: float, x_taper: float,
-                      x_siw: float) -> int:
+    def trace_surface(x_in: float, x_taper: float, x_siw: float,
+                      w_pad: float | None = None,
+                      x_pad_end: float | None = None,
+                      x_pad_hold: float | None = None) -> int:
         # outline: feed end -> taper -> full a_siw width at SIW edge -> back
-        pts = [(x_in, +W / 2), (x_taper, +W / 2), (x_siw, +half),
-               (x_siw, -half), (x_taper, -W / 2), (x_in, -W / 2)]
+        pts = list(feed_trace_poly(x_in, x_taper, x_siw, W, -half, half,
+                                   w_pad, x_pad_end, x_pad_hold))
         tags = [occ.addPoint(px, py, h) for px, py in pts]
         lines = [occ.addLine(tags[i], tags[(i + 1) % len(tags)])
                  for i in range(len(tags))]
         wire = occ.addCurveLoop(lines)
         return occ.addPlaneSurface([wire])
 
-    trace_in = (2, trace_surface(-1.0, X0, -Lt, 0.0))
-    trace_out = (2, trace_surface(+1.0, X1, Li + Lt, Li))
+    # CPWG launch feed width: inside the coplanar section the 50-ohm width is
+    # set by the CPWG gap (not the microstrip width), so the feed is built at
+    # the CPWG width and tapered to the microstrip width where the coplanar
+    # grounds end -- same construction as palace_dualmode_driven.py.
+    _wp = cpwg_w_feed_mm if (cpwg_gap_mm is not None) else None
+    _xp_in = X0 + (cpwg_len_mm + cpwg_taper_mm) if _wp is not None else None
+    _xp_out = X1 - (cpwg_len_mm + cpwg_taper_mm) if _wp is not None else None
+    _xh_in = X0 + cpwg_len_mm if _wp is not None else None
+    _xh_out = X1 - cpwg_len_mm if _wp is not None else None
+    trace_in = (2, trace_surface(X0, -Lt, 0.0, _wp, _xp_in, _xh_in))
+    trace_out = (2, trace_surface(X1, Li + Lt, Li, _wp, _xp_out, _xh_out))
+
+    # ---- connector ground pads + stitching vias (Taoglas CPWG footprint) --
+    # Same geometry helper palace_dualmode_driven.py uses, so the meshed
+    # model and every 2D drawing agree. Off by default (gnd_stitch=False):
+    # nothing added, model byte-identical to before.
+    gnd_polys: list[np.ndarray] = []
+    gnd_surfs: list[tuple[int, int]] = []
+    gnd_via_centres: list[tuple[float, float]] = []
+    if gnd_stitch:
+        rg = gnd_via_d_mm / 2.0
+        gnd_polys, gnd_via_centres = gnd_stitch_layout(
+            X0, X1, W, ym, -ym,
+            n_gnd_stitch=n_gnd_stitch,
+            gnd_stitch_offset_mm=gnd_stitch_offset_mm,
+            gnd_stitch_pitch_mm=gnd_stitch_pitch_mm,
+            gnd_via_d_mm=gnd_via_d_mm,
+            gnd_clearance_mm=gnd_clearance_mm,
+            cpwg_gap_mm=cpwg_gap_mm,
+            cpwg_y_gnd_mm=cpwg_y_gnd_mm,
+            cpwg_y_out_mm=cpwg_y_out_mm,
+            cpwg_len_mm=cpwg_len_mm,
+            cpwg_taper_mm=cpwg_taper_mm)
+        for poly in gnd_polys:
+            pts = [occ.addPoint(px, py, h) for px, py in poly]
+            ln = [occ.addLine(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
+            gnd_surfs.append((2, occ.addPlaneSurface([occ.addCurveLoop(ln)])))
+        cyls += [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, rg)) for x, y in gnd_via_centres]
 
     # ---- SMA coax launch stubs (standard RG-401/SMA size: pin r=sma_rin_mm,
     # PTFE r=sma_rout_mm, eps_r~2.08 -> ~50 ohm by construction). Bolted onto
@@ -221,10 +281,10 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     occ.synchronize()
     sub_tags = [(d, t) for (d, t) in cut_out if d == 3]
     occ.fragment(sub_tags + ptfe_vols + [air_in, air_out],
-                 [trace_in, trace_out] + sma_caps)
+                 [trace_in, trace_out] + sma_caps + gnd_surfs)
     occ.synchronize()
 
-    via_centres = [(x * MM, y * MM) for x, y in via_xy]
+    via_centres = [(x * MM, y * MM) for x, y in via_xy] + gnd_via_centres
 
     # ---- identify volumes: dielectric (slab 0<z<h), air (z>h), or the SMA
     # PTFE stubs (anything entirely outside the board footprint x<X0/x>X1).
@@ -246,11 +306,13 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     if sma_diel:
         gmsh.model.addPhysicalGroup(3, sma_diel, tag=3, name="sma_ptfe")
 
-    # trace outlines (z=h, in mm) for point-in-polygon metal test
+    # trace outlines (z=h, in mm) for point-in-polygon metal test. The CPWG
+    # pad is narrower than W, not wider (see docstring), so testing against
+    # the constant-W outline (no pad) is a safe over-approximation -- same
+    # simplification palace_dualmode_driven.py's classification uses.
     def _outline(x_in, x_taper, x_siw):
-        return np.array([(x_in, +W / 2), (x_taper, +W / 2), (x_siw, +half),
-                         (x_siw, -half), (x_taper, -W / 2), (x_in, -W / 2)])
-    trace_polys = [_outline(X0, -Lt, 0.0), _outline(X1, Li + Lt, Li)]
+        return feed_trace_poly(x_in, x_taper, x_siw, W, -half, half)
+    trace_polys = [_outline(X0, -Lt, 0.0), _outline(X1, Li + Lt, Li)] + gnd_polys
 
     def _in_poly(px, py, poly) -> bool:
         n = len(poly); inside = False; j = n - 1
@@ -393,8 +455,8 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
         print(f"\n--- full-filter driven mesh ---")
         print(f"  box x[{X0:.1f},{X1:.1f}] y[{-ym:.1f},{ym:.1f}] z[0,{h:.2f}] "
               f"+ air {Hair:.1f} over feeds")
-        print(f"  vias={len(via_xy)}  diel_vols={len(diel_clean)} "
-              f"air_vols={len(air_vols)}")
+        print(f"  vias={len(via_xy)}  gnd_stitch_vias={len(gnd_via_centres)} "
+              f"diel_vols={len(diel_clean)}  air_vols={len(air_vols)}")
         print(f"  faces: pec={len(pec)} port_in={len(wave_in)} "
               f"port_out={len(wave_out)} absorbing={len(absorbing)}")
         print(f"  nodes={nnode:,}  tets={ntet:,}")
@@ -421,9 +483,18 @@ if __name__ == "__main__":
     ap.add_argument("--sma", action="store_true",
                     help="replace the microstrip wave ports with SMA coax launches")
     ap.add_argument("--sma-len", type=float, default=6.0, help="coax stub length mm")
+    ap.add_argument("--gnd-stitch", action="store_true",
+                    help="add connector ground pads + stitching vias (Taoglas footprint)")
+    ap.add_argument("--cpwg", action="store_true",
+                    help="real impedance-matched CPWG launch (solved values, "
+                         "docs/TUNING_PLAN_2026-08-29.md sec 2); implies --gnd-stitch")
     ap.add_argument("--preview", action="store_true",
                     help="open the Gmsh GUI (color-coded groups) instead of meshing")
     args = ap.parse_args()
+    cpwg_kwargs = (dict(cpwg_gap_mm=0.2512, cpwg_y_gnd_mm=0.8512,
+                        cpwg_y_out_mm=3.6, cpwg_w_feed_mm=1.2, n_gnd_stitch=6)
+                   if args.cpwg else {})
     build_mesh(mesh_max=args.max, mesh_min=args.min, h_air_factor=args.hair,
                with_wext=not args.no_wext, out_name=args.out,
-               with_sma=args.sma, sma_len_mm=args.sma_len, preview=args.preview)
+               with_sma=args.sma, sma_len_mm=args.sma_len, preview=args.preview,
+               gnd_stitch=args.gnd_stitch or args.cpwg, **cpwg_kwargs)

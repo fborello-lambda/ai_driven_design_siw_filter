@@ -19,8 +19,46 @@ from matplotlib.patches import Circle, Polygon, Rectangle
 
 from .config import SPEC, FilterSpec, out_img, out_data
 from .siw_geometry import Geometry, build_geometry
+from .palace_dualmode_driven import gnd_stitch_layout
 
 MM = 1e3  # metres -> mm for plotting/CSV
+
+
+def _draw_launch_footprint(ax, g: Geometry, launch: dict) -> None:
+    """Overlay the connector ground pads, stitching vias and pin -- same
+    geometry Palace actually meshes (gnd_stitch_layout, shared with
+    palace_driven.py/palace_dualmode_driven.py) so this drawing can't drift
+    from what gets simulated. `launch` is a TAOGLAS_SMA-style kwargs dict:
+    sma_rin_mm, gnd_stitch_offset_mm/pitch_mm, gnd_via_d_mm, cpwg_gap_mm,
+    cpwg_y_gnd_mm, cpwg_y_out_mm, cpwg_len_mm, cpwg_taper_mm."""
+    W = g.W_ms * MM
+    half = g.a_siw / 2 * MM
+    ym = half + 3.0
+    X0 = -(g.L_taper + g.L_feed) * MM
+    X1 = (g.L_inner + g.L_taper + g.L_feed) * MM
+    polys, via_centres = gnd_stitch_layout(
+        X0, X1, W, ym, -ym,
+        n_gnd_stitch=launch.get("n_gnd_stitch", 3),
+        gnd_stitch_offset_mm=launch.get("gnd_stitch_offset_mm", 2.62),
+        gnd_stitch_pitch_mm=launch.get("gnd_stitch_pitch_mm", 1.2),
+        gnd_via_d_mm=launch.get("gnd_via_d_mm", 0.6),
+        gnd_clearance_mm=launch.get("gnd_clearance_mm", 0.3),
+        cpwg_gap_mm=launch.get("cpwg_gap_mm"),
+        cpwg_y_gnd_mm=launch.get("cpwg_y_gnd_mm"),
+        cpwg_y_out_mm=launch.get("cpwg_y_out_mm"),
+        cpwg_len_mm=launch.get("cpwg_len_mm", 5.0),
+        cpwg_taper_mm=launch.get("cpwg_taper_mm", 4.0))
+    for poly in polys:
+        ax.add_patch(Polygon(poly, closed=True, fc="#7a8c7a", ec="#3d4a3d",
+                             lw=0.6, alpha=0.85, zorder=4))
+    rg = launch.get("gnd_via_d_mm", 0.6) / 2.0
+    for x, y in via_centres:
+        ax.add_patch(Circle((x, y), rg, fc="#0a5c0a", ec="none", zorder=5))
+    rin = launch.get("sma_rin_mm")
+    if rin:
+        for x_edge in (X0, X1):
+            ax.add_patch(Circle((x_edge, 0.0), rin, fc="none", ec="#c00",
+                                lw=1.2, zorder=6))
 
 
 def export_via_csv(g: Geometry, path: str = "via_coords.csv") -> None:
@@ -34,7 +72,7 @@ def export_via_csv(g: Geometry, path: str = "via_coords.csv") -> None:
     print(f"Wrote {path} ({len(g.vias)} vias)")
 
 
-def plot_layout(g: Geometry, path: str = "layout.png") -> None:
+def plot_layout(g: Geometry, path: str = "layout.png", launch: dict | None = None) -> None:
     spec, sub = g.spec, g.spec.substrate
     fig, ax = plt.subplots(figsize=(13, 4.5))
 
@@ -78,6 +116,9 @@ def plot_layout(g: Geometry, path: str = "layout.png") -> None:
         for x_face in (0.0, g.L_inner * MM):
             _dim_v(ax, x_face, -we / 2, we / 2, f"w_ext={we:.1f}",
                    color="#b00", off=0)
+
+    if launch:
+        _draw_launch_footprint(ax, g, launch)
 
     ax.set_xlabel("x [mm]")
     ax.set_ylabel("y [mm]")

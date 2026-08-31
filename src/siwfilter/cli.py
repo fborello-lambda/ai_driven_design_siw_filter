@@ -336,12 +336,16 @@ def cmd_layout(args) -> int:
     spec = _make_spec(args)
     params = _parse_params(args.params) if args.params else {
         k: v[0] for k, v in topo.param_space(spec).items()}
+    # Include N in the prefix: two different orders of the same topology
+    # (e.g. cascade N=3 vs N=4) are different geometries and must not share
+    # a filename, or the second overwrites the first's baseline picture.
+    prefix = f"layout_{args.topology}_N{spec.N}"
     r = None
     if args.render is not None:
-        _artifacts(topo, spec, params, f"layout_{args.topology}")
+        _artifacts(topo, spec, params, prefix)
     else:
         from .config import out_img
-        path = out_img(f"layout_{args.topology}_2d.png")
+        path = out_img(f"{prefix}_2d.png")
         topo.plot_layout_2d(spec, path, **params)
     print(f"params: {params}")
     return 0

@@ -816,7 +816,8 @@ def plot_layout_2d(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0,
                    d_via_mm: float = D_VIA_MM,
                    p_via_mm: float = P_VIA_MM, w_ms_mm: float | None = None,
                    l_taper_mm: float | None = None, l_feed_mm: float | None = None,
-                   w_ext_mm: float | None = None, path: str = "dualmode_layout_2d.png") -> str:
+                   w_ext_mm: float | None = None, path: str = "dualmode_layout_2d.png",
+                   launch: dict | None = None) -> str:
     """Fast pure-matplotlib top view (no gmsh/mesh needed) -- same style as
     layout_plot.py: vias as circles, feed traces as filled rectangles,
     internal iris highlighted + dimensioned."""
@@ -866,6 +867,33 @@ def plot_layout_2d(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0,
     ax.text(2, we / 2 + 2, f"w_ext={we:.2f}mm", ha="left", fontsize=8, color="#a06d12")
     ax.text(-Xf / 2, half + 2, f"W_ms={W:.3f}mm, L_taper={Lt:.1f}mm", ha="center",
            fontsize=8, color="#a06d12")
+
+    if launch:
+        ym = half + 3.0
+        X0, X1 = -Xf, a_mm + Xf
+        polys, via_centres = gnd_stitch_layout(
+            X0, X1, W, ym, -ym,
+            n_gnd_stitch=launch.get("n_gnd_stitch", 3),
+            gnd_stitch_offset_mm=launch.get("gnd_stitch_offset_mm", 2.62),
+            gnd_stitch_pitch_mm=launch.get("gnd_stitch_pitch_mm", 1.2),
+            gnd_via_d_mm=launch.get("gnd_via_d_mm", 0.6),
+            gnd_clearance_mm=launch.get("gnd_clearance_mm", 0.3),
+            cpwg_gap_mm=launch.get("cpwg_gap_mm"),
+            cpwg_y_gnd_mm=launch.get("cpwg_y_gnd_mm"),
+            cpwg_y_out_mm=launch.get("cpwg_y_out_mm"),
+            cpwg_len_mm=launch.get("cpwg_len_mm", 5.0),
+            cpwg_taper_mm=launch.get("cpwg_taper_mm", 4.0))
+        for poly in polys:
+            ax.add_patch(Polygon(poly, closed=True, fc="#7a8c7a", ec="#3d4a3d",
+                                 lw=0.6, alpha=0.85, zorder=4))
+        rg = launch.get("gnd_via_d_mm", 0.6) / 2.0
+        for x, y in via_centres:
+            ax.add_patch(Circle((x, y), rg, fc="#0a5c0a", ec="none", zorder=5))
+        rin = launch.get("sma_rin_mm")
+        if rin:
+            for x_edge in (X0, X1):
+                ax.add_patch(Circle((x_edge, 0.0), rin, fc="none", ec="#c00",
+                                    lw=1.2, zorder=6))
 
     ax.set_xlabel("x [mm]")
     ax.set_ylabel("y [mm]")
