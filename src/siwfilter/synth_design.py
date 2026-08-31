@@ -149,14 +149,33 @@ def run_pipeline(spec: FilterSpec, device: str = "auto", np_ranks: int = 4,
                  w_irises: list[float] | None = None,
                  w_exts: list[float] | None = None,
                  cache: bool = True, refine: bool = True,
-                 fc_trim: bool = True, mid_trim: bool = True) -> dict:
+                 fc_trim: bool = True, mid_trim: bool = True,
+                 seed_params: dict | None = None) -> dict:
     """Full physics chain for the cascade topology. Returns the design dict.
 
     Calibrations are cached per (substrate, vias, f0) so the expensive part is
     paid once and reused across orders -- N=3 and N=4 share both curves,
     differing only in the targets they invert.
+
+    seed_params: skip calibration/invert/refine entirely and start fc_trim/
+    mid_trim directly from this params dict. For resuming a known-good
+    fc-trimmed point (calibration + refine are fully deterministic given the
+    same calibration cache, so redoing them just to re-tune mid_trim's
+    parameters wastes real driven-solve time) or for retrying mid_trim alone
+    with different tuning.
     """
     topo = CascadeTopology()
+    if seed_params is not None:
+        d = {"params": dict(seed_params)}
+        if fc_trim:
+            d["params"] = driven_fc_trim(spec, topo, d["params"], np_ranks=np_ranks)
+            print(f"[pipeline] fc-trimmed -> {d['params']}", flush=True)
+        if mid_trim and len(_len_keys(spec.N)) >= 2:
+            print("[pipeline] middle-cavity correction ...", flush=True)
+            d["params"] = correct_middle_cavity(spec, topo, d["params"], np_ranks=np_ranks)
+            print(f"[pipeline] middle-trimmed -> {d['params']}", flush=True)
+        return d
+
     key = (f"{spec.substrate_name}_d{spec.d_via*1e3:.2f}_p{spec.p_via*1e3:.2f}"
            f"_f{spec.f0/1e9:.3f}")
     path = out_data("cascade_pipeline_cal.json")

@@ -297,9 +297,11 @@ def cmd_synth_design(args) -> int:
     from .topologies.cascade import CascadeTopology
 
     spec = _make_spec(args)
+    seed_params = _parse_params(args.seed_params) if args.seed_params else None
     d = run_pipeline(spec, device=args.device, np_ranks=args.np,
                      cache=not args.no_cache, refine=not args.no_refine,
-                     fc_trim=not args.no_fc_trim, mid_trim=not args.no_mid_trim)
+                     fc_trim=not args.no_fc_trim, mid_trim=not args.no_mid_trim,
+                     seed_params=seed_params)
     if args.no_confirm:
         return 0
     topo = CascadeTopology()
@@ -470,6 +472,13 @@ def main(argv: list[str] | None = None) -> int:
                             "the collapsed-2-pole and skewed-zero-spacing failures.")
     p_syn.add_argument("--no-confirm", action="store_true",
                        help="assemble the design but skip the fine-mesh confirm")
+    p_syn.add_argument("--seed-params", default=None,
+                       help="k=v,k=v,... -- skip calibration/invert/refine entirely and "
+                            "start fc-trim/mid-trim directly from this params dict. For "
+                            "resuming a known fc-trimmed point (calibration+refine are "
+                            "deterministic given the same cache, so redoing them just to "
+                            "retry mid-trim wastes real driven-solve time) or retrying "
+                            "mid-trim alone after a tuning change.")
     p_syn.set_defaults(func=cmd_synth_design)
 
     p_cal = sub.add_parser("calibrate",
