@@ -476,10 +476,27 @@ def correct_middle_cavity(spec: FilterSpec, topo, params: dict,
             L_lin = correct_l_cav_to(spec, actual, L, target)
             L_new = L + damping * (L_lin - L)
         else:
-            # No count history and no usable spacing signal (first iteration
-            # already collapsed): a small probe step, alternating so a bad
-            # first guess doesn't run the length away monotonically.
-            L_new = L + 0.01 * L * (1 if it % 2 else -1)
+            # No usable spacing signal, and the zero count did NOT change
+            # from the previous try (or this is the very first attempt): a
+            # probe step that EXPANDS every time the same count recurs,
+            # alternating direction from the length where the current streak
+            # of that count started. A FIXED-size alternating step gets
+            # stuck: measured on N=4, a flat +-1% step cycled 35.75mm <->
+            # 36.11mm forever (both give the same collapsed 3-zero count),
+            # burning the whole iteration budget without ever reaching a
+            # length where the count differs, so bisection could never
+            # trigger. Doubling the step on each repeat guarantees the probe
+            # eventually lands somewhere with a different count.
+            streak = 1
+            for (_, n) in reversed(hist[:-1]):
+                if n == hist[-1][1]:
+                    streak += 1
+                else:
+                    break
+            base_L = hist[-streak][0]
+            frac = 0.01 * (2 ** (streak - 1))
+            sign = 1.0 if streak % 2 == 1 else -1.0
+            L_new = base_L + sign * frac * base_L
         p[mid_key] = round(L_new, 2)
 
     print(f"[mid-trim] best measured shape score {best_score}" if best_score is not None
