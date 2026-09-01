@@ -406,3 +406,43 @@ posts, top-copper slots, quad-mode cavities) are already falsified there with
 real simulation data. The one methodological gap, if it is ever revisited:
 no attempt directly measured per-mode external Q; everything was inferred from
 S11 curve shape.
+
+## 10c. Status update 2026-09-01 — fabrication decision made; see `docs/ROADMAP_2026-09-01.md`
+
+**Dual-mode N=2 is the confirmed fabrication design**, chosen over cascade
+N=3/N=4 by a direct head-to-head comparison (`siw compare-designs`, new CLI
+subcommand this session; figures at `docs/design_comparison_sparams.png` /
+`docs/design_comparison_board_scale.png`). It wins on every axis except
+bandwidth (still the known 318 vs 143.5MHz open item) — both cascades carry
+a second passband nearly as strong as the intended one (0–8GHz broadband
+check), which the dual-mode design does not. Cascade work is **parked**, not
+abandoned; its numbers stand as a real comparative/negative result for the
+paper, but no further tuning goes into it unless this decision is revisited.
+
+**Two bugs found and fixed this session, both worth knowing before trusting
+old fab-study numbers:**
+- `topologies/dualmode.py`'s `build_mesh()` adapter silently dropped
+  `soldermask`/`via_conductivity` before they reached the Palace config —
+  both fab studies (soldermask, via-conductivity) had been running with the
+  feature no-op'd and still producing plausible-looking numbers. Fixed
+  (`13af8cc`). Soldermask re-measured for real: S11w −17.69→−13.59dB
+  (~4dB real detuning), bandwidth −5% (318→303MHz, not the old invalid
+  entry's claimed +28%), IL negligible. Golden entry corrected.
+- **Structural finding, not a quick fix**: Palace's `Boundaries.Conductivity`
+  (surface-impedance BC) only works on true one-sided *exterior* faces
+  (confirmed in `~/palace/docs/src/reference.md` and Palace's own MFEM
+  warning). This project's vias — and the copper trace — are internal,
+  two-sided PEC sheets cut through one continuous dielectric/air volume: a
+  valid, cheap trick for ideal PEC, invalid for a lossy-conductor BC. This
+  blocks both the filled-vs-unfilled via study (task #43) and a
+  newly-requested ENIG-vs-OSP finish comparison (task #47) on the same
+  wall. Fixing it needs real excluded 3D conductor geometry (task #46),
+  not another boundary-tag patch — see `docs/ROADMAP_2026-09-01.md` §1c for
+  the full reasoning. **Do not re-attempt this via a boundary-tag-only
+  patch**; it silently reproduces the same invalid-BC result (an
+  implausible −7.8dB IL on solid copper) found this session.
+
+See `docs/ROADMAP_2026-09-01.md` for the full scoped plan, including the
+soldermask-off/OSP cell of the finish study that IS simulatable now (OSP is
+a thin dielectric, not a conductor — same machinery as the soldermask
+study), pending real OSP εr/tanδ values.
