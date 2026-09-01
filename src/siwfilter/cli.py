@@ -274,13 +274,19 @@ def cmd_design(args) -> int:
     if args.fine_sweep is not None:
         f0, f1, step_hz = args.fine_sweep
         fine_sweep = (f0 / 1e9, f1 / 1e9, step_hz / 1e9)
+    # Include N in every output name: log_name/best_json_name default to
+    # opt_{topology.name}_*, which has no N in it, so an N=4 run silently
+    # overwrote an N=3 run's saved best/log/artifacts (measured this
+    # session -- lost the N=3 search's raw result this way).
+    prefix = f"{args.topology}_N{spec.N}"
     result = optimize(topo, spec, budget=args.evals, device=args.device, np_ranks=args.np,
-                      fine_sweep=fine_sweep, patience=args.patience)
+                      fine_sweep=fine_sweep, patience=args.patience,
+                      log_name=f"opt_{prefix}_log.csv", best_json_name=f"opt_{prefix}_best.json")
     print(f"\nBest design: {result['params']}")
     from .optimize import evaluate
     r = evaluate(topo, spec, result["params"], fine=True, tag_prefix="designfinal",
                 device=args.device, np_ranks=args.np)
-    _artifacts(topo, spec, result["params"], f"design_{args.topology}", r)
+    _artifacts(topo, spec, result["params"], f"design_{prefix}", r)
     return 0
 
 
@@ -403,8 +409,12 @@ def cmd_sweep(args) -> int:
     else:
         params = _parse_params(args.params)
 
+    # Include N: two orders of the same topology (e.g. cascade N=3 vs N=4)
+    # share a mesh tag without this and silently overwrite each other's
+    # plot/JSON (measured this session -- lost an N=3 sweep result this way).
+    prefix = f"sweep_{args.topology}_N{spec.N}"
     mmax, mmin, hair = _mesh_preset(topo.name, args.device)
-    r = run_driven(topo, spec, params, f"sweep_{args.topology}",
+    r = run_driven(topo, spec, params, prefix,
                    args.fmin, args.fmax, args.step, mmax, mmin, hair,
                    device=args.device, np_ranks=args.np)
     if not r.get("ok"):
@@ -412,9 +422,9 @@ def cmd_sweep(args) -> int:
         return 1
     print(f"fc={r.get('fc_3db', r['fc']):.3f}GHz IL={r['il']:.2f}dB "
           f"BW={r['bw']:.0f}MHz S11w={r['s11w']:.2f}dB")
-    plot_comparison({f"{args.topology} sweep": r}, spec, out_img(f"sweep_{args.topology}.png"))
+    plot_comparison({f"{args.topology} sweep": r}, spec, out_img(f"{prefix}.png"))
     from .config import out_data
-    sparams_path = out_data(f"sweep_{args.topology}_sparams.json")
+    sparams_path = out_data(f"{prefix}_sparams.json")
     json.dump({"f_ghz": list(r["f"]), "s11_db": list(r["s11_db"]),
               "s21_db": list(r["s21_db"]), "params": params,
               "fmin": args.fmin, "fmax": args.fmax, "step": args.step},
