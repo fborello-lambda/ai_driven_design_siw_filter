@@ -24,10 +24,13 @@ import shutil
 import subprocess
 import sys
 
+import json
+
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 import skrf as rf
 
 from .config import OUTPUT_DIR, data_path, out_s2p, out_img
@@ -156,6 +159,109 @@ def build_cst_v2_compare() -> bool:
     out = os.path.join(REPORT_DIR, "compare_cst_v2.png")
     fig.tight_layout(); fig.savefig(out, dpi=140)
     print(f"  compare_cst_v2.png -> {REPORT_DIR}")
+    return True
+
+
+def build_design_comparison(golden_paths: list[str], f0_ghz: float = 2.87,
+                            fbw: float = 0.05, spec_db: float = -16.0,
+                            out_name: str = "design_comparison",
+                            labels: list[str] | None = None) -> bool:
+    """Fabrication-decision comparison across an arbitrary list of golden
+    design entries (golden/<topology_N>/<stem>.json, each needing its
+    companion <stem>.s11s21.json for the raw sweep).
+
+    Two figures: (1) S11/S21 for every design on IDENTICAL x/y axes -- the
+    earlier ad-hoc version of this plot mixed a leftover narrow sweep window
+    for one design against a proper wide one for the others, which made the
+    designs look qualitatively different rather than letting the real
+    performance gap show; (2) board footprints drawn to true relative scale,
+    since each topology's own layout plot auto-scales its own figure and so
+    never shows which design is actually bigger.
+    """
+    from .config import FilterSpec
+    from .topologies import REGISTRY
+
+    entries = []
+    for i, p in enumerate(golden_paths):
+        stem = p[:-len(".json")] if p.endswith(".json") else p
+        s11s21_path = stem + ".s11s21.json"
+        if not (os.path.exists(p) and os.path.exists(s11s21_path)):
+            print(f"  (skip {p} -- missing golden json or companion .s11s21.json)")
+            continue
+        d = json.load(open(p))
+        sd = json.load(open(s11s21_path))
+        m = d.get("metrics", {})
+        # Whether a design is "landed" vs "best known" isn't reliably
+        # inferable from the golden schema (the landed dualmode N=2 entry
+        # still carries its own known_open_item, the bandwidth gap) -- let
+        # the caller supply labels; default to a bare topology/N tag.
+        title = labels[i] if labels and i < len(labels) else f"{d.get('topology', '?')} N={d.get('N', '?')}"
+        board_mm = m.get("board_length_mm")
+        if board_mm is None:
+            try:
+                topo_obj = REGISTRY[d["topology"]]
+                spec = FilterSpec(N=d["N"])
+                board_mm = topo_obj.board_length_mm(spec, **d["params"])
+            except Exception:
+                board_mm = float("nan")
+        entries.append(dict(title=title, f=sd["f_ghz"], s11=sd["s11_db"], s21=sd["s21_db"],
+                            s11w=m.get("s11w_db", float("nan")), board_mm=board_mm))
+    if not entries:
+        print("  (skip design comparison -- no valid golden entries)")
+        return False
+
+    colors = plt.cm.tab10.colors
+    xlim = (min(min(e["f"]) for e in entries), max(max(e["f"]) for e in entries))
+
+    fig, axes = plt.subplots(len(entries), 2, figsize=(12, 3 * len(entries)), sharex=True,
+                             squeeze=False)
+    for row, e in enumerate(entries):
+        color = colors[row % len(colors)]
+        ax21, ax11 = axes[row]
+        for ax in (ax21, ax11):
+            ax.axvspan(f0_ghz * (1 - fbw / 2), f0_ghz * (1 + fbw / 2), color="green", alpha=0.08)
+            ax.axhline(spec_db, color="gray", ls=":", lw=1)
+            ax.set_xlim(*xlim); ax.set_ylim(-40, 2); ax.grid(alpha=0.3)
+        ax21.plot(e["f"], e["s21"], color=color, lw=1.6)
+        ax21.set_ylabel("|S21| (dB)")
+        ax21.set_title(f"{e['title']}  --  S11w={e['s11w']:.1f}dB  board={e['board_mm']:.0f}mm",
+                       loc="left", fontsize=10)
+        ax11.plot(e["f"], e["s11"], color=color, lw=1.6)
+        ax11.set_ylabel("|S11| (dB)")
+    axes[-1][0].set_xlabel("Frequency (GHz)")
+    axes[-1][1].set_xlabel("Frequency (GHz)")
+    fig.suptitle(f"Design comparison, same axes/window "
+                f"(green={fbw * 100:.0f}% FBW target, dotted={spec_db:.0f}dB spec)")
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    out1 = out_img(f"{out_name}_sparams.png")
+    fig.savefig(out1, dpi=140)
+    plt.close(fig)
+    shutil.copy2(out1, os.path.join(REPORT_DIR, f"{out_name}_sparams.png"))
+    print(f"  {out_name}_sparams.png -> {REPORT_DIR}")
+
+    fig2, ax2 = plt.subplots(figsize=(12, 1.2 + 1.6 * len(entries)))
+    y0, gap, h = 0.0, 18.0, 12.0
+    maxlen = max(e["board_mm"] for e in entries)
+    for row, e in enumerate(entries):
+        color = colors[row % len(colors)]
+        ax2.add_patch(Rectangle((0, y0), e["board_mm"], h, fill=True, fc=color, alpha=0.25,
+                                ec=color, lw=1.5))
+        ax2.text(e["board_mm"] + 0.02 * maxlen, y0 + h / 2,
+                 f"{e['title']}\n{e['board_mm']:.0f}mm, S11w={e['s11w']:.1f}dB",
+                 va="center", fontsize=9)
+        y0 += gap
+    ax2.set_xlim(0, maxlen * 1.5)
+    ax2.set_ylim(-6, y0)
+    ax2.set_yticks([])
+    ax2.set_xlabel("Board length (mm)")
+    ax2.set_title("Board footprint, true relative scale")
+    ax2.grid(axis="x", alpha=0.3)
+    fig2.tight_layout()
+    out2 = out_img(f"{out_name}_board_scale.png")
+    fig2.savefig(out2, dpi=140)
+    plt.close(fig2)
+    shutil.copy2(out2, os.path.join(REPORT_DIR, f"{out_name}_board_scale.png"))
+    print(f"  {out_name}_board_scale.png -> {REPORT_DIR}")
     return True
 
 

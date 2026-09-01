@@ -28,6 +28,10 @@ Plus AI-driven design subcommands (see HANDOFF.md), all Palace/Topology-based:
     design --topology ...       : full Bayesian search for a new design
     layout --topology ...       : fast layout-only sanity check (no solve)
     sweep  --topology ...       : wideband sweep of an existing design
+    compare-designs --golden .. : fabrication-decision comparison across an
+                                   arbitrary list of golden/ design entries --
+                                   S11/S21 on identical axes + true-to-scale
+                                   board footprints (report.build_design_comparison)
 
 Examples:
     siw                              # light pipeline (synth..report)
@@ -433,6 +437,14 @@ def cmd_sweep(args) -> int:
     return 0
 
 
+def cmd_compare_designs(args) -> int:
+    from .report import build_design_comparison
+    ok = build_design_comparison(args.golden, f0_ghz=args.f0, fbw=args.fbw,
+                                 spec_db=args.spec_db, out_name=args.out_name,
+                                 labels=args.labels)
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="siw", description=__doc__.splitlines()[0],
@@ -566,6 +578,25 @@ def main(argv: list[str] | None = None) -> int:
                        help=_DEVICE_HELP)
     p_swp.add_argument("--np", type=int, default=4)
     p_swp.set_defaults(func=cmd_sweep)
+
+    p_cmpd = sub.add_parser("compare-designs",
+                            help="fabrication-decision comparison across a list of golden/ "
+                                 "design entries -- S11/S21 on identical axes + true-to-scale "
+                                 "board footprints (no re-solving, reads existing golden data)")
+    p_cmpd.add_argument("--golden", nargs="+", required=True,
+                        help="paths to golden/<topology_N>/<stem>.json entries "
+                             "(each needs a companion <stem>.s11s21.json)")
+    p_cmpd.add_argument("--f0", type=float, default=2.87, help="GHz, for the FBW shading")
+    p_cmpd.add_argument("--fbw", type=float, default=0.05, help="fractional BW, for the shading")
+    p_cmpd.add_argument("--spec-db", type=float, default=-16.0, help="S11 spec line")
+    p_cmpd.add_argument("--out-name", default="design_comparison",
+                        help="output basename -- writes <out-name>_sparams.png and "
+                             "<out-name>_board_scale.png to output/imgs/ and docs/")
+    p_cmpd.add_argument("--labels", nargs="+", default=None,
+                        help="one label per --golden entry, same order (default: "
+                             "'<topology> N=<N>', since landed-vs-best-known isn't "
+                             "reliably inferable from the golden schema)")
+    p_cmpd.set_defaults(func=cmd_compare_designs)
 
     # Internal only (see _artifacts/_render_worker): isolates one gmsh
     # render_png call per subprocess, not meant to be invoked directly.
