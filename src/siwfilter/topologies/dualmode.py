@@ -103,7 +103,9 @@ class DualModeTopology:
         return {"mesh_path": res["mesh"], "ports": res["ports"], "tets": res["tets"],
                 "nodes": res["nodes"], "sma": res.get("sma"),
                 "eps_r": res.get("eps_r", spec.substrate.eps_r),
-                "tand": res.get("tand", spec.substrate.tan_d)}
+                "tand": res.get("tand", spec.substrate.tan_d),
+                "soldermask": res.get("soldermask"),
+                "via_conductivity": res.get("via_conductivity")}
 
     def plot_layout_2d(self, spec: FilterSpec, path: str, **params) -> str:
         p = dict(params)

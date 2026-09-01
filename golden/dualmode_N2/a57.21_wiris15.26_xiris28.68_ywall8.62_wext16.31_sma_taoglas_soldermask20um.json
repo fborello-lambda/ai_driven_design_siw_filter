@@ -1,5 +1,6 @@
 {
   "_comment": "Golden A/B study: 20um soldermask over the feed only (not the enclosed cavity top -- see palace_dualmode_driven.py soldermask_um docstring), same design/launch as the sma_taoglas golden entry. Compare against that entry for the bare-copper baseline.",
+  "CORRECTION_2026-09-01": "The original save under this filename (commit 024d5b6) is INVALID and has been overwritten. Root cause: topologies/dualmode.py's build_mesh() adapter never forwarded res['soldermask'] (or res['via_conductivity']) from palace_dualmode_driven.py's mesh builder up to optimize.py's _driven_config(), so every soldermask (and via-conductivity) run to date silently ran with NO soldermask material assigned in the Palace config -- Palace defaulted the untagged volume rather than erroring. The old numbers below (bw +28%, S11w -9.95dB) measured that no-op, not the soldermask. Fixed by forwarding both keys in dualmode.py's build_mesh() return dict; this file now holds the first real measurement, reproduced via evaluate(fine=True) (the same wide-window path that produced the bare-copper golden entry) rather than the narrower siw-sweep window the old entry used.",
   "topology": "dualmode",
   "N": 2,
   "params": {
@@ -21,22 +22,27 @@
     "description": "Same as the bare-copper golden entry -- pad-only ground stitching, unchanged."
   },
   "metrics": {
-    "fc_ghz": 2.925,
-    "il_db": -1.12,
-    "bw_mhz": 406,
-    "s11w_db": -9.95
+    "fc_ghz": 2.910,
+    "il_db": -1.46,
+    "bw_mhz": 303,
+    "s11w_db": -13.59,
+    "band_truncated": false,
+    "shape_check": {"n_zeros": 2, "n_peaks": 1, "matches_order": true,
+                     "zeros_ghz": [2.807125, 2.937125]}
   },
   "comparison_vs_bare_copper": {
     "bare_golden_entry": "a57.21_wiris15.26_xiris28.68_ywall8.62_wext16.31_sma_taoglas.json",
-    "s11w_delta_db": 7.73,
-    "bw_delta_mhz": 88.5,
-    "fc_delta_mhz": 14.848490966260286,
-    "conclusion": "Substantial detuning from the feed coating alone: S11w degrades 7.7dB, bandwidth widens 28%, fc shifts +15MHz. Confirms CLAUDE.md sec 4s qualitative prediction (mask matters at the feed, not the cavity) and quantifies it -- large enough to matter for fabrication, not negligible."
+    "bare_reproduced_this_session": {"fc_ghz": 2.911, "il_db": -1.42, "bw_mhz": 318, "s11w_db": -17.69},
+    "s11w_delta_db": 4.10,
+    "bw_delta_mhz": -15,
+    "fc_delta_mhz": -1,
+    "conclusion": "Modest, real effect: bandwidth is essentially unchanged (318->303MHz, -5%), matched-band return loss degrades by ~4dB (-17.7->-13.6dB, a real detuning from the added capacitance under the feed trace), insertion loss ticks up negligibly (-1.42->-1.46dB, consistent with tan_d=0.02 over a thin, feed-only layer). This supersedes the prior (invalid, no-op) entry's claim of +28% bandwidth and -7.7dB S11w degradation."
   },
   "provenance": {
-    "source": "output/data/sweep_dualmode_N2_sparams.json",
-    "reproduce_with": "siw sweep --topology dualmode --N 2 --params a=57.21,w_iris=15.26,x_iris=28.68,y_wall=8.62,w_ext=16.31,soldermask_um=20 --fmin 2.57 --fmax 3.17 --step 0.005 --np 8",
-    "git_commit_when_saved": "024d5b6",
+    "source": "output/data/postpro/sm_properF_a57.21_soldermask_um20.00_w_ext16.31_w_iris15.26_x_iris28.68_y_wall8.62/port-S.csv",
+    "reproduce_with": "python -c \"from siwfilter.config import FilterSpec; from siwfilter.optimize import evaluate; from siwfilter.topologies.dualmode import DualModeTopology; print(evaluate(DualModeTopology(), FilterSpec(N=2), dict(a=57.21,w_iris=15.26,x_iris=28.68,y_wall=8.62,w_ext=16.31,soldermask_um=20.0), fine=True, np_ranks=8))\"",
+    "adapter_fix_commit": "uncommitted at save time -- topologies/dualmode.py build_mesh() now forwards res.get('soldermask')/res.get('via_conductivity')",
+    "original_invalid_commit": "024d5b6",
     "saved": "2026-09-01"
   }
 }
