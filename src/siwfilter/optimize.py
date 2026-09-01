@@ -415,6 +415,10 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
                           "Permittivity": sma["eps_r"], "LossTan": sma["tand"]})
         port_in["VoltagePath"] = sma["voltage_path_in"]
         port_out["VoltagePath"] = sma["voltage_path_out"]
+    mask = res.get("soldermask")
+    if mask:
+        materials.append({"Attributes": [4], "Permeability": 1.0,
+                          "Permittivity": mask["eps_r"], "LossTan": mask["tand"]})
     return {
         "Problem": {"Type": "Driven", "Verbose": 1, "Output": f"postpro/{tag}"},
         "Model": {"Mesh": mesh, "L0": 1.0e-3},

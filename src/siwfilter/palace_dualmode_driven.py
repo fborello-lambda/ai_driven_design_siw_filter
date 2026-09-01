@@ -353,6 +353,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                slot_x_mm: float | None = None, slot_y_mm: float = 0.0,
                slot_w_mm: float = 4.0, slot_l_mm: float = 3.0, slot_h_mm: float = 3.0,
                slot_pec_cap: bool = False,
+               soldermask_um: float | None = None,
+               soldermask_eps_r: float = 3.5, soldermask_tand: float = 0.02,
                **geom_extra) -> dict:
     W, Lt, Lf = _dims(a_mm, w_ms_mm, l_taper_mm, l_feed_mm)
     Xf = Lt + Lf
@@ -464,8 +466,26 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     occ = gmsh.model.occ
 
     sub = (3, occ.addBox(X0, ym_lo, 0.0, X1 - X0, y_span, h))
-    air_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, Hair))
-    air_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, Hair))
+    # Soldermask (2026-09-01): a thin dielectric slab z in [h, h+t_mask] over
+    # the FEED region only, not the enclosed cavity top. The cavity top at
+    # z=h is modelled as a solid PEC sheet with no air above it at all (see
+    # the module docstring) -- there is no air volume there to subdivide,
+    # and CLAUDE.md's own physical argument is that mask over that fully-
+    # enclosed ground plane can't reach the cavity fields anyway. The feed's
+    # fringing fields ARE partly in air, so a mask there changes the
+    # microstrip's effective permittivity, shifting Z0 and electrical
+    # length -- that's the effect this parameter is for. mask_in/mask_out
+    # sit directly on the copper (bottom face at z=h, same plane trace_in/
+    # trace_out are built on); air_in/air_out shrink to start above the mask
+    # instead of at z=h. soldermask_um=None (default) reproduces the old
+    # geometry exactly -- byte-identical, regression-verified.
+    mask_in = mask_out = None
+    t_mask = (soldermask_um * 1e-3) if soldermask_um else 0.0
+    if soldermask_um:
+        mask_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, t_mask))
+        mask_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, t_mask))
+    air_in = (3, occ.addBox(X0, ym_lo, h + t_mask, Xf, y_span, Hair - t_mask))
+    air_out = (3, occ.addBox(Li, ym_lo, h + t_mask, Xf, y_span, Hair - t_mask))
 
     # ---- v8 (2026-08-29): electric coupling slot in the TOP copper ----
     # A cutout in the top ground plane, distinct from every via-fence
@@ -621,25 +641,30 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     cut_out, _ = occ.cut([sub], cyls, removeObject=True, removeTool=True)
     occ.synchronize()
     sub_tags = [(dd, t) for (dd, t) in cut_out if dd == 3]
-    air_boxes = [air_in, air_out] + ([air_slot] if air_slot is not None else [])
+    mask_boxes = [b for b in (mask_in, mask_out) if b is not None]
+    air_boxes = [air_in, air_out] + ([air_slot] if air_slot is not None else []) + mask_boxes
     occ.fragment(sub_tags + ptfe_vols + air_boxes,
                  [trace_in, trace_out] + sma_caps + gnd_surfs)
     occ.synchronize()
 
     via_centres = final + gnd_via_centres
 
-    diel_clean, air_vols, sma_diel = [], [], []
+    diel_clean, air_vols, sma_diel, mask_vols = [], [], [], []
     for dim, tag in gmsh.model.getEntities(3):
         cx, cy, cz = gmsh.model.occ.getCenterOfMass(dim, tag)
         if with_sma and (cx < X0 - 1e-6 or cx > X1 + 1e-6):
             sma_diel.append(tag)
         elif cz < h:
             diel_clean.append(tag)
+        elif soldermask_um and cz < h + t_mask + 1e-9:
+            mask_vols.append(tag)
         else:
             air_vols.append(tag)
 
     gmsh.model.addPhysicalGroup(3, diel_clean, tag=1, name="dielectric")
     gmsh.model.addPhysicalGroup(3, air_vols, tag=2, name="air")
+    if mask_vols:
+        gmsh.model.addPhysicalGroup(3, mask_vols, tag=4, name="soldermask")
     if sma_diel:
         gmsh.model.addPhysicalGroup(3, sma_diel, tag=3, name="sma_ptfe")
 
@@ -795,6 +820,11 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             "voltage_path_in": [[Xc0, sma_rin_mm, h], [Xc0, sma_rout_mm, h]],
             "voltage_path_out": [[Xc1, sma_rin_mm, h], [Xc1, sma_rout_mm, h]],
         }
+    mask_info = None
+    if mask_vols:
+        legend["soldermask"] = 4
+        mask_info = {"eps_r": soldermask_eps_r, "tand": soldermask_tand,
+                     "thickness_um": soldermask_um}
     if show:
         print(f"\n--- dual-mode driven mesh, in-line ports (Li={Li}mm, "
               f"w_iris={w_iris_mm}mm, x_iris={x_iris:.2f}mm, y_wall={y_wall_mm}mm, "
@@ -808,7 +838,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     gmsh.finalize()
     return {"mesh": out, "tets": ntet, "nodes": nnode, "legend": legend,
             "ports": (len(wave_in), len(wave_out)), "sma": sma_info,
-            "eps_r": eps_r, "tand": tand}
+            "soldermask": mask_info, "eps_r": eps_r, "tand": tand}
 
 
 def plot_layout_2d(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0,
