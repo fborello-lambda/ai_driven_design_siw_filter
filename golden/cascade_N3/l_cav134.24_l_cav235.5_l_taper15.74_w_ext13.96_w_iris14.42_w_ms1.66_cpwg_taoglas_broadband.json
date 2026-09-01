@@ -1,0 +1,76 @@
+{
+  "_comment": "Golden broadband (0-8GHz) check of the N=3 golden design, real gap-matched CPWG launch (cascade default). Purpose: check for spurious/higher-order passbands outside the intended f0 band.",
+  "topology": "cascade",
+  "N": 3,
+  "params": {
+    "l_cav1": 34.239,
+    "l_cav2": 35.503,
+    "w_iris": 14.416,
+    "w_ext": 13.96,
+    "l_taper": 15.738,
+    "w_ms": 1.6636
+  },
+  "launch": {
+    "model": "cpwg_taoglas",
+    "description": "Real Taoglas SMA + impedance-matched CPWG (gap 0.2512mm), cascades TAOGLAS_SMA default."
+  },
+  "sweep": {
+    "fmin_ghz": 0.05,
+    "fmax_ghz": 8.0,
+    "step_ghz": 0.03,
+    "device": "CPU",
+    "np_ranks": 8
+  },
+  "intended_band": {
+    "range_ghz": [
+      2.78,
+      2.99
+    ],
+    "peak_s21_db": -1.86,
+    "fc_ghz": 2.87
+  },
+  "spurious_passbands_s21_gt_m10db": [
+    {
+      "range_ghz": [
+        4.37,
+        4.37
+      ],
+      "peak_s21_db": -7.87
+    },
+    {
+      "range_ghz": [
+        4.58,
+        4.67
+      ],
+      "peak_s21_db": -3.77
+    },
+    {
+      "range_ghz": [
+        4.76,
+        4.85
+      ],
+      "peak_s21_db": -4.54
+    },
+    {
+      "range_ghz": [
+        5.75,
+        6.44
+      ],
+      "peak_s21_db": -1.78,
+      "note": "strongest spurious band, comparable to the intended passband"
+    },
+    {
+      "range_ghz": [
+        6.62,
+        7.1
+      ],
+      "peak_s21_db": -3.33
+    }
+  ],
+  "provenance": {
+    "source": "output/data/sweep_cascade_sparams.json",
+    "reproduce_with": "siw sweep --topology cascade --N 3 --params l_cav1=34.239,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 --fmin 0.05 --fmax 8.0 --step 0.03 --np 8",
+    "git_commit_when_saved": "40f8720",
+    "saved": "2026-09-01"
+  }
+}
