@@ -1,0 +1,52 @@
+{
+  "_comment": "Golden design constants. See golden/README.md for the naming convention and CLAUDE.md 'Golden designs' for how this fits the project. Do not hand-edit numbers here without re-running the CLI and re-deriving them.",
+  "topology": "cascade",
+  "N": 4,
+  "spec": {
+    "f0_hz": 2.87e9,
+    "FBW": 0.05,
+    "ripple_db": 0.1,
+    "substrate": "RO4350B_0.76mm",
+    "eps_r": 3.66,
+    "tan_d": 0.0037,
+    "h_mm": 0.76,
+    "d_via_mm": 1.5,
+    "p_via_mm": 3.0
+  },
+  "params": {
+    "l_cav1": 34.325,
+    "l_cav2": 35.305,
+    "w_iris1": 15.599,
+    "w_iris2": 13.038,
+    "w_ext": 13.742,
+    "l_taper": 17.415,
+    "w_ms": 1.6636
+  },
+  "launch": {
+    "model": "cpwg_taoglas",
+    "description": "Real Taoglas EMPCB.SMAFSTJ.B.HT SMA + impedance-matched CPWG launch (gap 0.2512mm, ground inner edge 0.8512mm, feed 1.2mm, 6 stitch vias/side, solved 50.00 ohm) -- topologies/cascade.py's TAOGLAS_SMA, the actual default for every cascade mesh since 2026-08-31."
+  },
+  "metrics": {
+    "fc_ghz": 2.887125,
+    "fc_3db_ghz": 2.888507155397064,
+    "s11w_db": -6.105682297209,
+    "bw_mhz": 199.51415266578553,
+    "il_db": -2.724923140825,
+    "score": 22.775367409946693,
+    "board_length_mm": 211.01459632882975,
+    "band_truncated": false
+  },
+  "fab_tolerance_0p1mm": {
+    "params": {"w_ms": 1.7, "l_cav1": 34.3, "l_cav2": 35.3, "w_iris1": 15.6,
+               "w_iris2": 13.0, "w_ext": 13.7, "l_taper": 17.4},
+    "metrics": {"fc_ghz": 2.937125, "s11w_db": -8.492825772646,
+                "bw_mhz": 215.84786508425015, "il_db": -2.708558134665,
+                "score": 21.92275057212141}
+  },
+  "known_open_item": "NOT landed -- S11w -6.1dB (exact) / -8.5dB (fab-rounded) vs the -16dB spec, bw ~200-216MHz vs the 143.5MHz target. This is a genuine local optimum: two independent local GP search rounds (span=2mm each, patience=16) both converged to this exact point, one seeded fresh from the calibrate-and-invert pipeline's fc-trimmed design, the other re-centered on the first round's result. Materially rougher than the N=3 golden entry at the same stage, despite N=4 having more coupling DOF (2 independent iris widths) -- more DOF made the search harder within the evaluated budget, not easier. Kept as the best-known N=4 point, not a landed design.",
+  "provenance": {
+    "reproduce_with": "siw synth-design --N 4 --no-mid-trim --np 8, then siw design --topology cascade --N 4 --seed <fc-trimmed params> --span 2 --patience 16 --evals 45 --np 8 (twice, second seeded on the first's result)",
+    "git_commit_when_saved": "40f8720",
+    "saved": "2026-09-01"
+  }
+}
