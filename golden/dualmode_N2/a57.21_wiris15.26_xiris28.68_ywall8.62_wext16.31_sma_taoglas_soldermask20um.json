@@ -1,0 +1,42 @@
+{
+  "_comment": "Golden A/B study: 20um soldermask over the feed only (not the enclosed cavity top -- see palace_dualmode_driven.py soldermask_um docstring), same design/launch as the sma_taoglas golden entry. Compare against that entry for the bare-copper baseline.",
+  "topology": "dualmode",
+  "N": 2,
+  "params": {
+    "a": 57.21,
+    "w_iris": 15.26,
+    "x_iris": 28.68,
+    "y_wall": 8.62,
+    "w_ext": 16.31,
+    "soldermask_um": 20.0
+  },
+  "soldermask": {
+    "thickness_um": 20.0,
+    "eps_r": 3.5,
+    "tand": 0.02,
+    "note": "typical LPI (liquid photoimageable) soldermask values; not measured for a specific vendor product"
+  },
+  "launch": {
+    "model": "sma_taoglas",
+    "description": "Same as the bare-copper golden entry -- pad-only ground stitching, unchanged."
+  },
+  "metrics": {
+    "fc_ghz": 2.925,
+    "il_db": -1.12,
+    "bw_mhz": 406,
+    "s11w_db": -9.95
+  },
+  "comparison_vs_bare_copper": {
+    "bare_golden_entry": "a57.21_wiris15.26_xiris28.68_ywall8.62_wext16.31_sma_taoglas.json",
+    "s11w_delta_db": 7.73,
+    "bw_delta_mhz": 88.5,
+    "fc_delta_mhz": 14.848490966260286,
+    "conclusion": "Substantial detuning from the feed coating alone: S11w degrades 7.7dB, bandwidth widens 28%, fc shifts +15MHz. Confirms CLAUDE.md sec 4s qualitative prediction (mask matters at the feed, not the cavity) and quantifies it -- large enough to matter for fabrication, not negligible."
+  },
+  "provenance": {
+    "source": "output/data/sweep_dualmode_N2_sparams.json",
+    "reproduce_with": "siw sweep --topology dualmode --N 2 --params a=57.21,w_iris=15.26,x_iris=28.68,y_wall=8.62,w_ext=16.31,soldermask_um=20 --fmin 2.57 --fmax 3.17 --step 0.005 --np 8",
+    "git_commit_when_saved": "024d5b6",
+    "saved": "2026-09-01"
+  }
+}
