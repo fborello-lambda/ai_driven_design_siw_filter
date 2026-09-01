@@ -1,0 +1,43 @@
+{
+  "_comment": "Golden design constants. See golden/README.md for the naming convention and CLAUDE.md Golden designs. Do not hand-edit numbers without re-running the CLI.",
+  "topology": "cascade",
+  "N": 3,
+  "spec": {
+    "f0_hz": 2870000000.0,
+    "FBW": 0.05,
+    "ripple_db": 0.1,
+    "substrate": "RO4350B_0.76mm",
+    "eps_r": 3.66,
+    "tan_d": 0.0037,
+    "h_mm": 0.76,
+    "d_via_mm": 1.5,
+    "p_via_mm": 3.0
+  },
+  "params": {
+    "l_cav1": 34.239,
+    "l_cav2": 35.503,
+    "w_iris": 14.416,
+    "w_ext": 13.96,
+    "l_taper": 15.738,
+    "w_ms": 1.6636
+  },
+  "launch": {
+    "model": "cpwg_taoglas",
+    "description": "Real Taoglas EMPCB.SMAFSTJ.B.HT SMA + impedance-matched CPWG launch (gap 0.2512mm, ground inner edge 0.8512mm, feed 1.2mm, 6 stitch vias/side, solved 50.00 ohm) -- topologies/cascade.py TAOGLAS_SMA, the actual default for every cascade mesh since 2026-08-31."
+  },
+  "metrics": {
+    "fc_ghz": 2.879,
+    "il_db": -1.85,
+    "bw_mhz": 189,
+    "s11w_db": -13.37
+  },
+  "shape_check": {
+    "note": "FINE CONFIRM (evaluate, different mesh preset) measured s11w=-14.92dB, bw=188MHz, shape 3 zeros/3 peaks (want 3/2) -- not yet a clean equiripple response"
+  },
+  "known_open_item": "NOT landed -- S11w -13.4 to -14.9dB vs the -16dB spec, bw ~188-189MHz vs the 143.5MHz target. Genuine local optimum: two independent local GP search rounds (span=2mm then span=1mm, patience=16 each) converged here, starting from the calibrate-and-invert pipelines fc-trimmed + mid-trimmed design. Best N=3 result this session.",
+  "provenance": {
+    "reproduce_with": "siw sweep --topology cascade --N 3 --params l_cav1=34.239,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 --fmin 2.57 --fmax 3.17 --step 0.005 --np 8",
+    "git_commit_when_saved": "40f8720",
+    "saved": "2026-09-01"
+  }
+}
