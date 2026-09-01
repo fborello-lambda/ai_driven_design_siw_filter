@@ -419,13 +419,26 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
     if mask:
         materials.append({"Attributes": [4], "Permeability": 1.0,
                           "Permittivity": mask["eps_r"], "LossTan": mask["tand"]})
+    boundaries = {"PEC": {"Attributes": [10]},
+                  "Absorbing": {"Attributes": [13], "Order": 1},
+                  "WavePort": [port_in, port_out]}
+    via_cond = res.get("via_conductivity")
+    if via_cond:
+        # Real finite-conductivity surface impedance on the via barrels
+        # (filled-vs-unfilled study, task #43) instead of lumping them into
+        # the idealized zero-loss PEC boundary every other face still uses.
+        # Thickness omitted (0.0 = semi-infinite/solid-metal assumption) for
+        # a fully filled/solid via; a real plating_um activates Palace's
+        # finite-thickness correction for a hollow, plated barrel.
+        cb = {"Attributes": [14], "Conductivity": via_cond["conductivity_sm"]}
+        if via_cond.get("plating_um"):
+            cb["Thickness"] = via_cond["plating_um"] * 1e-3   # um -> mm (L0=1mm)
+        boundaries["Conductivity"] = [cb]
     return {
         "Problem": {"Type": "Driven", "Verbose": 1, "Output": f"postpro/{tag}"},
         "Model": {"Mesh": mesh, "L0": 1.0e-3},
         "Domains": {"Materials": materials},
-        "Boundaries": {"PEC": {"Attributes": [10]},
-                       "Absorbing": {"Attributes": [13], "Order": 1},
-                       "WavePort": [port_in, port_out]},
+        "Boundaries": boundaries,
         "Solver": {"Order": 1, "Device": device,
                    "Driven": {"Samples": [{"Type": "Linear", "MinFreq": fmin,
                                            "MaxFreq": fmax, "FreqStep": step}]},

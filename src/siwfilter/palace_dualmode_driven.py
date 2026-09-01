@@ -355,6 +355,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                slot_pec_cap: bool = False,
                soldermask_um: float | None = None,
                soldermask_eps_r: float = 3.5, soldermask_tand: float = 0.02,
+               via_conductivity_sm: float | None = None,
+               via_plating_um: float | None = None,
                **geom_extra) -> dict:
     W, Lt, Lf = _dims(a_mm, w_ms_mm, l_taper_mm, l_feed_mm)
     Xf = Lt + Lf
@@ -685,7 +687,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             j = i
         return inside
 
-    pec, wave_in, wave_out, absorbing = [], [], [], []
+    pec, wave_in, wave_out, absorbing, via_cond = [], [], [], [], []
     for dim, tag in gmsh.model.getEntities(2):
         cx, cy, cz = gmsh.model.occ.getCenterOfMass(2, tag)
         xmin, ymin_f, _, xmax, ymax_f, _ = gmsh.model.getBoundingBox(2, tag)
@@ -726,6 +728,22 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
         if _near(cz, 0.0):
             pec.append(tag)
+        elif on_via and via_conductivity_sm:
+            # Filled vs unfilled via study (2026-09-01): route via barrel
+            # faces to a real finite-conductivity surface-impedance boundary
+            # (Palace's Boundaries.Conductivity, "for conductors with
+            # thickness much larger than the skin depth") instead of the
+            # idealized zero-loss PEC every other face still uses.
+            # via_plating_um=None -> semi-infinite/solid-metal assumption
+            # (a fully filled/solid via post); a given thickness activates
+            # Palace's finite-thickness correction (a real plated, possibly
+            # hollow, barrel of that plating depth). Physically these should
+            # come out nearly identical whenever the plating is many skin
+            # depths thick (copper skin depth at 2.87GHz is ~1.23um vs a
+            # typical 20-25um barrel plating -- 16-20 skin depths), which is
+            # the point of running both: confirm the expected null result
+            # with real EM data rather than assume it.
+            via_cond.append(tag)
         elif on_via or on_sma_pin or on_sma_shell or on_sma_cap:
             pec.append(tag)
         elif with_sma and _near(cx, Xc0) and xmax - xmin < 1e-3:
@@ -755,12 +773,15 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             absorbing.append(tag)
 
     pec = sorted(set(pec))
-    absorbing = sorted(set(absorbing) - set(pec) - set(wave_in) - set(wave_out))
+    via_cond = sorted(set(via_cond))
+    absorbing = sorted(set(absorbing) - set(pec) - set(wave_in) - set(wave_out) - set(via_cond))
 
     gmsh.model.addPhysicalGroup(2, pec, tag=10, name="pec")
     gmsh.model.addPhysicalGroup(2, wave_in, tag=11, name="port_in")
     gmsh.model.addPhysicalGroup(2, wave_out, tag=12, name="port_out")
     gmsh.model.addPhysicalGroup(2, absorbing, tag=13, name="absorbing")
+    if via_cond:
+        gmsh.model.addPhysicalGroup(2, via_cond, tag=14, name="via_conductivity")
 
     if preview:
         print(f"  faces: pec={len(pec)} port_in={len(wave_in)} "
@@ -825,6 +846,11 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         legend["soldermask"] = 4
         mask_info = {"eps_r": soldermask_eps_r, "tand": soldermask_tand,
                      "thickness_um": soldermask_um}
+    via_cond_info = None
+    if via_cond:
+        legend["via_conductivity"] = 14
+        via_cond_info = {"conductivity_sm": via_conductivity_sm,
+                         "plating_um": via_plating_um}
     if show:
         print(f"\n--- dual-mode driven mesh, in-line ports (Li={Li}mm, "
               f"w_iris={w_iris_mm}mm, x_iris={x_iris:.2f}mm, y_wall={y_wall_mm}mm, "
@@ -838,7 +864,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     gmsh.finalize()
     return {"mesh": out, "tets": ntet, "nodes": nnode, "legend": legend,
             "ports": (len(wave_in), len(wave_out)), "sma": sma_info,
-            "soldermask": mask_info, "eps_r": eps_r, "tand": tand}
+            "soldermask": mask_info, "via_conductivity": via_cond_info,
+            "eps_r": eps_r, "tand": tand}
 
 
 def plot_layout_2d(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0,
