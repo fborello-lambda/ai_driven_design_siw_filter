@@ -440,9 +440,11 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
     """
     from matplotlib.patches import Circle, Polygon, Rectangle
     from .config import FilterSpec
-    from .palace_dualmode_driven import _dims, _via_layout, feed_trace_poly
+    from .palace_dualmode_driven import (_dims, _via_layout, feed_trace_poly,
+                                         gnd_stitch_layout)
     from .topologies.dualmode import (A_SIW_MM, JLCPCB_SOLDERMASK,
-                                      JLCPCB_SILKSCREEN, JLCPCB_ENIG)
+                                      JLCPCB_SILKSCREEN, JLCPCB_ENIG,
+                                      TAOGLAS_CPWG_VISUAL as CPWG)
     spec = spec or FilterSpec(N=2)
     p = params or dict(a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31)
     a = p["a"]
@@ -453,11 +455,28 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
     final, x_iris = _via_layout(a, p["w_iris"], p["x_iris"], p["w_ext"],
                                 spec.d_via * 1e3, spec.p_via * 1e3, p["y_wall"])
     ym = half + 3.0
-    trace_in = feed_trace_poly(-Xf, -Lt, 0.0, W, -half, half)
-    trace_out = feed_trace_poly(a + Xf, a + Lt, a, W, -half, half)
+    # CPWG launch: coplanar ground pads + stitching vias, the real Taoglas
+    # footprint (same helper the mesh builder uses).
+    gnd_polys, gnd_vias = gnd_stitch_layout(
+        -Xf, a + Xf, W, ym, -ym,
+        n_gnd_stitch=int(CPWG["n_gnd_stitch"]),
+        gnd_stitch_offset_mm=CPWG["gnd_stitch_offset_mm"],
+        cpwg_gap_mm=CPWG["cpwg_gap_mm"], cpwg_y_gnd_mm=CPWG["cpwg_y_gnd_mm"],
+        cpwg_y_out_mm=CPWG["cpwg_y_out_mm"],
+        cpwg_len_mm=CPWG.get("cpwg_len_mm", 5.0),
+        cpwg_taper_mm=CPWG.get("cpwg_taper_mm", 4.0))
+    rg = 0.3
+    w_pad = CPWG.get("cpwg_w_feed_mm")
+    trace_in = feed_trace_poly(-Xf, -Lt, 0.0, W, -half, half,
+                               w_pad=w_pad, x_pad_end=-Xf + CPWG.get("cpwg_len_mm", 5.0)
+                               + CPWG.get("cpwg_taper_mm", 4.0), x_pad_hold=-Xf + CPWG.get("cpwg_len_mm", 5.0))
+    trace_out = feed_trace_poly(a + Xf, a + Lt, a, W, -half, half,
+                                w_pad=w_pad, x_pad_end=a + Xf - CPWG.get("cpwg_len_mm", 5.0)
+                                - CPWG.get("cpwg_taper_mm", 4.0), x_pad_hold=a + Xf - CPWG.get("cpwg_len_mm", 5.0))
 
-    fig, axes = plt.subplots(2, 1, figsize=(13, 8.5), sharex=True)
-    for ax, open_mask in zip(axes, (False, True)):
+    fig = plt.figure(figsize=(13, 11))
+    axes = [fig.add_subplot(3, 1, 1), fig.add_subplot(3, 1, 2), fig.add_subplot(3, 1, 3)]
+    for ax, open_mask in zip(axes[:2], (False, True)):
         # board + soldermask coverage
         ax.add_patch(Rectangle((-Xf, -ym), a + 2 * Xf, 2 * ym, fc="#c8b28a",
                                ec="0.3", lw=1.0, zorder=0))
@@ -481,6 +500,11 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
         for poly in (trace_in, trace_out):
             ax.add_patch(Polygon(poly, closed=True, fc="#d9a441", ec="#a06d12",
                                  lw=0.8, alpha=0.95, zorder=3))
+        for poly in gnd_polys:
+            ax.add_patch(Polygon(poly, closed=True, fc="#d9a441", ec="#a06d12",
+                                 lw=0.7, alpha=0.95, zorder=3))
+        for (x, y) in gnd_vias:
+            ax.add_patch(Circle((x, y), rg, fc="#666", ec="none", zorder=4))
         for (x, y) in final:
             internal = abs(x - x_iris) < 1e-6
             ax.add_patch(Circle((x, y), r, fc=("#b00" if internal else "#444"),
@@ -498,7 +522,39 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
                "SOLDERMASK + SILKSCREEN over the WHOLE board  "
                "(measured: S11w -12.5dB, misses the -16dB spec)")
         ax.set_title(ttl, fontsize=9.5)
-    axes[-1].set_xlabel("x [mm]")
+    # --- zoom on the input CPWG launch (a 0.25mm gap is invisible at board scale)
+    az = axes[2]
+    x_lo, x_hi = -Xf - 1.5, -Xf + CPWG.get("cpwg_len_mm", 5.0) + CPWG.get("cpwg_taper_mm", 4.0) + 6.0
+    az.add_patch(Rectangle((x_lo, -ym), x_hi - x_lo, 2 * ym, fc="#c8b28a",
+                           ec="none", zorder=0))
+    az.add_patch(Rectangle((-Lt, -ym), x_hi + Lt, 2 * ym, fc="#1b6b3a", ec="none",
+                           alpha=0.45, zorder=1))
+    az.add_patch(Rectangle((-Xf, -ym), Xf - Lt, 2 * ym, fc="none", ec="#b00",
+                           lw=1.8, ls="--", zorder=6))
+    az.add_patch(Polygon(trace_in, closed=True, fc="#d9a441", ec="#a06d12",
+                         lw=0.9, zorder=3))
+    for poly in gnd_polys:
+        az.add_patch(Polygon(poly, closed=True, fc="#d9a441", ec="#a06d12",
+                             lw=0.9, zorder=3))
+    for (x, y) in gnd_vias:
+        az.add_patch(Circle((x, y), rg, fc="#666", ec="none", zorder=4))
+    for (x, y) in final:
+        if x < x_hi:
+            az.add_patch(Circle((x, y), r, fc="#444", ec="none", zorder=4))
+    az.annotate(f"CPWG gap {CPWG['cpwg_gap_mm']:.4f} mm",
+                xy=(-Xf + 2.0, CPWG["cpwg_y_gnd_mm"]),
+                xytext=(-Xf + 2.0, CPWG["cpwg_y_gnd_mm"] + 4.5),
+                arrowprops=dict(arrowstyle="->", color="#b00"), fontsize=8.5, color="#b00")
+    az.text(-Xf + 1.0, -CPWG["cpwg_y_out_mm"] - 2.6,
+            f"{int(CPWG['n_gnd_stitch'])} stitch vias/side", fontsize=8.5, color="#333")
+    az.set_xlim(x_lo, x_hi)
+    az.set_ylim(-CPWG["cpwg_y_out_mm"] - 4, CPWG["cpwg_y_out_mm"] + 6)
+    az.set_aspect("equal")
+    az.set_ylabel("y [mm]")
+    az.set_title("ZOOM: input CPWG launch inside the mask opening "
+                 "(signal trace + coplanar grounds + stitch vias)", fontsize=9.5)
+    axes[1].set_xlabel("x [mm]")
+    az.set_xlabel("x [mm]")
     fig.suptitle(
         f"Top view with fabrication stack -- green = soldermask "
         f"({JLCPCB_SOLDERMASK['soldermask_um']:.0f}um) + silkscreen "
