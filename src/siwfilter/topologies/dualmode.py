@@ -152,6 +152,86 @@ class DualModeTopology:
                 "legend": res.get("legend"),
                 "launch_geom": res.get("launch_geom")}
 
+    def calibrate_qe(self, spec: FilterSpec, w_exts: list[float] | None = None,
+                     a_mm: float = A_SIW_MM, device: str = "auto",
+                     np_ranks: int = 8) -> dict:
+        """EM Qe(w_ext) external-coupling calibration under the REAL launch.
+
+        The dual-mode counterpart to calibrate()'s k12(w_iris), and the piece
+        CLAUDE.md sec.6 has listed as missing. Written 2026-09-02 because the
+        global search failed exactly the way the cascade's did: it
+        early-stopped after 15 evals without beating its own seed, and the
+        CPWG launch (solved to 50 ohm for the cascade, not for this cavity)
+        cost about 7 dB of return loss.
+
+        TEST STRUCTURE: the same cavity with `w_iris=None`, which removes the
+        internal floating iris row entirely (see _via_layout). Without it the
+        degenerate pair is not split and only one mode couples to the inline
+        ports, so the structure is a plain symmetric doubly-loaded resonator:
+
+            1/Q_L = 1/Qu + 2/Qe    ->    Qe = 2 / (1/Q_L - 1/Qu)
+
+        WHY NOT SWEEP w_ext ON THE ASSEMBLED FILTER: its passband width is
+        DISCONTINUOUS in w_ext -- below a coupling threshold only one pole
+        clears -3 dB, above it the poles merge and the band leaps (measured
+        on the cascade: 16/22/36/65/215 MHz, with the target inside the
+        jump). A GP objective containing that width inherits the
+        discontinuity. One resonator has no poles to merge, so its loaded Q
+        is smooth and monotonic in w_ext -- which is the whole reason
+        calibrate-and-invert works where search does not.
+
+        Qu is taken as the dielectric limit 1/tan_d (the closed-cavity
+        eigenmode measured 270.3 against 1/0.0037 = 270.3), so conductor,
+        via-leakage and radiation loss are excluded and the returned Qe is a
+        slight OVER-estimate of a real board's.
+
+        Returns {points, w_of_logQe, Qu}; invert a target Qe to a physical
+        w_ext with numpy.polyval(result["w_of_logQe"], log(Qe_target)).
+        """
+        import numpy as np
+        from ..optimize import run_driven, band_edges, _mesh_preset
+
+        qu = 1.0 / spec.substrate.tan_d
+        w_exts = w_exts if w_exts is not None else [8.0, 10.0, 12.0, 14.0,
+                                                    16.0, 18.0, 20.0, 22.0]
+        mmax, mmin, hair = _mesh_preset(self.name, "CPU")
+        f0 = spec.f0 / 1e9
+
+        points: dict[float, dict] = {}
+        for we in w_exts:
+            # w_iris=None -> no internal iris row -> single-mode resonator
+            p = dict(a=a_mm, w_iris=None, x_iris=None, y_wall=8.62, w_ext=we)
+            r = run_driven(self, spec, p, f"dmqe_we{we:.1f}",
+                           f0 - 0.6, f0 + 0.6, 0.005, mmax, mmin, hair,
+                           device=device, np_ranks=np_ranks)
+            if not r.get("ok"):
+                points[we] = {"ok": False, "err": r.get("err")}
+                print(f"  w_ext={we:.1f}: FAILED {r.get('err')}", flush=True)
+                continue
+            e = band_edges(r["f"], r["s21_db"])
+            bw = float(e.get("bw", 0.0))
+            fc = e.get("fc_3db") or float(r["f"][int(np.argmax(r["s21_db"]))])
+            if bw <= 0:
+                points[we] = {"ok": False, "err": "no -3dB band"}
+                print(f"  w_ext={we:.1f}: no -3dB band", flush=True)
+                continue
+            q_l = (fc * 1000.0) / bw
+            inv = 1.0 / q_l - 1.0 / qu
+            qe = (2.0 / inv) if inv > 0 else float("inf")
+            points[we] = {"ok": True, "fc": fc, "bw": bw, "Q_L": q_l, "Qe": qe}
+            print(f"  w_ext={we:5.1f}mm  fc={fc:.3f}GHz  bw={bw:6.1f}MHz  "
+                  f"Q_L={q_l:6.1f}  Qe={qe:7.2f}", flush=True)
+
+        good = [(we, d["Qe"]) for we, d in sorted(points.items())
+                if d.get("ok") and np.isfinite(d["Qe"]) and d["Qe"] > 0]
+        fit = None
+        if len(good) >= 3:
+            we_a = np.array([g[0] for g in good])
+            lq = np.log(np.array([g[1] for g in good]))
+            fit = np.polyfit(lq, we_a, min(2, len(good) - 1)).tolist()
+        return {"points": points, "Qu": qu, "w_of_logQe": fit,
+                "n_ok": len(good)}
+
     def plot_layout_2d(self, spec: FilterSpec, path: str, **params) -> str:
         p = dict(params)
         a = p.pop("a", A_SIW_MM)
