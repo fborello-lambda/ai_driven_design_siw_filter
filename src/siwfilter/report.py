@@ -582,6 +582,61 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
     return True
 
 
+def verify_drawing_matches_mesh(spec=None, params: dict | None = None) -> bool:
+    """Assert the stackup drawing depicts the geometry that is MESHED.
+
+    Exists because it already went wrong: the top view was drawn from a
+    "visual" preset while build_mesh used a different one, so the figure
+    showed an impedance-matched CPWG launch that no dual-mode simulation had
+    ever used. Sharing one preset makes that unlikely; comparing against the
+    mesh's own reported geometry makes it checkable. Compares the actual via
+    centres the mesher placed against the ones the drawing helpers compute.
+    """
+    import numpy as _np
+    from .config import FilterSpec, out_data
+    from .palace_dualmode_driven import _dims, _via_layout, gnd_stitch_layout
+    from .topologies.dualmode import DualModeTopology, TAOGLAS_SMA as LAUNCH
+    spec = spec or FilterSpec(N=2)
+    p = params or dict(a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31)
+
+    res = DualModeTopology().build_mesh(spec, "verify_drawing.msh", mesh_max=1.5,
+                                        mesh_min=0.4, h_air_factor=8.0, show=False, **p)
+    g = res.get("launch_geom")
+    if not g:
+        print("  VERIFY: mesh did not report launch_geom"); return False
+
+    a = p["a"]
+    W, Lt, Lf = _dims(a, None, None, None)
+    Xf = Lt + Lf
+    ym = a / 2.0 + 3.0
+    _, drawn_gnd = gnd_stitch_layout(
+        -Xf, a + Xf, W, ym, -ym,
+        n_gnd_stitch=int(LAUNCH["n_gnd_stitch"]),
+        gnd_stitch_offset_mm=LAUNCH["gnd_stitch_offset_mm"],
+        cpwg_gap_mm=LAUNCH.get("cpwg_gap_mm"),
+        cpwg_y_gnd_mm=LAUNCH.get("cpwg_y_gnd_mm"),
+        cpwg_y_out_mm=LAUNCH.get("cpwg_y_out_mm"))
+    drawn_fence, _ = _via_layout(a, p["w_iris"], p["x_iris"], p["w_ext"],
+                                 spec.d_via * 1e3, spec.p_via * 1e3, p["y_wall"])
+
+    ok = True
+    for name, drawn, meshed in (("ground-stitch vias", drawn_gnd, g["gnd_via_centres"]),
+                                ("fence vias", drawn_fence, g["via_centres"])):
+        d = _np.array(sorted(map(tuple, drawn)))
+        m = _np.array(sorted(map(tuple, meshed)))
+        if d.shape != m.shape:
+            print(f"  VERIFY FAIL: {name} count drawn={len(d)} meshed={len(m)}"); ok = False
+        elif not _np.allclose(d, m, atol=1e-6):
+            print(f"  VERIFY FAIL: {name} positions differ "
+                  f"(max {_np.abs(d - m).max():.4f} mm)"); ok = False
+        else:
+            print(f"  VERIFY ok: {name} match ({len(d)})")
+    gap_ok = LAUNCH.get("cpwg_gap_mm") == g["cpwg_gap_mm"]
+    print(f"  VERIFY {'ok' if gap_ok else 'FAIL'}: cpwg_gap drawn="
+          f"{LAUNCH.get('cpwg_gap_mm')} meshed={g['cpwg_gap_mm']}")
+    return ok and gap_ok
+
+
 def sync_figs() -> list[str]:
     """Copy pipeline figures from output/imgs/ into the report folder."""
     copied = []

@@ -1100,6 +1100,14 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             "ports": (len(wave_in), len(wave_out)), "sma": sma_info,
             "soldermask": mask_info, "via_conductivity": via_cond_info,
             "enig": enig_info, "metal_real": metal_info, "silkscreen": silk_info,
+            # Ground-truth launch geometry as MESHED, so any drawing can be
+            # verified against it instead of re-deriving from a preset (which
+            # is how the stackup view came to draw a launch that was never
+            # simulated). See report.verify_drawing_matches_mesh.
+            "launch_geom": {"gnd_via_centres": [list(map(float, c)) for c in gnd_via_centres],
+                            "via_centres": [list(map(float, c)) for c in final],
+                            "cpwg_gap_mm": cpwg_gap_mm,
+                            "n_gnd_stitch": n_gnd_stitch},
             "eps_r": eps_r, "tand": tand}
 
 

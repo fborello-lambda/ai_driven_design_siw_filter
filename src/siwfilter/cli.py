@@ -463,11 +463,14 @@ def cmd_sweep(args) -> int:
 
 
 def cmd_stackup(args) -> int:
-    from .report import build_stackup_view, build_stackup_topview
+    from .report import (build_stackup_view, build_stackup_topview,
+                         verify_drawing_matches_mesh)
     spec = _make_spec(args)
     ok = build_stackup_view(spec=spec, out_name=args.out_name)
     if not args.no_topview:
         ok = build_stackup_topview(spec=spec, out_name=f"{args.out_name}_topview") and ok
+    if args.verify:
+        ok = verify_drawing_matches_mesh(spec=spec) and ok
     return 0 if ok else 1
 
 
@@ -644,6 +647,10 @@ def main(argv: list[str] | None = None) -> int:
                                 "both with the feed covered and with the soldermask opened")
     _add_spec_args(p_stk)
     p_stk.add_argument("--out-name", default="stackup", help="output basename")
+    p_stk.add_argument("--verify", action="store_true",
+                       help="build the real mesh and assert the drawn via positions / CPWG "
+                            "gap match what was actually meshed (guards against the drawing "
+                            "depicting a launch that is not simulated)")
     p_stk.add_argument("--no-topview", action="store_true",
                        help="cross-section only; skip the top view showing soldermask "
                             "coverage and the recommended feed opening")
