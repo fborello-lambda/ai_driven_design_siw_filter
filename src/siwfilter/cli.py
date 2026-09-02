@@ -462,6 +462,11 @@ def cmd_sweep(args) -> int:
     return 0
 
 
+def cmd_stackup(args) -> int:
+    from .report import build_stackup_view
+    return 0 if build_stackup_view(spec=_make_spec(args), out_name=args.out_name) else 1
+
+
 def cmd_compare_fab_variants(args) -> int:
     from .report import build_fab_variant_comparison
     ok = build_fab_variant_comparison(result_json=args.result_json, f0_ghz=args.f0,
@@ -628,6 +633,14 @@ def main(argv: list[str] | None = None) -> int:
                        help=_DEVICE_HELP)
     p_swp.add_argument("--np", type=int, default=4)
     p_swp.set_defaults(func=cmd_sweep)
+
+    p_stk = sub.add_parser("stackup",
+                           help="cross-section view of the real fabrication stack at the feed "
+                                "(substrate / copper / ENIG / soldermask / silkscreen), drawn "
+                                "both with the feed covered and with the soldermask opened")
+    _add_spec_args(p_stk)
+    p_stk.add_argument("--out-name", default="stackup", help="output basename")
+    p_stk.set_defaults(func=cmd_stackup)
 
     p_fab = sub.add_parser("compare-fab-variants",
                            help="ONE overlay of every fabrication variant of a design "

@@ -359,6 +359,75 @@ def build_fab_variant_comparison(result_json: str | None = None,
     return n > 0
 
 
+def build_stackup_view(spec=None, out_name: str = "stackup",
+                       mask_open_over_feed: bool = None) -> bool:
+    """Cross-section of the real fabrication stack at the feed.
+
+    Vertical scale is deliberately NON-linear (each layer gets comparable
+    drawing height with its true thickness labelled): the substrate is
+    760um while ENIG is 4.5um, so a true-to-scale drawing would render every
+    finish layer as an invisible hairline. Draws both the masked feed and
+    the mask-opened feed side by side, which is the actual fabrication
+    decision this project has to make.
+    """
+    from .config import FilterSpec
+    from .topologies.dualmode import JLCPCB_ENIG, JLCPCB_SOLDERMASK, JLCPCB_SILKSCREEN
+    spec = spec or FilterSpec(N=2)
+    sub = spec.substrate
+    t_cu = sub.cu_thickness * 1e6
+
+    # (label, thickness_um, colour, hatch)
+    base = [
+        (f"Rogers {sub.name.split('_')[0]}  eps_r={sub.eps_r}, tan_d={sub.tan_d}",
+         sub.h * 1e6, "#c8b28a", None),
+        (f"copper {t_cu:.1f}um ({sub.cu_oz}oz)  5.96e7 S/m", t_cu, "#b87333", None),
+        (f"ENIG {JLCPCB_ENIG['enig_um']}um Ni-P  "
+         f"{JLCPCB_ENIG['enig_conductivity_sm']:.2e} S/m", JLCPCB_ENIG["enig_um"],
+         "#d4c47a", "//"),
+    ]
+    masked = base + [
+        (f"soldermask {JLCPCB_SOLDERMASK['soldermask_um']}um  "
+         f"eps_r={JLCPCB_SOLDERMASK['soldermask_eps_r']}",
+         JLCPCB_SOLDERMASK["soldermask_um"], "#1b6b3a", None),
+        (f"silkscreen {JLCPCB_SILKSCREEN['silkscreen_um']}um  "
+         f"eps_r={JLCPCB_SILKSCREEN['silkscreen_eps_r']}",
+         JLCPCB_SILKSCREEN["silkscreen_um"], "#f2f2f2", None),
+    ]
+    opened = base + [("(soldermask OPENED over the feed -- bare ENIG to air)",
+                      0.0, None, None)]
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 6.5))
+    for ax, (title, stack) in zip(axes, [
+            ("Feed COVERED by soldermask\n(measured: S11w -12.5dB)", masked),
+            ("Feed soldermask OPENED\n(recommended -- to be confirmed)", opened)]):
+        y = 0.0
+        for label, t_um, colour, hatch in stack:
+            if colour is None:
+                ax.text(0.5, y + 0.25, label, ha="center", va="bottom",
+                        fontsize=9, style="italic", color="#555")
+                continue
+            h = 1.6 if t_um > 100 else 0.75      # non-linear: see docstring
+            ax.add_patch(Rectangle((0, y), 1.0, h, facecolor=colour,
+                                   edgecolor="black", lw=1.0, hatch=hatch))
+            ax.text(1.04, y + h / 2, label, va="center", fontsize=8.5)
+            y += h
+        ax.add_patch(Rectangle((0, -0.75), 1.0, 0.75, facecolor="#b87333",
+                               edgecolor="black", lw=1.0))
+        ax.text(1.04, -0.375, f"bottom ground copper {t_cu:.1f}um", va="center", fontsize=8.5)
+        ax.set_xlim(0, 2.6); ax.set_ylim(-1.1, y + 0.7)
+        ax.set_xticks([]); ax.set_yticks([])
+        ax.set_title(title, fontsize=10)
+    fig.suptitle("Fabrication stackup at the feed (vertical scale non-linear; "
+                 "true thicknesses labelled)", fontsize=11)
+    fig.tight_layout()
+    img = out_img(f"{out_name}.png")
+    fig.savefig(img, dpi=140)
+    plt.close(fig)
+    shutil.copy2(img, os.path.join(REPORT_DIR, f"{out_name}.png"))
+    print(f"  {out_name}.png -> {REPORT_DIR}")
+    return True
+
+
 def sync_figs() -> list[str]:
     """Copy pipeline figures from output/imgs/ into the report folder."""
     copied = []
