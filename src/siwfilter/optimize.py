@@ -419,6 +419,10 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
     if mask:
         materials.append({"Attributes": [4], "Permeability": 1.0,
                           "Permittivity": mask["eps_r"], "LossTan": mask["tand"]})
+    silk = res.get("silkscreen")
+    if silk:
+        materials.append({"Attributes": [7], "Permeability": 1.0,
+                          "Permittivity": silk["eps_r"], "LossTan": silk["tand"]})
     enig = res.get("enig")
     if enig:
         # Real volumetric conductor (Ohmic loss), NOT the exterior-only
@@ -453,6 +457,25 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
         if metal_real.get("thickness_um"):
             mb["Thickness"] = metal_real["thickness_um"] * 1e-3   # um -> mm (L0=1mm)
         boundaries.setdefault("Conductivity", []).append(mb)
+    # GUARD: every DOMAIN physical group in the mesh must have a material
+    # here. Hit twice this session -- a new layer was added to the mesh
+    # builder but not wired into this config, leaving an undefined domain
+    # whose faces get no boundary condition at all (Palace: "N mesh faces
+    # with no associated boundary element"), which silently produced
+    # physically impossible results (insertion loss BETTER than a lossless
+    # PEC structure) rather than an error. Fail loudly instead.
+    legend = res.get("legend") or {}
+    DOMAIN_TAGS = {"dielectric": 1, "air": 2, "sma_ptfe": 3, "soldermask": 4,
+                   "enig": 5, "via_conductor": 6, "silkscreen": 7}
+    meshed = {t for name, t in legend.items() if DOMAIN_TAGS.get(name) == t}
+    covered = {a for m in materials for a in m["Attributes"]}
+    missing = meshed - covered
+    if missing:
+        names = [n for n, t in legend.items() if t in missing]
+        raise RuntimeError(
+            f"mesh domains {sorted(missing)} ({names}) have no material in the "
+            f"Palace config -- wire them into _driven_config()")
+
     return {
         "Problem": {"Type": "Driven", "Verbose": 1, "Output": f"postpro/{tag}"},
         "Model": {"Mesh": mesh, "L0": 1.0e-3},

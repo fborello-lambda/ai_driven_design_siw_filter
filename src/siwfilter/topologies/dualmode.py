@@ -170,7 +170,9 @@ class DualModeTopology:
                 "soldermask": res.get("soldermask"),
                 "via_conductivity": res.get("via_conductivity"),
                 "enig": res.get("enig"),
-                "metal_real": res.get("metal_real")}
+                "metal_real": res.get("metal_real"),
+                "silkscreen": res.get("silkscreen"),
+                "legend": res.get("legend")}
 
     def plot_layout_2d(self, spec: FilterSpec, path: str, **params) -> str:
         p = dict(params)
