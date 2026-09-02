@@ -412,11 +412,16 @@ def cmd_sweep(args) -> int:
         params = data.get("params", data)
     else:
         params = _parse_params(args.params)
-    if getattr(args, "enig", False):
+    if getattr(args, "enig", False) or getattr(args, "real_metal", False):
         if args.topology != "dualmode":
-            print("--enig is only wired for dualmode so far"); return 1
-        from .topologies.dualmode import JLCPCB_ENIG
-        for k, v in JLCPCB_ENIG.items():
+            print("--enig/--real-metal are only wired for dualmode so far"); return 1
+        from .topologies.dualmode import JLCPCB_ENIG, JLCPCB_METAL
+        preset = {}
+        if getattr(args, "real_metal", False):
+            preset.update(JLCPCB_METAL)
+        if getattr(args, "enig", False):
+            preset.update(JLCPCB_ENIG)
+        for k, v in preset.items():
             params.setdefault(k, v)   # --params can still override any of these
 
     # Include N: two orders of the same topology (e.g. cascade N=3 vs N=4)
@@ -583,6 +588,11 @@ def main(argv: list[str] | None = None) -> int:
                             "mu_r=1.0 -- see topologies/dualmode.JLCPCB_ENIG). Combine with "
                             "--params soldermask_um=20 for the masked case, or omit it for "
                             "ENIG exposed directly to air.")
+    p_swp.add_argument("--real-metal", action="store_true",
+                       help="model exterior metal as REAL lossy copper (5.96e7 S/m, 35um 1oz) "
+                            "instead of PEC (perfect, lossless). Every golden to date is "
+                            "PEC-only, i.e. dielectric loss only -- this adds the missing "
+                            "conductor loss (modelled Qu 270 -> ~188, ~0.6dB more IL).")
     p_swp.add_argument("--fmin", type=float, default=0.5, help="GHz")
     p_swp.add_argument("--fmax", type=float, default=6.0, help="GHz")
     p_swp.add_argument("--step", type=float, default=0.05, help="GHz")

@@ -70,6 +70,17 @@ JLCPCB_ENIG: dict[str, float] = {
     "enig_mu_r": 1.0,
 }
 
+# Real (lossy) copper instead of PEC on the exterior ground planes. 5.96e7 S/m
+# is annealed copper; 35um is JLCPCB's standard 1oz outer-layer finished
+# copper. At 2.87GHz copper's skin depth is 1.22um, so 35um is ~29 skin
+# depths -- electrically thick, and the surface-impedance model applies.
+# Adding this takes the modelled unloaded Q from 270 (dielectric only) to
+# ~188 (dielectric + conductor), i.e. ~0.6dB more real insertion loss.
+JLCPCB_METAL: dict[str, float] = {
+    "metal_conductivity_sm": 5.96e7,
+    "metal_thickness_um": 35.0,
+}
+
 TAOGLAS_SMA: dict[str, float | bool | int] = {
     "sma_rin_mm": 0.38,
     "sma_rout_mm": 1.2639,
@@ -127,7 +138,8 @@ class DualModeTopology:
                 "tand": res.get("tand", spec.substrate.tan_d),
                 "soldermask": res.get("soldermask"),
                 "via_conductivity": res.get("via_conductivity"),
-                "enig": res.get("enig")}
+                "enig": res.get("enig"),
+                "metal_real": res.get("metal_real")}
 
     def plot_layout_2d(self, spec: FilterSpec, path: str, **params) -> str:
         p = dict(params)

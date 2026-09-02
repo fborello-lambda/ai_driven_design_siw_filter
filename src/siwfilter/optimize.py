@@ -429,6 +429,7 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
         # internal/exterior-boundary restriction at all.
         materials.append({"Attributes": [5], "Permeability": enig["mu_r"],
                           "Permittivity": 1.0, "Conductivity": enig["conductivity_sm"]})
+    metal_real = res.get("metal_real")
     via_cond = res.get("via_conductivity")
     if via_cond:
         # Real volumetric conductor (2026-09-02, replaces the invalid
@@ -444,6 +445,14 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
     boundaries = {"PEC": {"Attributes": [10]},
                   "Absorbing": {"Attributes": [13], "Order": 1},
                   "WavePort": [port_in, port_out]}
+    if metal_real:
+        # Real copper surface impedance on the EXTERIOR ground planes (valid
+        # here -- they are true one-sided exterior boundaries, unlike the via
+        # barrels). Captures the conductor loss every PEC-only golden omits.
+        mb = {"Attributes": [15], "Conductivity": metal_real["conductivity_sm"]}
+        if metal_real.get("thickness_um"):
+            mb["Thickness"] = metal_real["thickness_um"] * 1e-3   # um -> mm (L0=1mm)
+        boundaries.setdefault("Conductivity", []).append(mb)
     return {
         "Problem": {"Type": "Driven", "Verbose": 1, "Output": f"postpro/{tag}"},
         "Model": {"Mesh": mesh, "L0": 1.0e-3},

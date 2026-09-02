@@ -357,6 +357,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                soldermask_eps_r: float = 3.5, soldermask_tand: float = 0.02,
                enig_um: float | None = None,
                enig_conductivity_sm: float = 1.67e6, enig_mu_r: float = 1.0,
+               metal_conductivity_sm: float | None = None,
+               metal_thickness_um: float = 35.0,
                via_conductivity_sm: float | None = None,
                via_plating_um: float | None = None,
                **geom_extra) -> dict:
@@ -830,6 +832,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         return inside
 
     pec, wave_in, wave_out, absorbing = [], [], [], []
+    pec_ext_flag: dict[int, bool] = {}
     for dim, tag in gmsh.model.getEntities(2):
         cx, cy, cz = gmsh.model.occ.getCenterOfMass(2, tag)
         xmin, ymin_f, _, xmax, ymax_f, _ = gmsh.model.getBoundingBox(2, tag)
@@ -869,7 +872,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                 on_sma_cap = True
 
         if _near(cz, 0.0):
-            pec.append(tag)
+            pec.append(tag); pec_ext_flag[tag] = is_boundary
         elif on_via and via_plated:
             # Filled vs unfilled via study (2026-09-02, replaces the invalid
             # 2026-09-01 Boundaries.Conductivity attempt): the via wall's
@@ -883,7 +886,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             # material domain's volumetric Conductivity, not by this face.
             pass
         elif on_via or on_sma_pin or on_sma_shell or on_sma_cap:
-            pec.append(tag)
+            pec.append(tag); pec_ext_flag[tag] = is_boundary
         elif with_sma and _near(cx, Xc0) and xmax - xmin < 1e-3:
             wave_in.append(tag)
         elif with_sma and _near(cx, Xc1) and xmax - xmin < 1e-3:
@@ -900,9 +903,9 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                 pass                                           # v8 coupling slot: leave open
             elif (0.0 - 1e-6 <= cx <= Li + 1e-6
                     and top_y_lo - 1e-6 <= cy <= top_y_hi + 1e-6):
-                pec.append(tag)                               # cavity top ground
+                pec.append(tag); pec_ext_flag[tag] = is_boundary   # cavity top ground
             elif any(_in_poly(cx, cy, poly) for poly in trace_polys):
-                pec.append(tag)                                # microstrip trace
+                pec.append(tag); pec_ext_flag[tag] = is_boundary   # microstrip trace
         elif (slot_pec_cap and slot_x_mm is not None and cz > h + 1e-6
               and abs(cx - slot_x_mm) <= slot_l_mm / 2.0 + 1e-6
               and abs(cy - slot_y_mm) <= slot_w_mm / 2.0 + 1e-6):
@@ -913,7 +916,28 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     pec = sorted(set(pec))
     absorbing = sorted(set(absorbing) - set(pec) - set(wave_in) - set(wave_out))
 
+    # Real (lossy) metal, 2026-09-02. Every metal face was PEC -- a PERFECT,
+    # lossless conductor -- so the goldens modelled dielectric loss only and
+    # report an optimistically low insertion loss. Palace's
+    # Boundaries.Conductivity (surface impedance) is EXTERIOR-ONLY, which is
+    # why it failed on via barrels (internal, two-sided sheets), but the
+    # ground planes ARE exterior mesh boundaries -- nothing is meshed below
+    # z=0 or above the cavity top -- and they carry most of the wall current.
+    # So split the single PEC group: exterior metal gets real copper surface
+    # impedance, internal metal (trace with air above, via barrels) stays
+    # PEC. The field-facing side of an exterior ground face is its INNER
+    # surface (copper against the substrate), so copper's conductivity is the
+    # right value here -- any ENIG sits on the far, shielded side.
+    # metal_conductivity_sm=None (default) keeps everything PEC, reproducing
+    # every existing golden exactly.
+    pec_real = []
+    if metal_conductivity_sm:
+        pec_real = sorted(t for t in pec if pec_ext_flag.get(t))
+        pec = sorted(set(pec) - set(pec_real))
+
     gmsh.model.addPhysicalGroup(2, pec, tag=10, name="pec")
+    if pec_real:
+        gmsh.model.addPhysicalGroup(2, pec_real, tag=15, name="metal_real")
     gmsh.model.addPhysicalGroup(2, wave_in, tag=11, name="port_in")
     gmsh.model.addPhysicalGroup(2, wave_out, tag=12, name="port_out")
     gmsh.model.addPhysicalGroup(2, absorbing, tag=13, name="absorbing")
@@ -986,6 +1010,12 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         legend["via_conductor"] = 6
         via_cond_info = {"conductivity_sm": via_conductivity_sm, "mu_r": 1.0,
                          "plating_um": via_plating_um}
+    metal_info = None
+    if pec_real:
+        legend["metal_real"] = 15
+        metal_info = {"conductivity_sm": metal_conductivity_sm,
+                      "thickness_um": metal_thickness_um,
+                      "n_faces": len(pec_real)}
     enig_info = None
     if enig_vols:
         legend["enig"] = 5
@@ -1005,7 +1035,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     return {"mesh": out, "tets": ntet, "nodes": nnode, "legend": legend,
             "ports": (len(wave_in), len(wave_out)), "sma": sma_info,
             "soldermask": mask_info, "via_conductivity": via_cond_info,
-            "enig": enig_info, "eps_r": eps_r, "tand": tand}
+            "enig": enig_info, "metal_real": metal_info,
+            "eps_r": eps_r, "tand": tand}
 
 
 def plot_layout_2d(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0,
