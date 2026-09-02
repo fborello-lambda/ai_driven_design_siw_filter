@@ -658,6 +658,39 @@ def verify_drawing_matches_mesh(spec=None, params: dict | None = None) -> bool:
     return ok and gap_ok
 
 
+def assert_sweep_complete(csv_path: str, expected: int | None = None) -> int:
+    """Refuse to read a Palace sweep that is still being written.
+
+    Palace appends port-S.csv one row per frequency point, so a sweep in
+    progress looks like a complete-but-shorter sweep -- there is no marker
+    distinguishing them. Plotting one produces a figure that is simply
+    missing the top of the band, which is easy to mistake for a real
+    response (it happened: a 38-of-65-point sweep was plotted and read as
+    if finished). Returns the row count; raises if short or still growing.
+    """
+    import time
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(csv_path)
+
+    def _rows() -> int:
+        with open(csv_path) as fh:
+            return max(sum(1 for _ in fh) - 1, 0)
+
+    n0 = _rows()
+    time.sleep(1.5)
+    n1 = _rows()
+    if n1 != n0:
+        raise RuntimeError(
+            f"{csv_path}: still being written ({n0} -> {n1} rows). "
+            f"The solve has not finished; wait for it rather than plotting a "
+            f"partial sweep.")
+    if expected is not None and n1 < expected:
+        raise RuntimeError(
+            f"{csv_path}: {n1} rows, expected {expected}. Partial sweep -- "
+            f"the upper part of the band is missing.")
+    return n1
+
+
 def sync_figs() -> list[str]:
     """Copy pipeline figures from output/imgs/ into the report folder."""
     copied = []
