@@ -419,21 +419,31 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
     if mask:
         materials.append({"Attributes": [4], "Permeability": 1.0,
                           "Permittivity": mask["eps_r"], "LossTan": mask["tand"]})
+    enig = res.get("enig")
+    if enig:
+        # Real volumetric conductor (Ohmic loss), NOT the exterior-only
+        # Boundaries.Conductivity surface BC that blocks the via-fill study
+        # (task #43/#46) -- a material domain's interfaces with its
+        # neighbors (copper below, idealized PEC; soldermask/air above) are
+        # handled by ordinary field continuity, so this has no
+        # internal/exterior-boundary restriction at all.
+        materials.append({"Attributes": [5], "Permeability": enig["mu_r"],
+                          "Permittivity": 1.0, "Conductivity": enig["conductivity_sm"]})
+    via_cond = res.get("via_conductivity")
+    if via_cond:
+        # Real volumetric conductor (2026-09-02, replaces the invalid
+        # 2026-09-01 Boundaries.Conductivity attempt -- Palace's own MFEM
+        # warning confirmed that surface BC is exterior-only and the via
+        # wall is an internal two-sided sheet). Filled/solid vs
+        # unfilled/hollow-plated is now a genuine GEOMETRY difference (a
+        # solid conductor cylinder vs a thin conductor shell around an air
+        # core, built in palace_dualmode_driven.py), not a Thickness
+        # parameter on a boundary condition.
+        materials.append({"Attributes": [6], "Permeability": via_cond["mu_r"],
+                          "Permittivity": 1.0, "Conductivity": via_cond["conductivity_sm"]})
     boundaries = {"PEC": {"Attributes": [10]},
                   "Absorbing": {"Attributes": [13], "Order": 1},
                   "WavePort": [port_in, port_out]}
-    via_cond = res.get("via_conductivity")
-    if via_cond:
-        # Real finite-conductivity surface impedance on the via barrels
-        # (filled-vs-unfilled study, task #43) instead of lumping them into
-        # the idealized zero-loss PEC boundary every other face still uses.
-        # Thickness omitted (0.0 = semi-infinite/solid-metal assumption) for
-        # a fully filled/solid via; a real plating_um activates Palace's
-        # finite-thickness correction for a hollow, plated barrel.
-        cb = {"Attributes": [14], "Conductivity": via_cond["conductivity_sm"]}
-        if via_cond.get("plating_um"):
-            cb["Thickness"] = via_cond["plating_um"] * 1e-3   # um -> mm (L0=1mm)
-        boundaries["Conductivity"] = [cb]
     return {
         "Problem": {"Type": "Driven", "Verbose": 1, "Output": f"postpro/{tag}"},
         "Model": {"Mesh": mesh, "L0": 1.0e-3},

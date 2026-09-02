@@ -355,6 +355,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                slot_pec_cap: bool = False,
                soldermask_um: float | None = None,
                soldermask_eps_r: float = 3.5, soldermask_tand: float = 0.02,
+               enig_um: float | None = None,
+               enig_conductivity_sm: float = 1.67e6, enig_mu_r: float = 1.0,
                via_conductivity_sm: float | None = None,
                via_plating_um: float | None = None,
                **geom_extra) -> dict:
@@ -481,13 +483,31 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     # trace_out are built on); air_in/air_out shrink to start above the mask
     # instead of at z=h. soldermask_um=None (default) reproduces the old
     # geometry exactly -- byte-identical, regression-verified.
+    # ENIG (2026-09-02): a real thin CONDUCTOR volume z in [h, h+t_enig],
+    # directly on the copper (same footprint/plane as soldermask above), not
+    # a boundary condition. Palace's Domains.Materials[].Conductivity is a
+    # genuine volumetric Ohmic-loss term with no internal/exterior-boundary
+    # restriction (unlike Boundaries.Conductivity, the exterior-only surface
+    # BC that blocked the via-fill study) -- a material domain's interfaces
+    # with its neighbors (copper below via idealized PEC, soldermask/air
+    # above) are handled by ordinary field continuity, needing no special
+    # boundary-condition code at all. Stacks under soldermask exactly like
+    # the real PCB process: soldermask sits ON TOP of ENIG, not the other
+    # way around. enig_um=None (default) reproduces the old geometry
+    # exactly.
+    enig_in = enig_out = None
+    t_enig = (enig_um * 1e-3) if enig_um else 0.0
+    if enig_um:
+        enig_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, t_enig))
+        enig_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, t_enig))
     mask_in = mask_out = None
     t_mask = (soldermask_um * 1e-3) if soldermask_um else 0.0
     if soldermask_um:
-        mask_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, t_mask))
-        mask_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, t_mask))
-    air_in = (3, occ.addBox(X0, ym_lo, h + t_mask, Xf, y_span, Hair - t_mask))
-    air_out = (3, occ.addBox(Li, ym_lo, h + t_mask, Xf, y_span, Hair - t_mask))
+        mask_in = (3, occ.addBox(X0, ym_lo, h + t_enig, Xf, y_span, t_mask))
+        mask_out = (3, occ.addBox(Li, ym_lo, h + t_enig, Xf, y_span, t_mask))
+    z_stack = h + t_enig + t_mask
+    air_in = (3, occ.addBox(X0, ym_lo, z_stack, Xf, y_span, Hair - t_enig - t_mask))
+    air_out = (3, occ.addBox(Li, ym_lo, z_stack, Xf, y_span, Hair - t_enig - t_mask))
 
     # ---- v8 (2026-08-29): electric coupling slot in the TOP copper ----
     # A cutout in the top ground plane, distinct from every via-fence
@@ -522,6 +542,40 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                                   slot_l_mm, slot_w_mm, slot_h_mm))
 
     cyls = [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, r)) for x, y in final]
+
+    # Filled vs unfilled (plated barrel) vias (2026-09-02, replaces the
+    # 2026-09-01 attempt): the main via fence's cylindrical hole (radius r,
+    # cut from `sub` below, unchanged) is now filled with a REAL conductor
+    # volume instead of just tagging its lateral surface PEC. Same fix as
+    # ENIG: a volumetric Domains.Materials Conductivity domain, not the
+    # exterior-only Boundaries.Conductivity surface BC -- the via wall's
+    # interface with the surrounding dielectric is an ordinary material
+    # interface (field continuity), needing no boundary-condition code at
+    # all, unlike the invalid 2026-09-01 attempt this replaces (confirmed
+    # invalid by Palace's own "internal and external boundary elements"
+    # MFEM warning on exactly this face).
+    # via_plating_um=None -> solid/filled (the whole radius-r cylinder is
+    # conductor); a given thickness -> hollow, plated to that depth, air
+    # inside. Scope: main via fence only (`final`), not the CPWG
+    # ground-stitch vias -- keeps this change's blast radius contained to
+    # the fence the task #43 study is actually about.
+    via_plated = via_conductivity_sm is not None
+    via_shell_objs: list[tuple[int, int]] = []
+    via_core_objs: list[tuple[int, int]] = []
+    via_inner_r = None
+    if via_plated:
+        t_via_shell = (via_plating_um * 1e-3) if via_plating_um else None
+        if t_via_shell is not None and t_via_shell < r:
+            via_inner_r = r - t_via_shell
+        for vx, vy in final:
+            cond = (3, occ.addCylinder(vx, vy, 0.0, 0, 0, h, r))
+            if via_inner_r is not None and via_inner_r > 1e-6:
+                core = (3, occ.addCylinder(vx, vy, 0.0, 0, 0, h, via_inner_r))
+                shell_cut, _ = occ.cut([cond], [core], removeObject=True, removeTool=False)
+                via_shell_objs += [(dd, t) for dd, t in shell_cut if dd == 3]
+                via_core_objs.append(core)
+            else:
+                via_shell_objs.append(cond)
 
     # ---- microstrip trace: straight 50-ohm feed (width W) from the port to
     # x_taper, then a Deslandes flare from W up to the FULL cavity wall
@@ -643,30 +697,58 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     cut_out, _ = occ.cut([sub], cyls, removeObject=True, removeTool=True)
     occ.synchronize()
     sub_tags = [(dd, t) for (dd, t) in cut_out if dd == 3]
+    enig_boxes = [b for b in (enig_in, enig_out) if b is not None]
     mask_boxes = [b for b in (mask_in, mask_out) if b is not None]
-    air_boxes = [air_in, air_out] + ([air_slot] if air_slot is not None else []) + mask_boxes
-    occ.fragment(sub_tags + ptfe_vols + air_boxes,
-                 [trace_in, trace_out] + sma_caps + gnd_surfs)
+    air_boxes = ([air_in, air_out] + ([air_slot] if air_slot is not None else [])
+                + mask_boxes + enig_boxes)
+    frag_objects = sub_tags + ptfe_vols + air_boxes + via_shell_objs + via_core_objs
+    _, frag_map = occ.fragment(frag_objects, [trace_in, trace_out] + sma_caps + gnd_surfs)
     occ.synchronize()
+    # A full 360-degree annulus (the via plating shell) has its (x,y) centroid
+    # AT THE AXIS by rotational symmetry -- identical to the solid core's
+    # centroid -- so post-fragment geometric classification (centroid radial
+    # distance, the pattern used for every other volume in this function)
+    # CANNOT tell shell from core apart; both would silently land in
+    # via_core_vols. Track identity through fragment's own mapping instead:
+    # it's parallel to frag_objects, so the via_shell_objs/via_core_objs
+    # slices at the end tell us exactly which output tags each became.
+    n_shell, n_core = len(via_shell_objs), len(via_core_objs)
+    shell_out_tags = {t for entry in frag_map[len(frag_objects) - n_shell - n_core:
+                                              len(frag_objects) - n_core]
+                      for (dd, t) in entry if dd == 3}
+    core_out_tags = {t for entry in frag_map[len(frag_objects) - n_core:]
+                     for (dd, t) in entry if dd == 3}
 
     via_centres = final + gnd_via_centres
 
-    diel_clean, air_vols, sma_diel, mask_vols = [], [], [], []
+    diel_clean, air_vols, sma_diel, mask_vols, enig_vols = [], [], [], [], []
+    via_shell_vols, via_core_vols = [], []
     for dim, tag in gmsh.model.getEntities(3):
         cx, cy, cz = gmsh.model.occ.getCenterOfMass(dim, tag)
         if with_sma and (cx < X0 - 1e-6 or cx > X1 + 1e-6):
             sma_diel.append(tag)
+        elif tag in shell_out_tags:
+            via_shell_vols.append(tag)
+        elif tag in core_out_tags:
+            via_core_vols.append(tag)
         elif cz < h:
             diel_clean.append(tag)
-        elif soldermask_um and cz < h + t_mask + 1e-9:
+        elif enig_um and cz < h + t_enig + 1e-9:
+            enig_vols.append(tag)
+        elif soldermask_um and cz < h + t_enig + t_mask + 1e-9:
             mask_vols.append(tag)
         else:
             air_vols.append(tag)
+    air_vols += via_core_vols   # the hollow core of a plated (unfilled) via is just air
 
     gmsh.model.addPhysicalGroup(3, diel_clean, tag=1, name="dielectric")
     gmsh.model.addPhysicalGroup(3, air_vols, tag=2, name="air")
     if mask_vols:
         gmsh.model.addPhysicalGroup(3, mask_vols, tag=4, name="soldermask")
+    if enig_vols:
+        gmsh.model.addPhysicalGroup(3, enig_vols, tag=5, name="enig")
+    if via_shell_vols:
+        gmsh.model.addPhysicalGroup(3, via_shell_vols, tag=6, name="via_conductor")
     if sma_diel:
         gmsh.model.addPhysicalGroup(3, sma_diel, tag=3, name="sma_ptfe")
 
@@ -687,7 +769,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             j = i
         return inside
 
-    pec, wave_in, wave_out, absorbing, via_cond = [], [], [], [], []
+    pec, wave_in, wave_out, absorbing = [], [], [], []
     for dim, tag in gmsh.model.getEntities(2):
         cx, cy, cz = gmsh.model.occ.getCenterOfMass(2, tag)
         xmin, ymin_f, _, xmax, ymax_f, _ = gmsh.model.getBoundingBox(2, tag)
@@ -728,22 +810,18 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
         if _near(cz, 0.0):
             pec.append(tag)
-        elif on_via and via_conductivity_sm:
-            # Filled vs unfilled via study (2026-09-01): route via barrel
-            # faces to a real finite-conductivity surface-impedance boundary
-            # (Palace's Boundaries.Conductivity, "for conductors with
-            # thickness much larger than the skin depth") instead of the
-            # idealized zero-loss PEC every other face still uses.
-            # via_plating_um=None -> semi-infinite/solid-metal assumption
-            # (a fully filled/solid via post); a given thickness activates
-            # Palace's finite-thickness correction (a real plated, possibly
-            # hollow, barrel of that plating depth). Physically these should
-            # come out nearly identical whenever the plating is many skin
-            # depths thick (copper skin depth at 2.87GHz is ~1.23um vs a
-            # typical 20-25um barrel plating -- 16-20 skin depths), which is
-            # the point of running both: confirm the expected null result
-            # with real EM data rather than assume it.
-            via_cond.append(tag)
+        elif on_via and via_plated:
+            # Filled vs unfilled via study (2026-09-02, replaces the invalid
+            # 2026-09-01 Boundaries.Conductivity attempt): the via wall's
+            # lateral surface is now a real conductor-dielectric material
+            # interface (see the via_shell_objs/via_core_objs construction
+            # above), not a boundary condition -- leave it unclassified so
+            # it falls through to the default (not is_boundary, since it has
+            # two neighboring 3D volumes) and gets no explicit BC at all,
+            # exactly like the ENIG-to-air/soldermask interface. The
+            # electrode's real Ohmic loss is carried by the via_conductor
+            # material domain's volumetric Conductivity, not by this face.
+            pass
         elif on_via or on_sma_pin or on_sma_shell or on_sma_cap:
             pec.append(tag)
         elif with_sma and _near(cx, Xc0) and xmax - xmin < 1e-3:
@@ -773,15 +851,12 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             absorbing.append(tag)
 
     pec = sorted(set(pec))
-    via_cond = sorted(set(via_cond))
-    absorbing = sorted(set(absorbing) - set(pec) - set(wave_in) - set(wave_out) - set(via_cond))
+    absorbing = sorted(set(absorbing) - set(pec) - set(wave_in) - set(wave_out))
 
     gmsh.model.addPhysicalGroup(2, pec, tag=10, name="pec")
     gmsh.model.addPhysicalGroup(2, wave_in, tag=11, name="port_in")
     gmsh.model.addPhysicalGroup(2, wave_out, tag=12, name="port_out")
     gmsh.model.addPhysicalGroup(2, absorbing, tag=13, name="absorbing")
-    if via_cond:
-        gmsh.model.addPhysicalGroup(2, via_cond, tag=14, name="via_conductivity")
 
     if preview:
         print(f"  faces: pec={len(pec)} port_in={len(wave_in)} "
@@ -847,10 +922,15 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         mask_info = {"eps_r": soldermask_eps_r, "tand": soldermask_tand,
                      "thickness_um": soldermask_um}
     via_cond_info = None
-    if via_cond:
-        legend["via_conductivity"] = 14
-        via_cond_info = {"conductivity_sm": via_conductivity_sm,
+    if via_shell_vols:
+        legend["via_conductor"] = 6
+        via_cond_info = {"conductivity_sm": via_conductivity_sm, "mu_r": 1.0,
                          "plating_um": via_plating_um}
+    enig_info = None
+    if enig_vols:
+        legend["enig"] = 5
+        enig_info = {"conductivity_sm": enig_conductivity_sm, "mu_r": enig_mu_r,
+                     "thickness_um": enig_um}
     if show:
         print(f"\n--- dual-mode driven mesh, in-line ports (Li={Li}mm, "
               f"w_iris={w_iris_mm}mm, x_iris={x_iris:.2f}mm, y_wall={y_wall_mm}mm, "
@@ -865,7 +945,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     return {"mesh": out, "tets": ntet, "nodes": nnode, "legend": legend,
             "ports": (len(wave_in), len(wave_out)), "sma": sma_info,
             "soldermask": mask_info, "via_conductivity": via_cond_info,
-            "eps_r": eps_r, "tand": tand}
+            "enig": enig_info, "eps_r": eps_r, "tand": tand}
 
 
 def plot_layout_2d(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0,

@@ -412,6 +412,12 @@ def cmd_sweep(args) -> int:
         params = data.get("params", data)
     else:
         params = _parse_params(args.params)
+    if getattr(args, "enig", False):
+        if args.topology != "dualmode":
+            print("--enig is only wired for dualmode so far"); return 1
+        from .topologies.dualmode import JLCPCB_ENIG
+        for k, v in JLCPCB_ENIG.items():
+            params.setdefault(k, v)   # --params can still override any of these
 
     # Include N: two orders of the same topology (e.g. cascade N=3 vs N=4)
     # share a mesh tag without this and silently overwrite each other's
@@ -571,6 +577,12 @@ def main(argv: list[str] | None = None) -> int:
     _add_spec_args(p_swp)
     p_swp.add_argument("--params", default=None, help="k=v,k=v,... (mm)")
     p_swp.add_argument("--params-file", default=None, help="JSON file with {'params': {...}}")
+    p_swp.add_argument("--enig", action="store_true",
+                       help="JLCPCB's real ENIG stack (dualmode only): Rogers -> Cu -> ENIG "
+                            "-> soldermask, IPC-4552 numbers (4.5um Ni, sigma=1.67e6 S/m, "
+                            "mu_r=1.0 -- see topologies/dualmode.JLCPCB_ENIG). Combine with "
+                            "--params soldermask_um=20 for the masked case, or omit it for "
+                            "ENIG exposed directly to air.")
     p_swp.add_argument("--fmin", type=float, default=0.5, help="GHz")
     p_swp.add_argument("--fmax", type=float, default=6.0, help="GHz")
     p_swp.add_argument("--step", type=float, default=0.05, help="GHz")

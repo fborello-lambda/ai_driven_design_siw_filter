@@ -49,6 +49,27 @@ _PARAMS: dict[str, ParamRange] = {
 # follows the same Z0=50ohm PTFE coax relation as before (rout/rin = 3.326).
 # gnd_stitch models the connector's 4 discrete ground legs at +-2.62mm and the
 # top-side pour they solder to, rather than the idealised continuous ring.
+# JLCPCB's actual finish stack (2026-09-02, per the user): Rogers substrate
+# -> copper -> ENIG -> soldermask -- "overall" ENIG (plated before masking),
+# not the cheaper "selective" default (mask first, ENIG only at exposed
+# pads). Real IPC-4552 numbers, the standard JLCPCB follows: nickel
+# 3.0-6.0um (4.5um midpoint used here), gold flash 0.05-0.1um (too thin to
+# matter separately, not modelled). Conductivity/permeability from
+# electroless Ni-P plating data (Advanced Plating Technologies / Nickel
+# Institute): medium-phosphorus (5-9% P, the standard solderable
+# formulation) gives ~50-70 uOhm-cm resistivity (1.67e6 S/m used here) and
+# is essentially non-magnetic at RF (mu_r~1.0 for P>=5%, vs >1 for low-P --
+# low-P is specifically avoided in RF-sensitive applications per
+# intermodulation-distortion literature). Modelled as a real volumetric
+# conductor (Domains.Materials Conductivity), NOT the exterior-only
+# Boundaries.Conductivity surface BC -- see palace_dualmode_driven.py's
+# enig_um docstring for why that distinction matters.
+JLCPCB_ENIG: dict[str, float] = {
+    "enig_um": 4.5,
+    "enig_conductivity_sm": 1.67e6,
+    "enig_mu_r": 1.0,
+}
+
 TAOGLAS_SMA: dict[str, float | bool | int] = {
     "sma_rin_mm": 0.38,
     "sma_rout_mm": 1.2639,
@@ -105,7 +126,8 @@ class DualModeTopology:
                 "eps_r": res.get("eps_r", spec.substrate.eps_r),
                 "tand": res.get("tand", spec.substrate.tan_d),
                 "soldermask": res.get("soldermask"),
-                "via_conductivity": res.get("via_conductivity")}
+                "via_conductivity": res.get("via_conductivity"),
+                "enig": res.get("enig")}
 
     def plot_layout_2d(self, spec: FilterSpec, path: str, **params) -> str:
         p = dict(params)
