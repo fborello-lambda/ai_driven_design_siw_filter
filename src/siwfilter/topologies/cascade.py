@@ -15,6 +15,7 @@ from ..config import FilterSpec
 from ..palace_driven import build_mesh as _build_mesh
 from ..siw_geometry import build_geometry, _build_primitives, microstrip_width_50ohm
 from ..layout_plot import plot_layout
+from .launch import TAOGLAS_CPWG as TAOGLAS_SMA
 from .base import MeshResult, ParamRange
 
 # Calibrated for the N=3 default (see palace_opt_sma.py); reused per-cavity
@@ -43,19 +44,6 @@ _L_TAPER = (15.73, 8.0, 26.0)
 # TAOGLAS_SMA only enabled pad-only ground stitching (cpwg_gap_mm=None),
 # not the impedance-matched gap. This is the first place either topology
 # actually uses the solved CPWG numbers by default.
-TAOGLAS_SMA: dict[str, float | bool | int] = {
-    "sma_rin_mm": 0.38,
-    "sma_rout_mm": 1.2639,
-    "sma_eps_r": 2.08,
-    "sma_tand": 4.0e-4,
-    "gnd_stitch": True,
-    "n_gnd_stitch": 6,
-    "gnd_stitch_offset_mm": 2.62,
-    "cpwg_gap_mm": 0.2512,
-    "cpwg_y_gnd_mm": 0.8512,
-    "cpwg_y_out_mm": 3.6,
-    "cpwg_w_feed_mm": 1.2,
-}
 
 
 def _n_len_params(N: int) -> int:

@@ -20,6 +20,8 @@ from ..config import FilterSpec, find_palace, out_data
 from ..palace_dualmode_driven import build_mesh as _build_mesh, _dims, plot_layout_2d as _plot_layout_2d
 from ..palace_dualmode import build_mesh as _build_eig_mesh, A_SIW_MM, D_VIA_MM, P_VIA_MM
 from .base import MeshResult, ParamRange
+# THE launch -- one definition for the whole project (see launch.py).
+from .launch import TAOGLAS_CPWG as TAOGLAS_SMA
 
 # Winning 1.5/3.0mm design region (docs/dualmode_cavity/README.md) -- centers
 # the default search box on what's already validated rather than blind-
@@ -108,36 +110,7 @@ JLCPCB_SILKSCREEN: dict[str, float] = {
 VIA_COVERED: dict[str, float] = {"via_conductivity_sm": 5.96e7}
 VIA_OPEN: dict[str, float] = {"via_conductivity_sm": 5.96e7, "via_plating_um": 50.0}
 
-# 2026-09-02: the impedance-matched CPWG launch is now SIMULATED for
-# dual-mode, not just drawn. It was previously cascade-only, while dual-mode
-# used pad-only stitching -- so the launch that was solved to 50 ohm was not
-# the one on the board we intend to fabricate. Merging it here makes
-# build_mesh, plot_layout_2d and the stackup drawing all read ONE dict,
-# which is what stops the picture drifting from the physics (that drift
-# happened: the stackup top view drew CPWG while the mesh built pad-only).
-#
-# INVALIDATES every pre-2026-09-02 dual-mode golden: they were measured
-# under the pad-only launch (tagged sma_taoglas). Anything measured from
-# here on is a genuinely different structure and must be tagged
-# cpwg_taoglas.
-TAOGLAS_SMA: dict[str, float | bool | int] = {
-    "sma_rin_mm": 0.38,
-    "sma_rout_mm": 1.2639,
-    "sma_eps_r": 2.08,
-    "sma_tand": 4.0e-4,
-    "gnd_stitch": True,
-    "n_gnd_stitch": 6,
-    "gnd_stitch_offset_mm": 2.62,
-    "cpwg_gap_mm": 0.2512,
-    "cpwg_y_gnd_mm": 0.8512,
-    "cpwg_y_out_mm": 3.6,
-    "cpwg_w_feed_mm": 1.2,
-}
 
-# Kept only as an alias: there is now ONE launch definition, simulated
-# and drawn from the same dict. A separate "visual" preset is exactly
-# how the drawing drifted from the physics before.
-TAOGLAS_CPWG_VISUAL = TAOGLAS_SMA
 
 
 class DualModeTopology:
@@ -189,7 +162,7 @@ class DualModeTopology:
         p.pop("with_sma", None)
         return _plot_layout_2d(a_mm=a, w_iris_mm=w_iris, x_iris_mm=x_iris,
                                y_wall_mm=y_wall, w_ext_mm=w_ext, path=path,
-                               launch=TAOGLAS_CPWG_VISUAL, **p)
+                               launch=TAOGLAS_SMA, **p)
 
     def board_length_mm(self, spec: FilterSpec, **params) -> float:
         a = params.get("a", A_SIW_MM)

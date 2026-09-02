@@ -442,14 +442,12 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
     from .config import FilterSpec
     from .palace_dualmode_driven import (_dims, _via_layout, feed_trace_poly,
                                          gnd_stitch_layout)
-    # Draw what is actually SIMULATED. dualmode's build_mesh applies
-    # TAOGLAS_SMA (pad-only stitching, no coplanar gap); TAOGLAS_CPWG_VISUAL
-    # is a drawing-only overlay its own source comment says is deliberately
-    # NOT merged into build_mesh. Drawing the CPWG here made the picture show
-    # a launch no measurement in this project used.
+    # THE launch (topologies/launch.py) -- the single definition every
+    # topology and every drawing reads, so the picture cannot depict a
+    # launch that is not simulated.
     from .topologies.dualmode import (A_SIW_MM, JLCPCB_SOLDERMASK,
-                                      JLCPCB_SILKSCREEN, JLCPCB_ENIG,
-                                      TAOGLAS_SMA as CPWG)
+                                      JLCPCB_SILKSCREEN, JLCPCB_ENIG)
+    from .topologies.launch import TAOGLAS_CPWG as CPWG
     spec = spec or FilterSpec(N=2)
     p = params or dict(a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31)
     a = p["a"]
@@ -607,7 +605,8 @@ def verify_drawing_matches_mesh(spec=None, params: dict | None = None) -> bool:
     from .config import FilterSpec, out_data
     from .palace_dualmode_driven import (_dims, _via_layout, gnd_stitch_layout,
                                          feed_trace_poly)
-    from .topologies.dualmode import DualModeTopology, TAOGLAS_SMA as LAUNCH
+    from .topologies.dualmode import DualModeTopology
+    from .topologies.launch import TAOGLAS_CPWG as LAUNCH
     spec = spec or FilterSpec(N=2)
     p = params or dict(a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31)
 
