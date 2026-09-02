@@ -1172,6 +1172,34 @@ def plot_comparison(designs: dict[str, dict], spec: FilterSpec, out_path: str,
     return out_path
 
 
+def fixed_extras(topology, extras: dict):
+    """Wrap a Topology so every build_mesh call carries `extras` (e.g. the
+    fabrication stack). Keeps the optimizer's search box untouched -- these
+    are fixed conditions, not search dimensions -- so a design searched under
+    PEC and one searched under the real stack remain directly comparable."""
+    class _Fixed:
+        name = topology.name
+        poles_per_cavity = getattr(topology, "poles_per_cavity", 1)
+
+        def param_space(self, spec):
+            return topology.param_space(spec)
+
+        def build_mesh(self, spec, out_name, **params):
+            merged = dict(extras); merged.update(params)
+            return topology.build_mesh(spec, out_name, **merged)
+
+        def plot_layout_2d(self, spec, path, **params):
+            return topology.plot_layout_2d(spec, path, **params)
+
+        def board_length_mm(self, spec, **params):
+            return topology.board_length_mm(spec, **params)
+
+        def calibrate(self, spec, **kw):
+            return topology.calibrate(spec, **kw)
+
+    return _Fixed()
+
+
 def local_topology(topology: Topology, seed: dict[str, float],
                    spans: dict[str, float] | None = None,
                    default_span: float = 2.5,

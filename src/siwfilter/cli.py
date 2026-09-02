@@ -271,6 +271,20 @@ def cmd_design(args) -> int:
     # discontinuous in w_ext), while the same optimizer works locally around a
     # physics-derived seed -- the regime it already succeeds in for dualmode.
     # Pair with `siw synth-design` to generate that seed.
+    fab = {}
+    if getattr(args, "real_metal", False) or getattr(args, "enig", False):
+        if args.topology != "dualmode":
+            print("--enig/--real-metal are only wired for dualmode so far"); return 1
+        from .topologies.dualmode import (JLCPCB_METAL, JLCPCB_ENIG,
+                                          JLCPCB_SOLDERMASK, JLCPCB_SILKSCREEN, VIA_OPEN)
+        fab.update(JLCPCB_METAL)
+        if args.enig:
+            fab.update(JLCPCB_ENIG); fab.update(JLCPCB_SOLDERMASK)
+            fab.update(JLCPCB_SILKSCREEN); fab.update(VIA_OPEN)
+        from .optimize import fixed_extras
+        topo = fixed_extras(topo, fab)
+        print(f"fabrication stack ON for every evaluation: {sorted(fab)}")
+
     if args.seed:
         from .optimize import local_topology
         seed = _parse_params(args.seed)
@@ -588,6 +602,11 @@ def main(argv: list[str] | None = None) -> int:
     p_des.add_argument("--device", default="auto", choices=["auto", "CPU", "GPU"],
                        help=_DEVICE_HELP)
     p_des.add_argument("--np", type=int, default=4, help="MPI ranks (CPU only; GPU always uses 1)")
+    p_des.add_argument("--real-metal", action="store_true",
+                       help="evaluate every design with REAL lossy copper instead of PEC")
+    p_des.add_argument("--enig", action="store_true",
+                       help="evaluate every design with the full JLCPCB stack "
+                            "(real copper + ENIG + soldermask + silkscreen + open vias)")
     p_des.set_defaults(func=cmd_design)
 
     p_lay = sub.add_parser("layout", help="fast layout-only sanity check (no solve)")
