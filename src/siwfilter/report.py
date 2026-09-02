@@ -265,6 +265,100 @@ def build_design_comparison(golden_paths: list[str], f0_ghz: float = 2.87,
     return True
 
 
+# Fabrication variants of ONE design: default set and their plot styling.
+# Unlike build_design_comparison (different designs, stacked per-design
+# subplots), these are the SAME geometry under different fabrication stacks,
+# so they belong on one shared pair of axes to be comparable at a glance.
+FAB_VARIANTS = [
+    ("pec_optimized",  "1. PEC (as optimized)",             "black",      "-",  2.2),
+    ("cu_silk_tented", "2. Cu+ENIG+mask+silk, vias tented", "tab:red",    "-",  1.6),
+    ("cu_silk_open",   "3. Cu+ENIG+mask+silk, vias open",   "tab:orange", "--", 1.6),
+    ("cu_nosilk",      "4. Cu+ENIG+mask, no silkscreen",    "tab:blue",   "-.", 1.6),
+]
+
+
+def build_fab_variant_comparison(result_json: str | None = None,
+                                 f0_ghz: float = 2.87, fbw: float = 0.05,
+                                 spec_db: float = -16.0,
+                                 out_name: str = "fab_variant_comparison",
+                                 variants: list | None = None) -> bool:
+    """One overlay of every fabrication variant + the ideal Chebyshev target.
+
+    Reads the incremental result JSON produced by the variant sweep, so it can
+    be run while cells are still solving -- variants that have not landed yet
+    are skipped rather than failing. Also writes the plotted curves and the
+    metrics table back out as JSON, so the figure's underlying data is kept
+    alongside it instead of living only inside a PNG.
+    """
+    from .config import out_data
+    path = result_json or out_data("four_variants_result.json")
+    if not os.path.exists(path):
+        print(f"  (skip fab variants -- no {path})")
+        return False
+    data = json.load(open(path))
+    variants = variants or FAB_VARIANTS
+
+    fig, (ax21, ax11) = plt.subplots(2, 1, figsize=(11, 8.5), sharex=True)
+    rows, saved, n = [], {}, 0
+    for key, label, colour, ls, lw in variants:
+        e = data.get(key)
+        if not e:
+            print(f"  (pending: {label})")
+            continue
+        f, s11, s21 = e["f_ghz"], e["s11_db"], e["s21_db"]
+        ax21.plot(f, s21, label=label, color=colour, ls=ls, lw=lw)
+        ax11.plot(f, s11, label=label, color=colour, ls=ls, lw=lw)
+        m = e["metrics"]
+        rows.append((label, m.get("fc_3db", m.get("fc")), m.get("il"),
+                     m.get("bw"), m.get("s11w")))
+        saved[key] = {"label": label, "f_ghz": f, "s11_db": s11, "s21_db": s21,
+                      "metrics": m, "params": e.get("params")}
+        n += 1
+
+    tgt = out_s2p("target.s2p")
+    if os.path.exists(tgt):
+        nw = rf.Network(tgt)
+        ft = nw.f / 1e9
+        t21 = _db(nw.s[:, 1, 0]); t11 = _db(nw.s[:, 0, 0])
+        ax21.plot(ft, t21, label="ideal Chebyshev", color="gray", ls=":", lw=2.2)
+        ax11.plot(ft, t11, label="ideal Chebyshev", color="gray", ls=":", lw=2.2)
+        saved["ideal_chebyshev"] = {"label": "ideal Chebyshev",
+                                    "f_ghz": list(ft), "s11_db": list(t11),
+                                    "s21_db": list(t21)}
+
+    for ax in (ax21, ax11):
+        ax.axvspan(f0_ghz * (1 - fbw / 2), f0_ghz * (1 + fbw / 2), color="green", alpha=0.07)
+        ax.grid(alpha=0.3)
+    ax11.axhline(spec_db, color="gray", ls="--", lw=0.8)
+    ax21.set_ylabel("|S21| (dB)"); ax21.set_ylim(-40, 3)
+    ax11.set_ylabel("|S11| (dB)"); ax11.set_ylim(-40, 3)
+    ax11.set_xlabel("Frequency (GHz)")
+    ax21.legend(fontsize=8, loc="lower right")
+    ax21.set_title(f"Fabrication variants vs ideal target ({n}/{len(variants)} available)")
+    fig.tight_layout()
+    img = out_img(f"{out_name}.png")
+    fig.savefig(img, dpi=140)
+    plt.close(fig)
+    shutil.copy2(img, os.path.join(REPORT_DIR, f"{out_name}.png"))
+    print(f"  {out_name}.png -> {REPORT_DIR}")
+
+    datap = out_data(f"{out_name}_plotdata.json")
+    json.dump(saved, open(datap, "w"), indent=2)
+    print(f"  wrote {datap}")
+
+    if rows:
+        print(f"\n{'variant':38s} {'fc(GHz)':>8s} {'IL(dB)':>7s} {'BW(MHz)':>8s} {'S11w(dB)':>9s}")
+        for label, fc, il, bw, s11w in rows:
+            print(f"{label:38s} {fc:8.3f} {il:7.2f} {bw:8.0f} {s11w:9.2f}")
+        if len(rows) >= 2:
+            b = rows[0]
+            print("\ndeltas vs the PEC reference:")
+            for label, fc, il, bw, s11w in rows[1:]:
+                print(f"  {label:36s} dIL={il - b[2]:+.2f}dB  dS11w={s11w - b[4]:+.2f}dB  "
+                      f"dBW={bw - b[3]:+.0f}MHz  dfc={(fc - b[1]) * 1000:+.0f}MHz")
+    return n > 0
+
+
 def sync_figs() -> list[str]:
     """Copy pipeline figures from output/imgs/ into the report folder."""
     copied = []

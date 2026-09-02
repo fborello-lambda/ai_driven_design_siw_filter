@@ -28,6 +28,10 @@ Plus AI-driven design subcommands (see HANDOFF.md), all Palace/Topology-based:
     design --topology ...       : full Bayesian search for a new design
     layout --topology ...       : fast layout-only sanity check (no solve)
     sweep  --topology ...       : wideband sweep of an existing design
+    compare-fab-variants        : ONE overlay of every fabrication variant of a
+                                   design (PEC vs copper/ENIG/soldermask/
+                                   silkscreen/via options) + the ideal Chebyshev
+                                   target; also saves the plot data as JSON
     compare-designs --golden .. : fabrication-decision comparison across an
                                    arbitrary list of golden/ design entries --
                                    S11/S21 on identical axes + true-to-scale
@@ -458,6 +462,14 @@ def cmd_sweep(args) -> int:
     return 0
 
 
+def cmd_compare_fab_variants(args) -> int:
+    from .report import build_fab_variant_comparison
+    ok = build_fab_variant_comparison(result_json=args.result_json, f0_ghz=args.f0,
+                                      fbw=args.fbw, spec_db=args.spec_db,
+                                      out_name=args.out_name)
+    return 0 if ok else 1
+
+
 def cmd_compare_designs(args) -> int:
     from .report import build_design_comparison
     ok = build_design_comparison(args.golden, f0_ghz=args.f0, fbw=args.fbw,
@@ -616,6 +628,22 @@ def main(argv: list[str] | None = None) -> int:
                        help=_DEVICE_HELP)
     p_swp.add_argument("--np", type=int, default=4)
     p_swp.set_defaults(func=cmd_sweep)
+
+    p_fab = sub.add_parser("compare-fab-variants",
+                           help="ONE overlay of every fabrication variant of a design "
+                                "(PEC vs copper/ENIG/soldermask/silkscreen/via options) plus "
+                                "the ideal Chebyshev target, on shared axes. Reads the "
+                                "incremental variant-sweep JSON, so it works while cells are "
+                                "still solving; also saves the plotted curves + metrics as JSON.")
+    p_fab.add_argument("--result-json", default=None,
+                       help="variant sweep results (default: output/data/four_variants_result.json)")
+    p_fab.add_argument("--f0", type=float, default=2.87, help="GHz, for the FBW shading")
+    p_fab.add_argument("--fbw", type=float, default=0.05, help="fractional BW, for the shading")
+    p_fab.add_argument("--spec-db", type=float, default=-16.0, help="S11 spec line")
+    p_fab.add_argument("--out-name", default="fab_variant_comparison",
+                       help="output basename -> output/imgs/<n>.png, docs/<n>.png, "
+                            "output/data/<n>_plotdata.json")
+    p_fab.set_defaults(func=cmd_compare_fab_variants)
 
     p_cmpd = sub.add_parser("compare-designs",
                             help="fabrication-decision comparison across a list of golden/ "
