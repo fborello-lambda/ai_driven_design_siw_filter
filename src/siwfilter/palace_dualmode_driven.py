@@ -632,6 +632,13 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     _xh_out = X1 - cpwg_len_mm if _wp is not None else None
     trace_in = (2, trace_surface(X0, -Lt, 0.0, ty_in_lo, ty_in_hi, _wp, _xp_in, _xh_in))
     trace_out = (2, trace_surface(X1, Li + Lt, Li, ty_out_lo, ty_out_hi, _wp, _xp_out, _xh_out))
+    # Ground truth for report.verify_drawing_matches_mesh: the exact feed
+    # outlines meshed, including the CPWG pad taper. Verifying only via
+    # positions missed a drawing that omitted the taper entirely.
+    _trace_poly_in = feed_trace_poly(X0, -Lt, 0.0, W, ty_in_lo, ty_in_hi,
+                                     _wp, _xp_in, _xh_in).tolist()
+    _trace_poly_out = feed_trace_poly(X1, Li + Lt, Li, W, ty_out_lo, ty_out_hi,
+                                      _wp, _xp_out, _xh_out).tolist()
 
     # ---- connector ground: top-side pour + stitching vias ----
     # The Taoglas EMPCB.SMAFSTJ.B.HT grounds through 4 discrete legs at the
@@ -1107,7 +1114,11 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             "launch_geom": {"gnd_via_centres": [list(map(float, c)) for c in gnd_via_centres],
                             "via_centres": [list(map(float, c)) for c in final],
                             "cpwg_gap_mm": cpwg_gap_mm,
-                            "n_gnd_stitch": n_gnd_stitch},
+                            "n_gnd_stitch": n_gnd_stitch,
+                            "trace_poly_in": _trace_poly_in,
+                            "trace_poly_out": _trace_poly_out,
+                            "w_pad": _wp, "x_pad_end_in": _xp_in,
+                            "x_pad_hold_in": _xh_in},
             "eps_r": eps_r, "tand": tand}
 
 

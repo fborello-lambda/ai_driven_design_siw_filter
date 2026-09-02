@@ -477,8 +477,19 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
     w_pad = CPWG.get("cpwg_w_feed_mm")
     _pad_end = (-Xf + CPWG.get("cpwg_len_mm", 5.0) + CPWG.get("cpwg_taper_mm", 4.0)
                 if w_pad else None)
-    trace_in = feed_trace_poly(-Xf, -Lt, 0.0, W, -half, half)
-    trace_out = feed_trace_poly(a + Xf, a + Lt, a, W, -half, half)
+    # Same formulas build_mesh uses for the CPWG pad taper (see
+    # palace_dualmode_driven's _wp/_xp/_xh). Omitting them drew a
+    # constant-width feed with no gradual transition -- a real mismatch
+    # against the meshed geometry, and one the via-only verification missed.
+    _clen = CPWG.get("cpwg_len_mm", 5.0)
+    _ctap = CPWG.get("cpwg_taper_mm", 4.0)
+    _wp = CPWG.get("cpwg_w_feed_mm") if CPWG.get("cpwg_gap_mm") is not None else None
+    _xp_in = -Xf + (_clen + _ctap) if _wp is not None else None
+    _xh_in = -Xf + _clen if _wp is not None else None
+    _xp_out = a + Xf - (_clen + _ctap) if _wp is not None else None
+    _xh_out = a + Xf - _clen if _wp is not None else None
+    trace_in = feed_trace_poly(-Xf, -Lt, 0.0, W, -half, half, _wp, _xp_in, _xh_in)
+    trace_out = feed_trace_poly(a + Xf, a + Lt, a, W, -half, half, _wp, _xp_out, _xh_out)
 
     fig = plt.figure(figsize=(13, 11))
     axes = [fig.add_subplot(3, 1, 1), fig.add_subplot(3, 1, 2), fig.add_subplot(3, 1, 3)]
@@ -594,7 +605,8 @@ def verify_drawing_matches_mesh(spec=None, params: dict | None = None) -> bool:
     """
     import numpy as _np
     from .config import FilterSpec, out_data
-    from .palace_dualmode_driven import _dims, _via_layout, gnd_stitch_layout
+    from .palace_dualmode_driven import (_dims, _via_layout, gnd_stitch_layout,
+                                         feed_trace_poly)
     from .topologies.dualmode import DualModeTopology, TAOGLAS_SMA as LAUNCH
     spec = spec or FilterSpec(N=2)
     p = params or dict(a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31)
@@ -619,9 +631,19 @@ def verify_drawing_matches_mesh(spec=None, params: dict | None = None) -> bool:
     drawn_fence, _ = _via_layout(a, p["w_iris"], p["x_iris"], p["w_ext"],
                                  spec.d_via * 1e3, spec.p_via * 1e3, p["y_wall"])
 
+    _clen = LAUNCH.get("cpwg_len_mm", 5.0)
+    _ctap = LAUNCH.get("cpwg_taper_mm", 4.0)
+    _wp = LAUNCH.get("cpwg_w_feed_mm") if LAUNCH.get("cpwg_gap_mm") is not None else None
+    drawn_trace = feed_trace_poly(
+        -Xf, -Lt, 0.0, W, -a / 2.0, a / 2.0, _wp,
+        (-Xf + _clen + _ctap) if _wp is not None else None,
+        (-Xf + _clen) if _wp is not None else None)
+
     ok = True
     for name, drawn, meshed in (("ground-stitch vias", drawn_gnd, g["gnd_via_centres"]),
-                                ("fence vias", drawn_fence, g["via_centres"])):
+                                ("fence vias", drawn_fence, g["via_centres"]),
+                                ("input feed outline (incl. CPWG pad taper)",
+                                 drawn_trace, g["trace_poly_in"])):
         d = _np.array(sorted(map(tuple, drawn)))
         m = _np.array(sorted(map(tuple, meshed)))
         if d.shape != m.shape:
