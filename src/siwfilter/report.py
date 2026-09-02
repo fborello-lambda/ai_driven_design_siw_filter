@@ -428,6 +428,91 @@ def build_stackup_view(spec=None, out_name: str = "stackup",
     return True
 
 
+def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
+                          params: dict | None = None) -> bool:
+    """TOP view of the board showing where each fabrication layer actually
+    sits: soldermask + silkscreen coverage, the recommended mask OPENING
+    over the CPWG feed / SMA launch, and the bare-ENIG copper it exposes.
+
+    Reuses palace_dualmode_driven's pure-geometry helpers (the same ones the
+    mesh builder and the existing layout drawing call), so the picture can
+    not drift from what is simulated.
+    """
+    from matplotlib.patches import Circle, Polygon, Rectangle
+    from .config import FilterSpec
+    from .palace_dualmode_driven import _dims, _via_layout, feed_trace_poly
+    from .topologies.dualmode import (A_SIW_MM, JLCPCB_SOLDERMASK,
+                                      JLCPCB_SILKSCREEN, JLCPCB_ENIG)
+    spec = spec or FilterSpec(N=2)
+    p = params or dict(a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31)
+    a = p["a"]
+    W, Lt, Lf = _dims(a, None, None, None)
+    Xf = Lt + Lf
+    half = a / 2.0
+    r = spec.d_via * 1e3 / 2.0
+    final, x_iris = _via_layout(a, p["w_iris"], p["x_iris"], p["w_ext"],
+                                spec.d_via * 1e3, spec.p_via * 1e3, p["y_wall"])
+    ym = half + 3.0
+    trace_in = feed_trace_poly(-Xf, -Lt, 0.0, W, -half, half)
+    trace_out = feed_trace_poly(a + Xf, a + Lt, a, W, -half, half)
+
+    fig, axes = plt.subplots(2, 1, figsize=(13, 8.5), sharex=True)
+    for ax, open_mask in zip(axes, (False, True)):
+        # board + soldermask coverage
+        ax.add_patch(Rectangle((-Xf, -ym), a + 2 * Xf, 2 * ym, fc="#c8b28a",
+                               ec="0.3", lw=1.0, zorder=0))
+        if open_mask:
+            # mask everywhere EXCEPT the two feed windows
+            ax.add_patch(Rectangle((-Lt, -ym), a + 2 * Lt, 2 * ym, fc="#1b6b3a",
+                                   ec="none", alpha=0.45, zorder=1))
+            for x0 in (-Xf, a + Lt):
+                ax.add_patch(Rectangle((x0, -ym), Xf - Lt, 2 * ym, fc="none",
+                                       ec="#b00", lw=1.6, ls="--", zorder=4))
+            ax.text(-Xf + (Xf - Lt) / 2, ym * 0.72, "MASK\nOPENING", ha="center",
+                    va="center", fontsize=8, color="#b00", weight="bold", zorder=5)
+            ax.text(a + Lt + (Xf - Lt) / 2, ym * 0.72, "MASK\nOPENING", ha="center",
+                    va="center", fontsize=8, color="#b00", weight="bold", zorder=5)
+        else:
+            ax.add_patch(Rectangle((-Xf, -ym), a + 2 * Xf, 2 * ym, fc="#1b6b3a",
+                                   ec="none", alpha=0.45, zorder=1))
+        # cavity + copper
+        ax.add_patch(Rectangle((0.0, -half), a, 2 * half, fc="#cfe8ff",
+                               ec="0.4", alpha=0.45, zorder=2))
+        for poly in (trace_in, trace_out):
+            ax.add_patch(Polygon(poly, closed=True, fc="#d9a441", ec="#a06d12",
+                                 lw=0.8, alpha=0.95, zorder=3))
+        for (x, y) in final:
+            internal = abs(x - x_iris) < 1e-6
+            ax.add_patch(Circle((x, y), r, fc=("#b00" if internal else "#444"),
+                                ec="none", zorder=4))
+        # add_patch does NOT update the data limits, so without explicit
+        # limits matplotlib keeps its default 0..1 x-range and the whole
+        # board collapses to a sliver.
+        ax.set_xlim(-Xf - 3, a + Xf + 3)
+        ax.set_ylim(-ym - 2, ym + 7)
+        ax.set_aspect("equal")
+        ax.set_ylabel("y [mm]")
+        ttl = ("SOLDERMASK OPENED over the feed  (recommended: exposes bare ENIG "
+               "at the launch, where the detuning originates)"
+               if open_mask else
+               "SOLDERMASK + SILKSCREEN over the WHOLE board  "
+               "(measured: S11w -12.5dB, misses the -16dB spec)")
+        ax.set_title(ttl, fontsize=9.5)
+    axes[-1].set_xlabel("x [mm]")
+    fig.suptitle(
+        f"Top view with fabrication stack -- green = soldermask "
+        f"({JLCPCB_SOLDERMASK['soldermask_um']:.0f}um) + silkscreen "
+        f"({JLCPCB_SILKSCREEN['silkscreen_um']:.0f}um);  gold = copper + ENIG "
+        f"({JLCPCB_ENIG['enig_um']}um);  red vias = internal iris", fontsize=10)
+    fig.tight_layout()
+    img = out_img(f"{out_name}.png")
+    fig.savefig(img, dpi=140)
+    plt.close(fig)
+    shutil.copy2(img, os.path.join(REPORT_DIR, f"{out_name}.png"))
+    print(f"  {out_name}.png -> {REPORT_DIR}")
+    return True
+
+
 def sync_figs() -> list[str]:
     """Copy pipeline figures from output/imgs/ into the report folder."""
     copied = []

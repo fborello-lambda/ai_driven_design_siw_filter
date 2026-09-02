@@ -463,8 +463,12 @@ def cmd_sweep(args) -> int:
 
 
 def cmd_stackup(args) -> int:
-    from .report import build_stackup_view
-    return 0 if build_stackup_view(spec=_make_spec(args), out_name=args.out_name) else 1
+    from .report import build_stackup_view, build_stackup_topview
+    spec = _make_spec(args)
+    ok = build_stackup_view(spec=spec, out_name=args.out_name)
+    if not args.no_topview:
+        ok = build_stackup_topview(spec=spec, out_name=f"{args.out_name}_topview") and ok
+    return 0 if ok else 1
 
 
 def cmd_compare_fab_variants(args) -> int:
@@ -640,6 +644,9 @@ def main(argv: list[str] | None = None) -> int:
                                 "both with the feed covered and with the soldermask opened")
     _add_spec_args(p_stk)
     p_stk.add_argument("--out-name", default="stackup", help="output basename")
+    p_stk.add_argument("--no-topview", action="store_true",
+                       help="cross-section only; skip the top view showing soldermask "
+                            "coverage and the recommended feed opening")
     p_stk.set_defaults(func=cmd_stackup)
 
     p_fab = sub.add_parser("compare-fab-variants",
