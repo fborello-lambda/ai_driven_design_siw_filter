@@ -26,7 +26,49 @@ All five geometry parameters move (`a, w_iris, x_iris, y_wall, w_ext`).
 Bandwidth is already a two-sided term in `score()` (`w_bw=3.0`), so it is
 targeted, not merely reported.
 
-**1b. Fabrication-stack comparison at FIXED 1a geometry**
+**RESULT of 1a (2026-09-02): the search failed, and the CPWG launch hurt.**
+
+The global search early-stopped after 15 of 45 evals -- 14 consecutive
+evals with no improvement -- and never beat the geometry it was seeded
+with. Fine confirm of that geometry under CPWG + PEC:
+`fc=2.901 GHz, S11w=-10.35 dB, BW=310 MHz, IL=-1.46 dB`.
+
+The same geometry measured **-17.7 dB** under the pad-only launch, so the
+CPWG launch costs about **7 dB of return loss** on this cavity. That launch
+was solved to 50 ohm for the *cascade*, not for dual-mode. Porting it over
+made things worse, not better.
+
+Two conclusions:
+
+1. Black-box search is the wrong tool here -- a GP that cannot beat a free
+   seed in 14 attempts indicates a mis-centred box, the same signature the
+   cascade showed before calibrate-and-invert rescued it.
+2. The launch itself needs matching to the dual-mode cavity, not adopting
+   wholesale from another topology.
+
+**1b. Fabrication-stack comparison at FIXED 1a geometry -- BLOCKED**
+
+The `pec` cell completed (numbers above). Both real-stack cells failed:
+gmsh could not recover the boundary mesh and produced an empty mesh
+(`nodes=0 tets=0`), so Palace had nothing to solve.
+
+The identical stack meshed fine (77-80k nodes) under the pad-only launch in
+the earlier fabrication study, so this is specific to **CPWG + thin fab
+layers**: the 4.5 um ENIG and 12 um silkscreen prisms spanning the 0.2512 mm
+coplanar gap are extreme-aspect-ratio slivers.
+
+Separately, a **gmsh state leak** turned one failure into two -- after the
+failed mesh gmsh stayed initialised ("Gmsh has already been initialized /
+I'm busy!"), poisoning the next build in the same process. Worth fixing on
+its own: one mesh failure silently corrupts everything after it.
+
+**1b-old (still valid).** The equivalent study under the pad-only launch DID
+complete, and its mechanism-level findings carry over: return loss is the
+dominant fabrication penalty, real copper costs about 0.37 dB of insertion
+loss, and via tenting and silkscreen are electrically irrelevant (<0.03 dB).
+See `golden/dualmode_N2/archive_padonly_launch/`.
+
+**1b-superseded. Original fixed-geometry comparison plan**
 
 Take 1a's winning geometry unchanged and evaluate it three ways. This
 isolates what the fabrication stack costs *this* geometry, before any
