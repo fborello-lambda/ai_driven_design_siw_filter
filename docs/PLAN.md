@@ -26,11 +26,34 @@ All five geometry parameters move (`a, w_iris, x_iris, y_wall, w_ext`).
 Bandwidth is already a two-sided term in `score()` (`w_bw=3.0`), so it is
 targeted, not merely reported.
 
-**1b. Polish, full fabrication stack**
+**1b. Fabrication-stack comparison at FIXED 1a geometry**
+
+Take 1a's winning geometry unchanged and evaluate it three ways. This
+isolates what the fabrication stack costs *this* geometry, before any
+re-tuning is allowed to mask it:
+
+| Cell | Metal | Stack | Vias |
+|---|---|---|---|
+| `pec` | PEC (idealised) | none | — |
+| `real_tented` | real copper + ENIG | soldermask + silkscreen | filled + capped |
+| `real_open` | real copper + ENIG | soldermask + silkscreen | open plated barrel |
+
+Same geometry in all three, so any difference is the stack alone. Expect
+return loss to drop (the stack detunes the launch) and insertion loss to
+rise about 0.4 dB (real copper). Tented versus open should be negligible;
+it was under the pad-only launch, and the via hole is far below its cutoff.
+
+**1c. Polish, full fabrication stack**
 ```bash
 siw design --topology dualmode --N 2 --seed <1a best> --span 2 \
            --patience 14 --evals 30 --np 8 --enig --real-metal
 ```
+
+**1d. Regenerate every artifact**
+
+New goldens tagged `cpwg_taoglas`, then `siw compare-designs`,
+`siw compare-fab-variants`, `siw layout` and `siw stackup --verify`, then
+update STATE.md and rebuild the PDFs.
 `--enig` applies real copper + ENIG + soldermask + silkscreen + open vias to
 every evaluation. `fixed_extras()` keeps these out of the search box — they
 are conditions, not dimensions — so 1a and 1b stay comparable.
