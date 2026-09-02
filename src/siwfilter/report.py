@@ -442,9 +442,14 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
     from .config import FilterSpec
     from .palace_dualmode_driven import (_dims, _via_layout, feed_trace_poly,
                                          gnd_stitch_layout)
+    # Draw what is actually SIMULATED. dualmode's build_mesh applies
+    # TAOGLAS_SMA (pad-only stitching, no coplanar gap); TAOGLAS_CPWG_VISUAL
+    # is a drawing-only overlay its own source comment says is deliberately
+    # NOT merged into build_mesh. Drawing the CPWG here made the picture show
+    # a launch no measurement in this project used.
     from .topologies.dualmode import (A_SIW_MM, JLCPCB_SOLDERMASK,
                                       JLCPCB_SILKSCREEN, JLCPCB_ENIG,
-                                      TAOGLAS_CPWG_VISUAL as CPWG)
+                                      TAOGLAS_SMA as CPWG)
     spec = spec or FilterSpec(N=2)
     p = params or dict(a=57.21, w_iris=15.26, x_iris=28.68, y_wall=8.62, w_ext=16.31)
     a = p["a"]
@@ -461,18 +466,19 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
         -Xf, a + Xf, W, ym, -ym,
         n_gnd_stitch=int(CPWG["n_gnd_stitch"]),
         gnd_stitch_offset_mm=CPWG["gnd_stitch_offset_mm"],
-        cpwg_gap_mm=CPWG["cpwg_gap_mm"], cpwg_y_gnd_mm=CPWG["cpwg_y_gnd_mm"],
-        cpwg_y_out_mm=CPWG["cpwg_y_out_mm"],
+        cpwg_gap_mm=CPWG.get("cpwg_gap_mm"), cpwg_y_gnd_mm=CPWG.get("cpwg_y_gnd_mm"),
+        cpwg_y_out_mm=CPWG.get("cpwg_y_out_mm"),
         cpwg_len_mm=CPWG.get("cpwg_len_mm", 5.0),
         cpwg_taper_mm=CPWG.get("cpwg_taper_mm", 4.0))
+    has_cpwg = CPWG.get("cpwg_gap_mm") is not None
+    n_per_row = max((sum(1 for v in gnd_vias if abs(v[1] - yy) < 1e-6)
+                     for yy in {round(v[1], 4) for v in gnd_vias}), default=0)
     rg = 0.3
     w_pad = CPWG.get("cpwg_w_feed_mm")
-    trace_in = feed_trace_poly(-Xf, -Lt, 0.0, W, -half, half,
-                               w_pad=w_pad, x_pad_end=-Xf + CPWG.get("cpwg_len_mm", 5.0)
-                               + CPWG.get("cpwg_taper_mm", 4.0), x_pad_hold=-Xf + CPWG.get("cpwg_len_mm", 5.0))
-    trace_out = feed_trace_poly(a + Xf, a + Lt, a, W, -half, half,
-                                w_pad=w_pad, x_pad_end=a + Xf - CPWG.get("cpwg_len_mm", 5.0)
-                                - CPWG.get("cpwg_taper_mm", 4.0), x_pad_hold=a + Xf - CPWG.get("cpwg_len_mm", 5.0))
+    _pad_end = (-Xf + CPWG.get("cpwg_len_mm", 5.0) + CPWG.get("cpwg_taper_mm", 4.0)
+                if w_pad else None)
+    trace_in = feed_trace_poly(-Xf, -Lt, 0.0, W, -half, half)
+    trace_out = feed_trace_poly(a + Xf, a + Lt, a, W, -half, half)
 
     fig = plt.figure(figsize=(13, 11))
     axes = [fig.add_subplot(3, 1, 1), fig.add_subplot(3, 1, 2), fig.add_subplot(3, 1, 3)]
@@ -541,18 +547,25 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
     for (x, y) in final:
         if x < x_hi:
             az.add_patch(Circle((x, y), r, fc="#444", ec="none", zorder=4))
-    az.annotate(f"CPWG gap {CPWG['cpwg_gap_mm']:.4f} mm",
-                xy=(-Xf + 2.0, CPWG["cpwg_y_gnd_mm"]),
-                xytext=(-Xf + 2.0, CPWG["cpwg_y_gnd_mm"] + 4.5),
-                arrowprops=dict(arrowstyle="->", color="#b00"), fontsize=8.5, color="#b00")
-    az.text(-Xf + 1.0, -CPWG["cpwg_y_out_mm"] - 2.6,
-            f"{int(CPWG['n_gnd_stitch'])} stitch vias/side", fontsize=8.5, color="#333")
+    if has_cpwg:
+        az.annotate(f"CPWG gap {CPWG['cpwg_gap_mm']:.4f} mm",
+                    xy=(-Xf + 2.0, CPWG["cpwg_y_gnd_mm"]),
+                    xytext=(-Xf + 2.0, CPWG["cpwg_y_gnd_mm"] + 4.5),
+                    arrowprops=dict(arrowstyle="->", color="#b00"),
+                    fontsize=8.5, color="#b00")
+    else:
+        az.text(-Xf + 0.5, 4.6, "PAD-ONLY launch (no coplanar gap) -- this is what\n"
+                               "every measurement in this project actually used",
+                fontsize=8.5, color="#b00")
+    az.text(-Xf + 0.5, -6.2, f"{n_per_row} ground-pad stitch vias per row "
+                             f"(counted from the geometry)", fontsize=8.5, color="#333")
+    _yz = CPWG.get("cpwg_y_out_mm") or (CPWG["gnd_stitch_offset_mm"] + 1.5)
     az.set_xlim(x_lo, x_hi)
-    az.set_ylim(-CPWG["cpwg_y_out_mm"] - 4, CPWG["cpwg_y_out_mm"] + 6)
+    az.set_ylim(-_yz - 4, _yz + 6)
     az.set_aspect("equal")
     az.set_ylabel("y [mm]")
-    az.set_title("ZOOM: input CPWG launch inside the mask opening "
-                 "(signal trace + coplanar grounds + stitch vias)", fontsize=9.5)
+    az.set_title("ZOOM: input launch inside the mask opening "
+                 f"({'CPWG' if has_cpwg else 'pad-only'} -- as simulated)", fontsize=9.5)
     axes[1].set_xlabel("x [mm]")
     az.set_xlabel("x [mm]")
     fig.suptitle(
