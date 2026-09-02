@@ -355,6 +355,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                slot_pec_cap: bool = False,
                soldermask_um: float | None = None,
                soldermask_eps_r: float = 3.5, soldermask_tand: float = 0.02,
+               silkscreen_um: float | None = None,
+               silkscreen_eps_r: float = 3.2, silkscreen_tand: float = 0.02,
                enig_um: float | None = None,
                enig_conductivity_sm: float = 1.67e6, enig_mu_r: float = 1.0,
                metal_conductivity_sm: float | None = None,
@@ -522,9 +524,17 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     if soldermask_um:
         mask_in = (3, occ.addBox(X0, ym_lo, h + t_enig, Xf, y_span, t_mask))
         mask_out = (3, occ.addBox(Li, ym_lo, h + t_enig, Xf, y_span, t_mask))
-    z_stack = h + t_enig + t_mask
-    air_in = (3, occ.addBox(X0, ym_lo, z_stack, Xf, y_span, Hair - t_enig - t_mask))
-    air_out = (3, occ.addBox(Li, ym_lo, z_stack, Xf, y_span, Hair - t_enig - t_mask))
+    # Silkscreen: epoxy ink layer ON TOP of soldermask (real process order),
+    # same feed footprint. Thinner and slightly lower-eps than soldermask.
+    silk_in = silk_out = None
+    t_silk = (silkscreen_um * 1e-3) if silkscreen_um else 0.0
+    if silkscreen_um:
+        silk_in = (3, occ.addBox(X0, ym_lo, h + t_enig + t_mask, Xf, y_span, t_silk))
+        silk_out = (3, occ.addBox(Li, ym_lo, h + t_enig + t_mask, Xf, y_span, t_silk))
+    z_stack = h + t_enig + t_mask + t_silk
+    _hair = Hair - t_enig - t_mask - t_silk
+    air_in = (3, occ.addBox(X0, ym_lo, z_stack, Xf, y_span, _hair))
+    air_out = (3, occ.addBox(Li, ym_lo, z_stack, Xf, y_span, _hair))
 
     # ---- v8 (2026-08-29): electric coupling slot in the TOP copper ----
     # A cutout in the top ground plane, distinct from every via-fence
@@ -754,8 +764,9 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     enig_cond_objs = enig_cond_objs_pre
     enig_gap_objs = enig_gap_in + enig_gap_out
     mask_boxes = [b for b in (mask_in, mask_out) if b is not None]
+    silk_boxes = [b for b in (silk_in, silk_out) if b is not None]
     air_boxes = ([air_in, air_out] + ([air_slot] if air_slot is not None else [])
-                + mask_boxes + enig_gap_objs)
+                + mask_boxes + silk_boxes + enig_gap_objs)
     frag_objects = (sub_tags + ptfe_vols + air_boxes + via_shell_objs + via_core_objs
                     + enig_cond_objs)
     _, frag_map = occ.fragment(frag_objects, [trace_in, trace_out] + sma_caps + gnd_surfs)
@@ -783,7 +794,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     via_centres = final + gnd_via_centres
 
-    diel_clean, air_vols, sma_diel, mask_vols, enig_vols = [], [], [], [], []
+    diel_clean, air_vols, sma_diel, mask_vols, enig_vols, silk_vols = [], [], [], [], [], []
     via_shell_vols, via_core_vols = [], []
     for dim, tag in gmsh.model.getEntities(3):
         cx, cy, cz = gmsh.model.occ.getCenterOfMass(dim, tag)
@@ -799,6 +810,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             diel_clean.append(tag)
         elif soldermask_um and cz < h + t_enig + t_mask + 1e-9:
             mask_vols.append(tag)
+        elif silkscreen_um and cz < h + t_enig + t_mask + t_silk + 1e-9:
+            silk_vols.append(tag)
         else:
             air_vols.append(tag)
     air_vols += via_core_vols   # the hollow core of a plated (unfilled) via is just air
@@ -809,6 +822,8 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         gmsh.model.addPhysicalGroup(3, mask_vols, tag=4, name="soldermask")
     if enig_vols:
         gmsh.model.addPhysicalGroup(3, enig_vols, tag=5, name="enig")
+    if silk_vols:
+        gmsh.model.addPhysicalGroup(3, silk_vols, tag=7, name="silkscreen")
     if via_shell_vols:
         gmsh.model.addPhysicalGroup(3, via_shell_vols, tag=6, name="via_conductor")
     if sma_diel:
@@ -1010,6 +1025,11 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         legend["via_conductor"] = 6
         via_cond_info = {"conductivity_sm": via_conductivity_sm, "mu_r": 1.0,
                          "plating_um": via_plating_um}
+    silk_info = None
+    if silk_vols:
+        legend["silkscreen"] = 7
+        silk_info = {"eps_r": silkscreen_eps_r, "tand": silkscreen_tand,
+                     "thickness_um": silkscreen_um}
     metal_info = None
     if pec_real:
         legend["metal_real"] = 15
@@ -1035,7 +1055,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     return {"mesh": out, "tets": ntet, "nodes": nnode, "legend": legend,
             "ports": (len(wave_in), len(wave_out)), "sma": sma_info,
             "soldermask": mask_info, "via_conductivity": via_cond_info,
-            "enig": enig_info, "metal_real": metal_info,
+            "enig": enig_info, "metal_real": metal_info, "silkscreen": silk_info,
             "eps_r": eps_r, "tand": tand}
 
 

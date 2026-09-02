@@ -70,16 +70,43 @@ JLCPCB_ENIG: dict[str, float] = {
     "enig_mu_r": 1.0,
 }
 
-# Real (lossy) copper instead of PEC on the exterior ground planes. 5.96e7 S/m
-# is annealed copper; 35um is JLCPCB's standard 1oz outer-layer finished
-# copper. At 2.87GHz copper's skin depth is 1.22um, so 35um is ~29 skin
-# depths -- electrically thick, and the surface-impedance model applies.
-# Adding this takes the modelled unloaded Q from 270 (dielectric only) to
-# ~188 (dielectric + conductor), i.e. ~0.6dB more real insertion loss.
+# Real (lossy) copper instead of PEC. 5.96e7 S/m is annealed copper. The
+# THICKNESS is not hardcoded: it comes from the substrate's own copper
+# cladding weight (config.SUBSTRATES' cu_oz -> Substrate.cu_thickness()).
+# For the default RO4350B_0.76mm that is cu_oz=0.5, i.e. 17.5um -- NOT the
+# 1oz/35um a generic FR4 assumption would give. At 2.87GHz copper's skin
+# depth is 1.22um, so even 17.5um is ~14 skin depths: electrically thick,
+# so the surface-impedance model applies and anything plated on the far
+# side (ENIG) stays shielded from the cavity fields.
+# NOTE: this is the BASE cladding. A plated-through-hole process adds
+# roughly 20-25um more on the outer layers, so finished outer copper is
+# thicker still; the base value is the conservative choice.
 JLCPCB_METAL: dict[str, float] = {
     "metal_conductivity_sm": 5.96e7,
-    "metal_thickness_um": 35.0,
 }
+
+# Soldermask + silkscreen, JLCPCB standard LPI process. Soldermask Dk 3.8 /
+# Df 0.02 are JLCPCB's own published-ish values (jitxlib.jlcpcb.materials;
+# their Df is flagged "a guess" there, and they publish no better one).
+# 20um is mid-range of their 15-30um cured LPI thickness. Silkscreen is a
+# thinner epoxy ink layer applied ON TOP of soldermask.
+JLCPCB_SOLDERMASK: dict[str, float] = {
+    "soldermask_um": 20.0, "soldermask_eps_r": 3.8, "soldermask_tand": 0.02,
+}
+JLCPCB_SILKSCREEN: dict[str, float] = {
+    "silkscreen_um": 12.0, "silkscreen_eps_r": 3.2, "silkscreen_tand": 0.02,
+}
+
+# Via cover/fill. cover=True models the premium resin-filled + copper-capped
+# via (a solid conductor plug, no hole through the board); cover=False models
+# the standard open plated barrel (hollow copper shell, air core). Plating is
+# 50um rather than the realistic 20-25um purely because of a MESHING floor
+# measured on this geometry: 40um meshes, 35um and below fail with a
+# TetGen/OCC PLC error (not a mesh-density knob -- mesh_min=0.01mm also
+# fails). Physically harmless for the comparison: both 25um and 50um are
+# tens of copper skin depths at 2.87GHz, so both are "electrically thick".
+VIA_COVERED: dict[str, float] = {"via_conductivity_sm": 5.96e7}
+VIA_OPEN: dict[str, float] = {"via_conductivity_sm": 5.96e7, "via_plating_um": 50.0}
 
 TAOGLAS_SMA: dict[str, float | bool | int] = {
     "sma_rin_mm": 0.38,
@@ -123,6 +150,10 @@ class DualModeTopology:
         x_iris = p.pop("x_iris", None)
         y_wall = p.pop("y_wall", 3.0)
         w_ext = p.pop("w_ext", None)
+        if p.get("metal_conductivity_sm") and "metal_thickness_um" not in p:
+            # Real copper thickness comes from the SUBSTRATE's cladding weight,
+            # not a generic 1oz assumption (RO4350B_0.76mm is 0.5oz = 17.5um).
+            p["metal_thickness_um"] = spec.substrate.cu_thickness * 1e6
         p.setdefault("with_sma", True)
         for k, v in TAOGLAS_SMA.items():   # caller can still override any of these
             p.setdefault(k, v)

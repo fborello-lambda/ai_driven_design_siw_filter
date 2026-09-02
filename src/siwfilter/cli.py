@@ -415,12 +415,22 @@ def cmd_sweep(args) -> int:
     if getattr(args, "enig", False) or getattr(args, "real_metal", False):
         if args.topology != "dualmode":
             print("--enig/--real-metal are only wired for dualmode so far"); return 1
-        from .topologies.dualmode import JLCPCB_ENIG, JLCPCB_METAL
-        preset = {}
-        if getattr(args, "real_metal", False):
-            preset.update(JLCPCB_METAL)
+        from .topologies.dualmode import (JLCPCB_ENIG, JLCPCB_METAL,
+                                          JLCPCB_SOLDERMASK, JLCPCB_SILKSCREEN,
+                                          VIA_COVERED, VIA_OPEN)
+        # Any real-fabrication flag implies REAL COPPER, not PEC. PEC (the
+        # idealised lossless conductor) stays the default for a plain
+        # `siw sweep`, so every existing golden still reproduces exactly --
+        # but it makes no sense to model a soldermask/ENIG/via stack on top
+        # of a perfect conductor, so the fab flags switch the metal too.
+        preset = dict(JLCPCB_METAL)
         if getattr(args, "enig", False):
             preset.update(JLCPCB_ENIG)
+            preset.update(JLCPCB_SOLDERMASK)
+        if getattr(args, "cover", None) is not None:
+            preset.update(VIA_COVERED if args.cover == "true" else VIA_OPEN)
+        if getattr(args, "silkscreen", None) == "true":
+            preset.update(JLCPCB_SILKSCREEN)
         for k, v in preset.items():
             params.setdefault(k, v)   # --params can still override any of these
 
@@ -593,6 +603,12 @@ def main(argv: list[str] | None = None) -> int:
                             "instead of PEC (perfect, lossless). Every golden to date is "
                             "PEC-only, i.e. dielectric loss only -- this adds the missing "
                             "conductor loss (modelled Qu 270 -> ~188, ~0.6dB more IL).")
+    p_swp.add_argument("--cover", choices=["true", "false"], default=None,
+                       help="via cover/fill: true = resin-filled + copper-capped (solid plug, "
+                            "no hole through the board); false = standard open plated barrel "
+                            "(hollow copper shell, air core). Implies real copper vias.")
+    p_swp.add_argument("--silkscreen", choices=["true", "false"], default=None,
+                       help="silkscreen epoxy ink layer (12um) on top of the soldermask")
     p_swp.add_argument("--fmin", type=float, default=0.5, help="GHz")
     p_swp.add_argument("--fmax", type=float, default=6.0, help="GHz")
     p_swp.add_argument("--step", type=float, default=0.05, help="GHz")
