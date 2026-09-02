@@ -507,27 +507,14 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     # at that z-range is filled with plain air (same material as the air
     # above it either way, so this costs nothing physically -- it only
     # matters that no CONDUCTOR extends past the real copper).
-    enig_cond_in = enig_cond_out = None
+    # Only the SCALAR thickness is needed here (the air/soldermask boxes above
+    # are offset by it); the ENIG solids themselves are built further down,
+    # once gnd_polys (the CPWG ground pads) exist -- ENIG covers the ground
+    # pour too, not just the signal trace.
+    enig_cond_objs_pre: list[tuple[int, int]] = []
     enig_gap_in: list[tuple[int, int]] = []
     enig_gap_out: list[tuple[int, int]] = []
     t_enig = (enig_um * 1e-3) if enig_um else 0.0
-    if enig_um:
-        def _extrude_poly(poly, x0, dz):
-            pts = [occ.addPoint(px, py, h) for px, py in poly]
-            ln = [occ.addLine(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
-            surf = occ.addPlaneSurface([occ.addCurveLoop(ln)])
-            out = occ.extrude([(2, surf)], 0, 0, dz)
-            return [(dd, t) for dd, t in out if dd == 3][0]
-        trace_poly_in = feed_trace_poly(X0, -Lt, 0.0, W, ty_in_lo, ty_in_hi)
-        trace_poly_out = feed_trace_poly(X1, Li + Lt, Li, W, ty_out_lo, ty_out_hi)
-        enig_cond_in = _extrude_poly(trace_poly_in, X0, t_enig)
-        enig_cond_out = _extrude_poly(trace_poly_out, Li, t_enig)
-        gap_box_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, t_enig))
-        gap_box_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, t_enig))
-        cut_in, _ = occ.cut([gap_box_in], [enig_cond_in], removeObject=True, removeTool=False)
-        cut_out2, _ = occ.cut([gap_box_out], [enig_cond_out], removeObject=True, removeTool=False)
-        enig_gap_in = [(dd, t) for dd, t in cut_in if dd == 3]
-        enig_gap_out = [(dd, t) for dd, t in cut_out2 if dd == 3]
     mask_in = mask_out = None
     t_mask = (soldermask_um * 1e-3) if soldermask_um else 0.0
     if soldermask_um:
@@ -694,6 +681,43 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             gnd_surfs.append((2, occ.addPlaneSurface([occ.addCurveLoop(ln)])))
         cyls += [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, rg)) for x, y in gnd_via_centres]
 
+    # ---- ENIG solids (built here so gnd_polys exists) ----
+    # ENIG plates ALL exposed copper in reality. Electromagnetically it only
+    # MATTERS where fields actually touch it: the feed region's top copper,
+    # whose fringing fields are partly in air. On the cavity top ground and
+    # the bottom ground plane the ENIG sits on the OUTER face of a ground
+    # plane, shielded from the cavity fields by the copper (~35um = ~28 skin
+    # depths at 2.87GHz; a perfect shield in this model, where those planes
+    # are PEC sheets), so modelling it there would add geometry that provably
+    # cannot change the answer -- and would need the mesh domain extended
+    # above/below the board to hold it. Covered here, therefore: the signal
+    # trace AND the CPWG ground pour, the latter being the gap-adjacent
+    # copper where the coplanar launch concentrates its fields (a 0.2512mm
+    # gap in the landed design). Note Ni-P's skin depth at 2.87GHz is ~7.3um
+    # vs the 4.5um layer, so this is a partially field-penetrable lossy film,
+    # not a shield -- which is exactly why WHERE it sits matters.
+    if enig_um:
+        def _extrude_poly(poly, dz):
+            pts = [occ.addPoint(px, py, h) for px, py in poly]
+            ln = [occ.addLine(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
+            surf = occ.addPlaneSurface([occ.addCurveLoop(ln)])
+            out = occ.extrude([(2, surf)], 0, 0, dz)
+            return [(dd, t) for dd, t in out if dd == 3][0]
+        enig_polys_in = [feed_trace_poly(X0, -Lt, 0.0, W, ty_in_lo, ty_in_hi)]
+        enig_polys_out = [feed_trace_poly(X1, Li + Lt, Li, W, ty_out_lo, ty_out_hi)]
+        for poly in gnd_polys:
+            xs = [p[0] for p in poly]
+            (enig_polys_in if sum(xs) / len(xs) < Li / 2.0 else enig_polys_out).append(poly)
+        cond_in = [_extrude_poly(p, t_enig) for p in enig_polys_in]
+        cond_out = [_extrude_poly(p, t_enig) for p in enig_polys_out]
+        enig_cond_objs_pre = cond_in + cond_out
+        gap_box_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, t_enig))
+        gap_box_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, t_enig))
+        cut_gi, _ = occ.cut([gap_box_in], cond_in, removeObject=True, removeTool=False)
+        cut_go, _ = occ.cut([gap_box_out], cond_out, removeObject=True, removeTool=False)
+        enig_gap_in = [(dd, t) for dd, t in cut_gi if dd == 3]
+        enig_gap_out = [(dd, t) for dd, t in cut_go if dd == 3]
+
     # ---- SMA coax launch stubs (same construction as palace_driven.py) ----
     ptfe_vols: list[tuple[int, int]] = []
     sma_caps: list[tuple[int, int]] = []
@@ -725,7 +749,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     cut_out, _ = occ.cut([sub], cyls, removeObject=True, removeTool=True)
     occ.synchronize()
     sub_tags = [(dd, t) for (dd, t) in cut_out if dd == 3]
-    enig_cond_objs = [b for b in (enig_cond_in, enig_cond_out) if b is not None]
+    enig_cond_objs = enig_cond_objs_pre
     enig_gap_objs = enig_gap_in + enig_gap_out
     mask_boxes = [b for b in (mask_in, mask_out) if b is not None]
     air_boxes = ([air_in, air_out] + ([air_slot] if air_slot is not None else [])
