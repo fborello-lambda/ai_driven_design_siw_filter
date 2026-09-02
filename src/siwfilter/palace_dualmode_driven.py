@@ -483,23 +483,51 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     # trace_out are built on); air_in/air_out shrink to start above the mask
     # instead of at z=h. soldermask_um=None (default) reproduces the old
     # geometry exactly -- byte-identical, regression-verified.
-    # ENIG (2026-09-02): a real thin CONDUCTOR volume z in [h, h+t_enig],
-    # directly on the copper (same footprint/plane as soldermask above), not
-    # a boundary condition. Palace's Domains.Materials[].Conductivity is a
+    # ENIG (2026-09-02, v2 -- v1 was a real bug, see below): a real thin
+    # CONDUCTOR volume z in [h, h+t_enig], directly on the copper, not a
+    # boundary condition. Palace's Domains.Materials[].Conductivity is a
     # genuine volumetric Ohmic-loss term with no internal/exterior-boundary
     # restriction (unlike Boundaries.Conductivity, the exterior-only surface
     # BC that blocked the via-fill study) -- a material domain's interfaces
-    # with its neighbors (copper below via idealized PEC, soldermask/air
-    # above) are handled by ordinary field continuity, needing no special
-    # boundary-condition code at all. Stacks under soldermask exactly like
-    # the real PCB process: soldermask sits ON TOP of ENIG, not the other
-    # way around. enig_um=None (default) reproduces the old geometry
-    # exactly.
-    enig_in = enig_out = None
+    # with its neighbors are handled by ordinary field continuity, needing
+    # no special boundary-condition code at all.
+    #
+    # v1 BUG (caught this session before it reached a golden result): shaped
+    # this like the soldermask box -- a FULL board-width slab. That's
+    # correct for soldermask (a dielectric that really does cover the whole
+    # board), but wrong for ENIG: a real conductor spanning the full width
+    # forms an unintended shorting plane across the ENTIRE feed cross
+    # section, not just over the actual copper trace (which is much
+    # narrower than the board for most of the taper's length). Measured
+    # result before the fix: S11w=-0.01dB, IL=-86dB, 0 filter poles detected
+    # -- the trace was electromagnetically shorted, not lightly loaded.
+    # Fixed by confining ENIG to feed_trace_poly's actual outline (the same
+    # polygon the "microstrip trace" PEC face classification already uses),
+    # extruded upward by t_enig; the leftover full-width-minus-trace region
+    # at that z-range is filled with plain air (same material as the air
+    # above it either way, so this costs nothing physically -- it only
+    # matters that no CONDUCTOR extends past the real copper).
+    enig_cond_in = enig_cond_out = None
+    enig_gap_in: list[tuple[int, int]] = []
+    enig_gap_out: list[tuple[int, int]] = []
     t_enig = (enig_um * 1e-3) if enig_um else 0.0
     if enig_um:
-        enig_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, t_enig))
-        enig_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, t_enig))
+        def _extrude_poly(poly, x0, dz):
+            pts = [occ.addPoint(px, py, h) for px, py in poly]
+            ln = [occ.addLine(pts[i], pts[(i + 1) % len(pts)]) for i in range(len(pts))]
+            surf = occ.addPlaneSurface([occ.addCurveLoop(ln)])
+            out = occ.extrude([(2, surf)], 0, 0, dz)
+            return [(dd, t) for dd, t in out if dd == 3][0]
+        trace_poly_in = feed_trace_poly(X0, -Lt, 0.0, W, ty_in_lo, ty_in_hi)
+        trace_poly_out = feed_trace_poly(X1, Li + Lt, Li, W, ty_out_lo, ty_out_hi)
+        enig_cond_in = _extrude_poly(trace_poly_in, X0, t_enig)
+        enig_cond_out = _extrude_poly(trace_poly_out, Li, t_enig)
+        gap_box_in = (3, occ.addBox(X0, ym_lo, h, Xf, y_span, t_enig))
+        gap_box_out = (3, occ.addBox(Li, ym_lo, h, Xf, y_span, t_enig))
+        cut_in, _ = occ.cut([gap_box_in], [enig_cond_in], removeObject=True, removeTool=False)
+        cut_out2, _ = occ.cut([gap_box_out], [enig_cond_out], removeObject=True, removeTool=False)
+        enig_gap_in = [(dd, t) for dd, t in cut_in if dd == 3]
+        enig_gap_out = [(dd, t) for dd, t in cut_out2 if dd == 3]
     mask_in = mask_out = None
     t_mask = (soldermask_um * 1e-3) if soldermask_um else 0.0
     if soldermask_um:
@@ -697,11 +725,13 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     cut_out, _ = occ.cut([sub], cyls, removeObject=True, removeTool=True)
     occ.synchronize()
     sub_tags = [(dd, t) for (dd, t) in cut_out if dd == 3]
-    enig_boxes = [b for b in (enig_in, enig_out) if b is not None]
+    enig_cond_objs = [b for b in (enig_cond_in, enig_cond_out) if b is not None]
+    enig_gap_objs = enig_gap_in + enig_gap_out
     mask_boxes = [b for b in (mask_in, mask_out) if b is not None]
     air_boxes = ([air_in, air_out] + ([air_slot] if air_slot is not None else [])
-                + mask_boxes + enig_boxes)
-    frag_objects = sub_tags + ptfe_vols + air_boxes + via_shell_objs + via_core_objs
+                + mask_boxes + enig_gap_objs)
+    frag_objects = (sub_tags + ptfe_vols + air_boxes + via_shell_objs + via_core_objs
+                    + enig_cond_objs)
     _, frag_map = occ.fragment(frag_objects, [trace_in, trace_out] + sma_caps + gnd_surfs)
     occ.synchronize()
     # A full 360-degree annulus (the via plating shell) has its (x,y) centroid
@@ -713,10 +743,16 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     # it's parallel to frag_objects, so the via_shell_objs/via_core_objs
     # slices at the end tell us exactly which output tags each became.
     n_shell, n_core = len(via_shell_objs), len(via_core_objs)
-    shell_out_tags = {t for entry in frag_map[len(frag_objects) - n_shell - n_core:
-                                              len(frag_objects) - n_core]
+    n_enig = len(enig_cond_objs)
+    _base = len(frag_objects) - n_shell - n_core - n_enig
+    shell_out_tags = {t for entry in frag_map[_base:_base + n_shell]
                       for (dd, t) in entry if dd == 3}
-    core_out_tags = {t for entry in frag_map[len(frag_objects) - n_core:]
+    core_out_tags = {t for entry in frag_map[_base + n_shell:_base + n_shell + n_core]
+                     for (dd, t) in entry if dd == 3}
+    # Same identity-tracking need as the via shell/core: the ENIG conductor
+    # prism and the air filling the rest of that z-slice occupy the SAME
+    # z-range, so a height-based test cannot separate them.
+    enig_out_tags = {t for entry in frag_map[_base + n_shell + n_core:]
                      for (dd, t) in entry if dd == 3}
 
     via_centres = final + gnd_via_centres
@@ -731,10 +767,10 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             via_shell_vols.append(tag)
         elif tag in core_out_tags:
             via_core_vols.append(tag)
+        elif tag in enig_out_tags:
+            enig_vols.append(tag)
         elif cz < h:
             diel_clean.append(tag)
-        elif enig_um and cz < h + t_enig + 1e-9:
-            enig_vols.append(tag)
         elif soldermask_um and cz < h + t_enig + t_mask + 1e-9:
             mask_vols.append(tag)
         else:
