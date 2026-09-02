@@ -1,5 +1,18 @@
 # SIW Bandpass Filter — Project Brief
 
+> **START HERE (2026-09-02).** Two documents supersede the historical
+> narrative below:
+> * **`docs/STATE.md`** — what exists and what is actually true right now.
+> * **`docs/PLAN.md`** — what to do next.
+>
+> Everything below is kept for the physics reference (design equations,
+> substrate data, method history) and for the bug taxonomy the paper needs.
+> Where it disagrees with STATE.md on numbers, STATE.md is right: the
+> dual-mode launch changed to CPWG on 2026-09-02 and every dual-mode
+> measurement predating that used a different structure
+> (archived in `golden/dualmode_N2/archive_padonly_launch/`).
+
+
 You are continuing a project to design, simulate, and export a **Substrate Integrated
 Waveguide (SIW) bandpass filter**. The human did the environment bootstrap (openEMS C++
 core is already compiled). Your job is to set up the uv project completely, build the
