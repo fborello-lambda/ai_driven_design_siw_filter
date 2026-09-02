@@ -4,7 +4,7 @@ Current state: `STATE.md`. Superseded plans: `docs/archive/`.
 
 Two things stand between the design and a board worth ordering:
 
-1. **Bandwidth is ~2× spec** (≈300 MHz vs 143.5 MHz) — a cavity-coupling
+1. **Bandwidth is ~2× spec** (about 300 MHz vs 143.5 MHz) — a cavity-coupling
    problem, unaffected by any fabrication choice.
 2. **Nothing has been optimised under the CPWG launch**, which is now what
    dual-mode actually simulates.
@@ -35,12 +35,12 @@ siw design --topology dualmode --N 2 --seed <1a best> --span 2 \
 every evaluation. `fixed_extras()` keeps these out of the search box — they
 are conditions, not dimensions — so 1a and 1b stay comparable.
 
-**Done when:** return loss ≤ −16 dB **and** bandwidth within ~10 % of
+**Done when:** return loss at most −16 dB **and** bandwidth within about 10 % of
 143.5 MHz, both under the full stack, with 2 reflection zeros.
 
 **If bandwidth stalls** (it has resisted several searches before): stop
 searching and calibrate. Measure `k12(w_iris)` and `Qe(w_ext)` on small
-structures, invert for the 5 % FBW targets (`k12 ≈ 0.069`, `Qe ≈ 16.9`), and
+structures, invert for the 5 % FBW targets (`k12 about 0.069`, `Qe about 16.9`), and
 assemble. This is the method that worked for the cascade after black-box
 search failed; the failure mode is that bandwidth is *discontinuous* in the
 external coupling, which a smooth-function optimiser cannot model.

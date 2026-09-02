@@ -21,7 +21,7 @@ A Substrate Integrated Waveguide (SIW) bandpass filter:
 |---|---|
 | Centre frequency | 2.87 GHz |
 | Bandwidth | 143.5 MHz (5 % FBW) |
-| Return loss | ≤ −16 dB in band |
+| Return loss | at most −16 dB in band |
 | Response | Chebyshev, 0.1 dB ripple |
 | Substrate | Rogers RO4350B, 0.76 mm, 0.5 oz copper (17.5 µm) |
 | Vias | Ø1.5 mm, 3.0 mm pitch |
@@ -119,7 +119,7 @@ Three findings, each measured:
 
 ## Not true yet
 
-- **Bandwidth is about 2× the specification** (≈300 MHz against 143.5 MHz).
+- **Bandwidth is about 2× the specification** (about 300 MHz against 143.5 MHz).
   This is the oldest open problem, and no fabrication choice affects it. It
   requires the cavity coupling to be re-derived, not a launch adjustment.
 - **Nothing has been optimised under the CPWG launch.** It was merged into
