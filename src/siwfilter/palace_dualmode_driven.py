@@ -848,14 +848,24 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     pec, wave_in, wave_out, absorbing = [], [], [], []
     pec_ext_flag: dict[int, bool] = {}
+    _all_boundary_faces: list[int] = []
     for dim, tag in gmsh.model.getEntities(2):
         cx, cy, cz = gmsh.model.occ.getCenterOfMass(2, tag)
         xmin, ymin_f, _, xmax, ymax_f, _ = gmsh.model.getBoundingBox(2, tag)
         adj_up, _ = gmsh.model.getAdjacencies(2, tag)
         is_boundary = len(adj_up) <= 1
+        if is_boundary:
+            _all_boundary_faces.append(tag)
 
         on_via = any((cx - vx) ** 2 + (cy - vy) ** 2 < (1.3 * r) ** 2
                      for vx, vy in via_centres) and cz <= h + 1e-6
+        # Only the MAIN fence (`final`) gets real conductor volumes; the CPWG
+        # ground-stitch vias keep empty holes. The two must be distinguished
+        # here or the stitch-via walls are skipped from PEC while having no
+        # conductor behind them -- leaving unassigned exterior faces (found
+        # via the catch-all below: 94 faces at mid-substrate height).
+        on_main_via = any((cx - vx) ** 2 + (cy - vy) ** 2 < (1.3 * r) ** 2
+                          for vx, vy in final) and cz <= h + 1e-6
 
         on_sma_pin = on_sma_shell = on_sma_cap = False
         if with_sma:
@@ -888,7 +898,20 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
         if _near(cz, 0.0):
             pec.append(tag); pec_ext_flag[tag] = is_boundary
-        elif on_via and via_plated:
+        elif on_main_via and via_plated and is_boundary:
+            # A via CAP face (z=0 or z=h), i.e. exterior. For a filled +
+            # capped via this is solid metal continuous with the ground
+            # plane; for an open barrel the inner disc is a real aperture
+            # while the surrounding annular ring is still metal. Tell them
+            # apart by lateral extent (a full annulus's centroid sits on the
+            # axis, so centroid position cannot): the core disc spans
+            # ~2*via_inner_r, the annulus spans ~2*r.
+            span = max(xmax - xmin, ymax_f - ymin_f)
+            if via_inner_r is not None and span < 2 * via_inner_r + 0.2 * r:
+                absorbing.append(tag)          # open hole: radiates to free space
+            else:
+                pec.append(tag); pec_ext_flag[tag] = True    # metal cap / ring
+        elif on_main_via and via_plated:
             # Filled vs unfilled via study (2026-09-02, replaces the invalid
             # 2026-09-01 Boundaries.Conductivity attempt): the via wall's
             # lateral surface is now a real conductor-dielectric material
@@ -930,6 +953,27 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     pec = sorted(set(pec))
     absorbing = sorted(set(absorbing) - set(pec) - set(wave_in) - set(wave_out))
+
+    # CATCH-ALL: every exterior face MUST carry a boundary condition. The
+    # classification above is an if/elif chain, so a face that enters a
+    # branch (e.g. the z==h branch) but matches none of its sub-cases falls
+    # out entirely and never reaches the `elif is_boundary` default. With
+    # PEC-only geometry those faces happened to be interior, so nothing was
+    # lost -- but the stacked fabrication layers (ENIG / soldermask /
+    # silkscreen) introduced exterior faces that hit exactly that hole, and
+    # Palace then warned "N mesh faces with no associated boundary element"
+    # and produced invalid physics rather than failing. Sweep up anything
+    # left over: the outer faces of a dielectric stack at the board edge
+    # radiate into free space, so Absorbing is the physically correct
+    # default for them. Reported, never silent.
+    _assigned = set(pec) | set(wave_in) | set(wave_out) | set(absorbing)
+    _leftover = sorted(t for t in _all_boundary_faces if t not in _assigned)
+    if _leftover:
+        _zs = [gmsh.model.occ.getCenterOfMass(2, t)[2] for t in _leftover]
+        if show:
+            print(f"  [catch-all] {len(_leftover)} unclassified exterior face(s) "
+                  f"-> Absorbing (z {min(_zs):.4f}..{max(_zs):.4f})")
+        absorbing = sorted(set(absorbing) | set(_leftover))
 
     # Real (lossy) metal, 2026-09-02. Every metal face was PEC -- a PERFECT,
     # lossless conductor -- so the goldens modelled dielectric loss only and
