@@ -273,8 +273,17 @@ def cmd_design(args) -> int:
     # Pair with `siw synth-design` to generate that seed.
     fab = {}
     if getattr(args, "real_metal", False) or getattr(args, "enig", False):
-        if args.topology != "dualmode":
-            print("--enig/--real-metal are only wired for dualmode so far"); return 1
+        # --real-metal now works for CASCADE too (the exterior-face split was
+        # ported into palace_driven on 2026-09-03). --enig still does not:
+        # ENIG/soldermask/silkscreen are meshed layers, unresolvable at this
+        # mesh density, and ENIG is in any case shielded behind ~14 skin
+        # depths of ground-plane copper. See docs/STATE.md.
+        if args.topology == "cascade" and getattr(args, "enig", False):
+            print("--enig is not available for cascade (and is an RF no-op: the "
+                  "plating sits on the shielded side of the ground plane). Use "
+                  "--real-metal."); return 1
+        if args.topology not in ("dualmode", "cascade"):
+            print("--enig/--real-metal are only wired for dualmode/cascade so far"); return 1
         from .topologies.dualmode import (JLCPCB_METAL, JLCPCB_ENIG,
                                           JLCPCB_SOLDERMASK, JLCPCB_SILKSCREEN, VIA_OPEN)
         fab.update(JLCPCB_METAL)
@@ -717,8 +726,17 @@ def cmd_sweep(args) -> int:
     else:
         params = _parse_params(args.params)
     if getattr(args, "enig", False) or getattr(args, "real_metal", False):
-        if args.topology != "dualmode":
-            print("--enig/--real-metal are only wired for dualmode so far"); return 1
+        # --real-metal now works for CASCADE too (the exterior-face split was
+        # ported into palace_driven on 2026-09-03). --enig still does not:
+        # ENIG/soldermask/silkscreen are meshed layers, unresolvable at this
+        # mesh density, and ENIG is in any case shielded behind ~14 skin
+        # depths of ground-plane copper. See docs/STATE.md.
+        if args.topology == "cascade" and getattr(args, "enig", False):
+            print("--enig is not available for cascade (and is an RF no-op: the "
+                  "plating sits on the shielded side of the ground plane). Use "
+                  "--real-metal."); return 1
+        if args.topology not in ("dualmode", "cascade"):
+            print("--enig/--real-metal are only wired for dualmode/cascade so far"); return 1
         from .topologies.dualmode import (JLCPCB_ENIG, JLCPCB_METAL,
                                           JLCPCB_SOLDERMASK, JLCPCB_SILKSCREEN,
                                           VIA_COVERED, VIA_OPEN)
@@ -801,9 +819,31 @@ def _fab_variant_specs():
     return [
         ("pec_optimized",   {}),
         ("only_cu",         {**JLCPCB_METAL}),       # exterior-plane surface impedance
-        ("only_enig",       {**JLCPCB_ENIG}),        # ENIG conductor domain
-        ("only_mask",       {**JLCPCB_SOLDERMASK}),  # feed-region dielectric
-        ("only_silk",       {**JLCPCB_SILKSCREEN}),  # silkscreen dielectric
+        ("only_enig",       {**JLCPCB_ENIG}),        # ENIG conductor domain -- UNRESOLVABLE
+        ("only_mask",       {**JLCPCB_SOLDERMASK}),  # feed-region dielectric -- UNRESOLVABLE
+        ("only_silk",       {**JLCPCB_SILKSCREEN}),  # silkscreen dielectric -- UNRESOLVABLE
+        # NO COPPER+ENIG CELL, and the reason is geometric rather than
+        # numerical (2026-09-03, user's observation).
+        #
+        # It is tempting to model the finish as one effective surface
+        # impedance for the two-layer stack: 4.5um Ni-P at 2.87GHz is 0.62
+        # skin depths, so a wave ARRIVING THROUGH THE PLATING sees
+        # Rs = 39.6 mohm/sq against copper's 13.8 -- 2.87x, equivalent to
+        # sigma = 7.225e6 S/m. That arithmetic is correct and irrelevant
+        # here: it describes the wrong side of the metal.
+        #
+        # The exterior ground planes are 17.5um of copper, ~14 skin depths.
+        # RF current flows on their INNER face, against the substrate. The
+        # ENIG is plated on the OUTER face, shielded behind all of that
+        # copper, carrying essentially no current. Charging it ENIG loss
+        # would attribute dissipation to a surface the field never reaches.
+        #
+        # ENIG can only matter where a plated surface FACES the field -- the
+        # microstrip feed trace and the CPWG ground pads. Those are internal
+        # two-sided sheets, where Palace's exterior-only Conductivity BC does
+        # not apply, and they are a small fraction of the wall current in any
+        # case. So the honest model is: ENIG is an RF no-op for this design.
+        # See docs/STATE.md, "what the fabrication stack costs".
     ]
 
 
@@ -821,7 +861,7 @@ def cmd_compare_fab_variants(args) -> int:
             print("--run needs --params (the fixed geometry to hold across variants)")
             return 1
         from .config import SPEC, FilterSpec
-        topo = REGISTRY["dualmode"]
+        topo = REGISTRY[getattr(args, "topology", "dualmode")]
         spec = FilterSpec(f0=SPEC.f0, FBW=SPEC.FBW, N=args.N,
                           ripple_db=SPEC.ripple_db,
                           substrate_name=SPEC.substrate_name,
@@ -830,7 +870,14 @@ def cmd_compare_fab_variants(args) -> int:
         out = _json.load(open(result_json)) if (args.resume and os.path.exists(result_json)) else {}
         out["_geometry"] = base
         print(f"fabrication variants at FIXED geometry {base}")
-        for key, overlay in _fab_variant_specs():
+        specs = _fab_variant_specs()
+        if topo.name != "dualmode":
+            # The meshed-layer diagnostic cells (only_enig/mask/silk) exist
+            # only in the dual-mode mesh builder, and their numbers are
+            # meaningless anyway (unresolved slivers). For any other topology
+            # the honest study is PEC vs real copper.
+            specs = [(k, ov) for k, ov in specs if k in ("pec_optimized", "only_cu")]
+        for key, overlay in specs:
             # Resume skips only SUCCEEDED variants. Skipping failed ones too
             # would make --resume permanently entrench a transient failure
             # (the first run lost three variants to an OOM kill, which is a
@@ -1143,6 +1190,9 @@ def main(argv: list[str] | None = None) -> int:
                                 "still solving; also saves the plotted curves + metrics as JSON.")
     p_fab.add_argument("--result-json", default=None,
                        help="variant sweep results (default: output/data/four_variants_result.json)")
+    p_fab.add_argument("--topology", default="dualmode", choices=_TOPOLOGY_CHOICES,
+                       help="topology to run the variants on (default dualmode). "
+                            "cascade runs PEC vs real copper only.")
     p_fab.add_argument("--run", action="store_true",
                        help="RUN the variants first (dualmode) instead of only plotting a "
                             "previous sweep. Needs --params: the one fixed geometry every "

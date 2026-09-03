@@ -159,8 +159,13 @@ class CascadeTopology:
             # render_png=/preview= short-circuit before a real mesh is built
             # (see palace_driven.build_mesh) -- nothing to translate.
             return res  # type: ignore[return-value]
+        # metal_real must be forwarded: optimize._driven_config reads it to emit
+        # the Boundaries.Conductivity surface impedance. An adapter silently
+        # dropping a feature dict is exactly how two earlier fabrication
+        # studies ran with the feature switched off (CLAUDE.md sec 10c).
         return {"mesh_path": res["mesh"], "ports": res["ports"], "tets": res["tets"],
                 "nodes": res["nodes"], "sma": res.get("sma"),
+                "metal_real": res.get("metal_real"),
                 "eps_r": spec.substrate.eps_r, "tand": spec.substrate.tan_d}
 
     def _geometry(self, spec: FilterSpec, params: dict):
@@ -180,8 +185,9 @@ class CascadeTopology:
         return g
 
     def plot_layout_2d(self, spec: FilterSpec, path: str, **params) -> str:
+        zoom = bool(params.pop("zoom_launch", False))
         g = self._geometry(spec, params)
-        plot_layout(g, path, launch=TAOGLAS_SMA)
+        plot_layout(g, path, launch=TAOGLAS_SMA, zoom_launch=zoom)
         return path
 
     def board_length_mm(self, spec: FilterSpec, **params) -> float:

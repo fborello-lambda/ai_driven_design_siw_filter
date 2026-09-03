@@ -56,6 +56,8 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
                # topologies/cascade._n_iris_params. Takes precedence over
                # w_iris_mm when both are given.
                w_irises_mm: list[float] | None = None,
+               metal_conductivity_sm: float | None = None,
+               metal_thickness_um: float | None = None,
                with_sma: bool = False, sma_len_mm: float = 6.0,
                sma_rin_mm: float = 0.35, sma_rout_mm: float = 1.164,
                sma_eps_r: float = 2.08, sma_tand: float = 4.0e-4,
@@ -326,6 +328,7 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
 
     # ---- classify boundary surfaces ----
     pec, wave_in, wave_out, absorbing = [], [], [], []
+    pec_ext_flag: dict[int, bool] = {}
     for dim, tag in gmsh.model.getEntities(2):
         cx, cy, cz = gmsh.model.occ.getCenterOfMass(2, tag)
         xmin, ymin_f, _, xmax, ymax_f, _ = gmsh.model.getBoundingBox(2, tag)
@@ -363,9 +366,9 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
                 on_sma_cap = True
 
         if _near(cz, 0.0):                                    # bottom ground
-            pec.append(tag)
+            pec.append(tag); pec_ext_flag[tag] = is_boundary
         elif on_via or on_sma_pin or on_sma_shell or on_sma_cap:
-            pec.append(tag)                                   # via/pin/shell/cap
+            pec.append(tag); pec_ext_flag[tag] = is_boundary   # via/pin/shell/cap
         elif with_sma and _near(cx, Xc0) and xmax - xmin < 1e-3:
             wave_in.append(tag)                               # coax port (in)
         elif with_sma and _near(cx, Xc1) and xmax - xmin < 1e-3:
@@ -376,9 +379,9 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
             wave_out.append(tag)                              # microstrip port (out)
         elif _near(cz, h):                                    # z=h plane
             if 0.0 - 1e-6 <= cx <= Li + 1e-6:                 # SIW top ground
-                pec.append(tag)
+                pec.append(tag); pec_ext_flag[tag] = is_boundary
             elif any(_in_poly(cx, cy, poly) for poly in trace_polys):
-                pec.append(tag)                               # microstrip trace
+                pec.append(tag); pec_ext_flag[tag] = is_boundary  # microstrip trace
             # else: open substrate/air interface -> no BC (internal)
         elif is_boundary:                                     # outer air/diel
             absorbing.append(tag)
@@ -386,7 +389,26 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     pec = sorted(set(pec))
     absorbing = sorted(set(absorbing) - set(pec) - set(wave_in) - set(wave_out))
 
+    # Real (lossy) metal, ported from palace_dualmode_driven 2026-09-03 so the
+    # CASCADE can carry the same conductor-loss model the dual-mode design
+    # already had. Palace's Boundaries.Conductivity (surface impedance) is
+    # EXTERIOR-ONLY -- valid on the ground planes, which are true one-sided
+    # mesh boundaries, and invalid on via barrels and the trace, which are
+    # internal two-sided sheets. So split the single PEC group: exterior
+    # metal gets real copper, internal metal stays PEC.
+    # EXTERIOR-ness comes from mesh topology (is_boundary), never from an
+    # assumption about z -- a face's exterior status changes the moment
+    # anything is meshed above it.
+    # metal_conductivity_sm=None (the default) keeps everything PEC and
+    # reproduces every existing cascade golden exactly.
+    pec_real = []
+    if metal_conductivity_sm:
+        pec_real = sorted(t for t in pec if pec_ext_flag.get(t))
+        pec = sorted(set(pec) - set(pec_real))
+
     gmsh.model.addPhysicalGroup(2, pec, tag=10, name="pec")
+    if pec_real:
+        gmsh.model.addPhysicalGroup(2, pec_real, tag=15, name="metal_real")
     gmsh.model.addPhysicalGroup(2, wave_in, tag=11, name="port_in")
     gmsh.model.addPhysicalGroup(2, wave_out, tag=12, name="port_out")
     gmsh.model.addPhysicalGroup(2, absorbing, tag=13, name="absorbing")
@@ -437,6 +459,12 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     nnode = len(gmsh.model.mesh.getNodes()[0])
     legend = {"dielectric": 1, "air": 2, "pec": 10, "port_in": 11,
               "port_out": 12, "absorbing": 13}
+    metal_info = None
+    if pec_real:
+        legend["metal_real"] = 15
+        metal_info = {"conductivity_sm": metal_conductivity_sm,
+                      "thickness_um": metal_thickness_um,
+                      "n_faces": len(pec_real)}
     sma_info = None
     if with_sma:
         legend["sma_ptfe"] = 3
@@ -470,6 +498,7 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
         print(f"  WROTE {out}")
     gmsh.finalize()
     return {"mesh": out, "tets": ntet, "nodes": nnode, "legend": legend,
+            "metal_real": metal_info,
             "ports": (len(wave_in), len(wave_out)), "sma": sma_info}
 
 

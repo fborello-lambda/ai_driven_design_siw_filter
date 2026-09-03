@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 
+import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -23,6 +24,29 @@ from .palace_dualmode_driven import gnd_stitch_layout
 
 MM = 1e3  # metres -> mm for plotting/CSV
 
+
+
+def _cpwg_feed_polys(g: Geometry, launch: dict):
+    """Feed outline for a CPWG launch, in METRES, matching what the mesher
+    builds: width cpwg_w_feed_mm from the board edge through cpwg_len_mm,
+    linearly tapered over cpwg_taper_mm to the microstrip width g.W_ms, then
+    constant to the SIW wall. Mirrored at the output end."""
+    wp = launch["cpwg_w_feed_mm"] / MM          # mm -> m
+    wm = g.W_ms
+    clen = launch.get("cpwg_len_mm", 5.0) / MM
+    ctap = launch.get("cpwg_taper_mm", 4.0) / MM
+    Lf, Lt, Li = g.L_feed, g.L_taper, g.L_inner
+    X0 = -(Lt + Lf)
+    out = []
+    for x_edge, sgn in ((X0, +1.0), (Li + Lt + Lf, -1.0)):
+        xa = x_edge + sgn * clen                # end of constant CPWG section
+        xb = xa + sgn * ctap                    # end of the taper
+        xc = x_edge + sgn * (Lt + Lf)           # SIW wall / start of the flare
+        out.append(np.array([
+            (x_edge, -wp / 2), (xa, -wp / 2), (xb, -wm / 2), (xc, -wm / 2),
+            (xc,  wm / 2), (xb,  wm / 2), (xa,  wp / 2), (x_edge,  wp / 2),
+        ]))
+    return out
 
 def _draw_launch_footprint(ax, g: Geometry, launch: dict) -> None:
     """Overlay the connector ground pads, stitching vias and pin -- same
@@ -59,6 +83,14 @@ def _draw_launch_footprint(ax, g: Geometry, launch: dict) -> None:
         for x_edge in (X0, X1):
             ax.add_patch(Circle((x_edge, 0.0), rin, fc="none", ec="#c00",
                                 lw=1.2, zorder=6))
+    # Return what was actually DRAWN. Labels must report measured geometry,
+    # never the requested parameter: n_gnd_stitch=6 yields 8 vias per side
+    # here, and printing the request instead of the result is a mismatch this
+    # project has already shipped once.
+    n_in = sum(1 for x, _y in via_centres if x < 0.5 * (X0 + X1))
+    return {"n_stitch_per_side": n_in, "n_stitch_total": len(via_centres),
+            "gap_mm": (launch.get("cpwg_y_gnd_mm", 0.0)
+                       - launch.get("cpwg_w_feed_mm", 0.0) / 2.0)}
 
 
 def export_via_csv(g: Geometry, path: str = "via_coords.csv") -> None:
@@ -72,18 +104,39 @@ def export_via_csv(g: Geometry, path: str = "via_coords.csv") -> None:
     print(f"Wrote {path} ({len(g.vias)} vias)")
 
 
-def plot_layout(g: Geometry, path: str = "layout.png", launch: dict | None = None) -> None:
+def plot_layout(g: Geometry, path: str = "layout.png", launch: dict | None = None,
+                zoom_launch: bool = False) -> None:
+    """Top view. zoom_launch=True crops to the INPUT launch instead of the
+    whole board -- at board scale the CPWG gap (0.2512mm over ~170mm) is
+    sub-pixel and the footprint cannot be inspected."""
     spec, sub = g.spec, g.spec.substrate
-    fig, ax = plt.subplots(figsize=(13, 4.5))
+    fig, ax = plt.subplots(figsize=(9, 7) if zoom_launch else (13, 4.5))
 
     # Board outline
     xmin, xmax, ymin, ymax = (v * MM for v in g.board)
     ax.add_patch(Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
                            fill=False, ec="0.4", lw=1.0, ls="--"))
 
-    # Copper feed + tapers (drawn as filled polygons)
-    for poly in g.feed_polys + g.taper_polys:
-        ax.add_patch(Polygon(poly * MM, closed=True, fc="#d9a441",
+    # Copper feed + tapers (drawn as filled polygons).
+    #
+    # With a CPWG launch the feed is NOT a constant-width microstrip: the
+    # mesher (palace_driven / palace_dualmode_driven, "_wp = cpwg_w_feed_mm")
+    # builds it at the CPWG 50-ohm width through the coplanar section, then
+    # tapers it out to the microstrip 50-ohm width where the ground pours
+    # end -- the two widths are different because a CPWG's impedance is set
+    # by its gap, not by the microstrip formula.
+    #
+    # Drawing a constant-width trace here understated the coplanar gap as
+    # 0.019mm instead of 0.2512mm (the trace nearly touching the pour) and
+    # hid the taper entirely, i.e. the picture showed a launch that is not
+    # the one simulated. That is the same drawing-vs-mesh drift class this
+    # project has hit before; the fix is to derive the drawn outline from
+    # the same launch parameters the mesh uses.
+    feed_polys = list(g.feed_polys)
+    if launch and launch.get("cpwg_gap_mm") is not None:
+        feed_polys = _cpwg_feed_polys(g, launch)
+    for poly in feed_polys + g.taper_polys:
+        ax.add_patch(Polygon(np.asarray(poly) * MM, closed=True, fc="#d9a441",
                              ec="#a06d12", lw=0.8, alpha=0.7, zorder=1))
 
     # Cavity boundary shading (alternating) + labels
@@ -117,8 +170,7 @@ def plot_layout(g: Geometry, path: str = "layout.png", launch: dict | None = Non
             _dim_v(ax, x_face, -we / 2, we / 2, f"w_ext={we:.1f}",
                    color="#b00", off=0)
 
-    if launch:
-        _draw_launch_footprint(ax, g, launch)
+    lp = _draw_launch_footprint(ax, g, launch) if launch else None
 
     ax.set_xlabel("x [mm]")
     ax.set_ylabel("y [mm]")
@@ -130,8 +182,24 @@ def plot_layout(g: Geometry, path: str = "layout.png", launch: dict | None = Non
         f"{iris_src}",
         fontsize=10)
     ax.set_aspect("equal")
-    ax.set_xlim(xmin - 3, xmax + 8)
-    ax.set_ylim(ymin - 8, ymax + 8)
+    if zoom_launch:
+        # Frame the input launch: from just outside the board edge to a little
+        # past where the CPWG ground pads end and the taper meets the SIW wall.
+        x_edge = -(g.L_taper + g.L_feed) * MM
+        span = (g.L_taper + g.L_feed) * MM
+        ax.set_xlim(x_edge - 2.0, x_edge + span + 4.0)
+        yl = max(g.W_ms * MM * 6.0, (launch or {}).get("cpwg_y_out_mm", 3.6) * 2.5)
+        ax.set_ylim(-yl, yl)
+        lk = launch or {}
+        ax.set_title(
+            f"CPWG launch footprint (input) — coplanar gap {lp['gap_mm']:.4f} mm "
+            f"(measured from the drawn outline)\n"
+            f"feed {lk.get('cpwg_w_feed_mm', 0):.2f} mm through the CPWG section, "
+            f"tapered to microstrip W={g.W_ms*MM:.3f} mm; "
+            f"{lp['n_stitch_per_side']} stitch vias/side (drawn)", fontsize=10)
+    else:
+        ax.set_xlim(xmin - 3, xmax + 8)
+        ax.set_ylim(ymin - 8, ymax + 8)
     ax.grid(True, alpha=0.2)
     fig.tight_layout()
     fig.savefig(path, dpi=130)
