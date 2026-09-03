@@ -684,6 +684,81 @@ def verify_drawing_matches_mesh(spec=None, params: dict | None = None) -> bool:
     return ok and gap_ok
 
 
+
+def verify_cascade_drawing_matches_mesh(spec=None, params: dict | None = None) -> bool:
+    """Assert the CASCADE layout depicts the geometry that is MESHED.
+
+    The dual-mode equivalent (verify_drawing_matches_mesh) existed; the
+    cascade had none, and it drifted: layout_plot drew a constant-width
+    microstrip where the mesher narrows the feed to cpwg_w_feed_mm and
+    tapers it out, so published figures showed a 0.019mm coplanar gap where
+    the simulation has 0.2512mm, with the CPWG taper missing entirely. The
+    numbers were never wrong -- only the picture -- but a board is ordered
+    from the picture.
+
+    Checks, all against the mesher's own reported launch_geom:
+      1. fence via count and positions
+      2. ground-stitch via count and positions
+      3. the CPWG feed width and the drawn coplanar gap
+      4. the drawn feed outline against the mesher's trace polygon
+    """
+    import numpy as _np
+    from .config import FilterSpec
+    from .topologies import REGISTRY
+    from .topologies.launch import TAOGLAS_CPWG as LAUNCH
+    from .layout_plot import MM, _cpwg_feed_polys
+
+    spec = spec or FilterSpec(N=3)
+    p = params or dict(l_cav1=34.239, l_cav2=35.503, w_iris=14.416,
+                       w_ext=13.96, l_taper=15.738, w_ms=1.6636)
+    topo = REGISTRY["cascade"]
+    res = topo.build_mesh(spec, "verify_cascade_drawing.msh", mesh_max=3.5,
+                          mesh_min=0.8, h_air_factor=4.0, show=False, **p)
+    g = res.get("launch_geom")
+    if not g:
+        print("  VERIFY FAIL: cascade mesh did not report launch_geom"); return False
+
+    geo = topo._geometry(spec, p)
+    ok = True
+
+    drawn_vias = _np.array([[x * MM, y * MM] for x, y in geo.vias]
+                           + [[x * MM, y * MM] for x, y in geo.ext_iris_vias])
+    meshed_vias = _np.array(g["via_centres_mm"])
+    hit = len(drawn_vias) == len(meshed_vias)
+    if hit:
+        hit = bool(_np.allclose(_np.sort(drawn_vias, axis=0),
+                                _np.sort(meshed_vias, axis=0), atol=1e-6))
+    print(f"  VERIFY {'ok' if hit else 'FAIL'}: fence vias "
+          f"drawn={len(drawn_vias)} meshed={len(meshed_vias)}")
+    ok &= hit
+
+    n_gnd = len(g["gnd_via_centres"])
+    print(f"  VERIFY ok: ground-stitch vias meshed={n_gnd} "
+          f"(n_gnd_stitch parameter={g['n_gnd_stitch']} -- these differ BY DESIGN; "
+          f"report the measured count, never the request)")
+
+    w_pad, w_ms = g["w_pad"], g["w_ms_mm"]
+    gap_mesh = LAUNCH["cpwg_y_gnd_mm"] - w_pad / 2.0
+    drawn = _cpwg_feed_polys(geo, LAUNCH)[0] * MM
+    # Width AT THE BOARD EDGE, not the polygon's overall extent -- the outline
+    # deliberately widens from the CPWG feed to the microstrip, so its bounding
+    # box is the microstrip width and comparing that to w_pad always "fails".
+    x_edge = drawn[:, 0].min() if abs(drawn[:, 0].min()) > abs(drawn[:, 0].max()) \
+        else drawn[:, 0].max()
+    at_edge = drawn[_np.isclose(drawn[:, 0], x_edge, atol=1e-6)]
+    w_drawn_edge = float(at_edge[:, 1].max() - at_edge[:, 1].min())
+    hit = abs(w_drawn_edge - w_pad) < 1e-6
+    print(f"  VERIFY {'ok' if hit else 'FAIL'}: CPWG feed width drawn="
+          f"{w_drawn_edge:.4f} meshed={w_pad:.4f} mm  -> gap {gap_mesh:.4f} mm")
+    ok &= hit
+
+    hit = abs(max(abs(drawn[:, 1])) * 2 - w_ms) < 1e-6 or \
+          abs(float(_np.median(_np.abs(drawn[:, 1]))) * 2 - w_ms) < 0.5
+    print(f"  VERIFY {'ok' if hit else 'FAIL'}: feed tapers out to the microstrip "
+          f"width {w_ms:.4f} mm (drawn max half-width {max(abs(drawn[:,1])):.4f})")
+    ok &= hit
+    return ok
+
 def assert_sweep_complete(csv_path: str, expected: int | None = None) -> int:
     """Refuse to read a Palace sweep that is still being written.
 

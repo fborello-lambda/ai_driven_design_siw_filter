@@ -499,6 +499,21 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     gmsh.finalize()
     return {"mesh": out, "tets": ntet, "nodes": nnode, "legend": legend,
             "metal_real": metal_info,
+            # Report the launch geometry the mesher ACTUALLY built, so a
+            # drawing can be checked against it rather than trusted. The
+            # cascade layout drifted from the mesh unnoticed until
+            # 2026-09-03 (constant-width feed drawn where the mesher
+            # narrows and tapers it -- coplanar gap shown as 0.019mm
+            # instead of 0.2512mm) precisely because this did not exist.
+            "launch_geom": {
+                "gnd_via_centres": [list(map(float, c)) for c in gnd_via_centres],
+                "via_centres_mm": [[float(x * MM), float(y * MM)] for x, y in via_xy],
+                "cpwg_gap_mm": cpwg_gap_mm,
+                "n_gnd_stitch": n_gnd_stitch,
+                "w_pad": _wp, "w_ms_mm": W,
+                "x_pad_hold_in": _xh_in, "x_pad_end_in": _xp_in,
+                "trace_poly_in": [list(map(float, q)) for q in _outline(X0, -Lt, 0.0)],
+            },
             "ports": (len(wave_in), len(wave_out)), "sma": sma_info}
 
 

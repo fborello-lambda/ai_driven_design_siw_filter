@@ -780,23 +780,6 @@ def cmd_sweep(args) -> int:
     return 0
 
 
-def cmd_stackup(args) -> int:
-    from .report import (build_stackup_view, build_stackup_topview,
-                         verify_drawing_matches_mesh)
-    spec = _make_spec(args)
-    ok = build_stackup_view(spec=spec, out_name=args.out_name)
-    if not args.no_topview:
-        ok = build_stackup_topview(spec=spec, out_name=f"{args.out_name}_topview") and ok
-    if args.verify:
-        ok = verify_drawing_matches_mesh(spec=spec) and ok
-    return 0 if ok else 1
-
-
-#: The fabrication variants, as PARAMETER OVERLAYS on one fixed geometry.
-#: Keys match report.FAB_VARIANTS so the runner and the plotter cannot drift.
-#: Note the soldermask in this model covers ONLY the two feed launch regions
-#: (palace_dualmode_driven builds mask_in/mask_out over the launches, not the
-#: cavity), so "mask opened over the feed" is precisely "no soldermask".
 def _fab_variant_specs():
     # NOTE: deliberately NO VIA_COVERED / VIA_OPEN here. Those set
     # via_conductivity_sm, which makes every SIW via a volumetric lossy
@@ -1167,20 +1150,14 @@ def main(argv: list[str] | None = None) -> int:
     p_scn.add_argument("--np", type=int, default=8)
     p_scn.set_defaults(func=cmd_scan)
 
-    p_stk = sub.add_parser("stackup",
-                           help="cross-section view of the real fabrication stack at the feed "
-                                "(substrate / copper / ENIG / soldermask / silkscreen), drawn "
-                                "both with the feed covered and with the soldermask opened")
-    _add_spec_args(p_stk)
-    p_stk.add_argument("--out-name", default="stackup", help="output basename")
-    p_stk.add_argument("--verify", action="store_true",
-                       help="build the real mesh and assert the drawn via positions / CPWG "
-                            "gap match what was actually meshed (guards against the drawing "
-                            "depicting a launch that is not simulated)")
-    p_stk.add_argument("--no-topview", action="store_true",
-                       help="cross-section only; skip the top view showing soldermask "
-                            "coverage and the recommended feed opening")
-    p_stk.set_defaults(func=cmd_stackup)
+    # `stackup` is deliberately NOT a CLI subcommand (2026-09-03, user's
+    # call: "make the stackup a feature not used in the cli"). The drawing
+    # helpers remain in report.py -- build_stackup_view, build_stackup_topview
+    # and verify_drawing_matches_mesh / verify_cascade_drawing_matches_mesh --
+    # and are called directly when a figure or a drawing-vs-mesh check is
+    # actually needed. Removing the subcommand keeps it out of the surface
+    # area to explore without losing the capability.
+
 
     p_fab = sub.add_parser("compare-fab-variants",
                            help="ONE overlay of every fabrication variant of a design "

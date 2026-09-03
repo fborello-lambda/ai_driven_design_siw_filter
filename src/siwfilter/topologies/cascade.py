@@ -166,6 +166,7 @@ class CascadeTopology:
         return {"mesh_path": res["mesh"], "ports": res["ports"], "tets": res["tets"],
                 "nodes": res["nodes"], "sma": res.get("sma"),
                 "metal_real": res.get("metal_real"),
+                "launch_geom": res.get("launch_geom"),
                 "eps_r": spec.substrate.eps_r, "tand": spec.substrate.tan_d}
 
     def _geometry(self, spec: FilterSpec, params: dict):
