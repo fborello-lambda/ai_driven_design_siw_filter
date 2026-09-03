@@ -383,6 +383,72 @@ def cmd_calibrate(args) -> int:
             if r.get("ok"):
                 print(f"  w_ext={float(w):6.2f} -> Qe={r['Qe']:8.2f}  "
                       f"Q_L={r['Q_L']:7.2f}  bw={r['bw']:6.1f} MHz")
+    # ---- invert: measured curves -> physical geometry for the spec ----
+    # Previously the CLI only MEASURED; inverting and confirming lived in
+    # synth_design.py, which is cascade-only, so every dual-mode run had to
+    # go through an ad-hoc script. This keeps the whole chain in the CLI.
+    if args.invert:
+        import numpy as _np
+        from .synthesis import synthesize
+        syn = synthesize(spec)
+        k_t = float(_np.asarray(syn.k).ravel()[0])
+        qe_t = float(syn.qe_in)
+        print(f"\ntargets for N={spec.N}, {spec.ripple_db}dB, FBW={spec.FBW}: "
+              f"k={k_t:.4f}  Qe={qe_t:.2f}")
+        geom: dict[str, float] = {}
+
+        if "qe" in out and out["qe"].get("w_of_logQe"):
+            we = float(_np.polyval(out["qe"]["w_of_logQe"], _np.log(qe_t)))
+            qes = [d["Qe"] for d in out["qe"]["points"].values() if d.get("ok")]
+            if qes and not (min(qes) <= qe_t <= max(qes)):
+                print(f"  WARNING: Qe target {qe_t:.2f} is OUTSIDE the measured "
+                      f"range [{min(qes):.1f}, {max(qes):.1f}] -- this is an "
+                      f"EXTRAPOLATION. Widen the w_ext sweep instead of trusting it.")
+            geom["w_ext"] = round(we, 3)
+            print(f"  Qe={qe_t:.2f} -> w_ext = {we:.3f} mm")
+        elif "qe" in out:
+            print("  Qe inversion unavailable (need >=3 usable points)")
+
+        if "k" in out:
+            pts = [(float(w), r["k"]) for w, r in out["k"].get("points", {}).items()
+                   if r.get("ok")]
+            if len(pts) >= 3:
+                ws = _np.array([q[0] for q in pts]); ks = _np.array([q[1] for q in pts])
+                fit = _np.polyfit(ks, ws, min(2, len(pts) - 1))
+                wi = float(_np.polyval(fit, k_t))
+                if not (ks.min() <= k_t <= ks.max()):
+                    print(f"  WARNING: k target {k_t:.4f} is OUTSIDE the measured "
+                          f"range [{ks.min():.4f}, {ks.max():.4f}] -- EXTRAPOLATION.")
+                geom["w_iris"] = round(wi, 3)
+                print(f"  k={k_t:.4f} -> w_iris = {wi:.3f} mm")
+            else:
+                print("  k inversion unavailable (need >=3 usable points)")
+
+        out["targets"] = {"k": k_t, "Qe": qe_t}
+        out["inverted_geometry"] = geom
+
+        if args.confirm and geom:
+            from .optimize import evaluate, pole_shape
+            import numpy as _np2
+            base = _json.loads(args.confirm_base) if args.confirm_base else {}
+            P = dict(base); P.update(geom)
+            print(f"\nCONFIRM with {P}")
+            r = evaluate(topo, spec, P, fine=True,
+                        tag_prefix=f"cal_confirm_{topo.name}",
+                        device=args.device, np_ranks=args.np)
+            if r.get("ok"):
+                sh = pole_shape(_np2.array(r["f"]), _np2.array(r["s11_db"]), spec.N)
+                print(f"  fc={r.get('fc_3db', r['fc']):.3f}GHz  IL={r['il']:.2f}dB  "
+                      f"BW={r['bw']:.0f}MHz  S11w={r['s11w']:.2f}dB  "
+                      f"poles={sh['n_zeros']} (want {spec.N})")
+                out["confirm"] = {"params": P,
+                                  "metrics": {k: v for k, v in r.items()
+                                              if k not in ("f", "s11_db", "s21_db", "csv")},
+                                  "f_ghz": list(r["f"]), "s11_db": list(r["s11_db"]),
+                                  "s21_db": list(r["s21_db"])}
+            else:
+                print(f"  CONFIRM FAILED: {r.get('err')}")
+
     p = out_data(f"calibration_{topo.name}_N{spec.N}.json")
     _json.dump(out, open(p, "w"), indent=2,
                default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o))
@@ -572,6 +638,16 @@ def main(argv: list[str] | None = None) -> int:
                        help=_DEVICE_HELP)
     p_cal.add_argument("--np", type=int, default=4,
                        help="MPI ranks (CPU only; GPU always uses 1)")
+    p_cal.add_argument("--invert", action="store_true",
+                       help="after measuring, invert the fitted curves for this spec's "
+                            "k/Qe targets and report the physical geometry (warns loudly "
+                            "if a target falls outside the measured range)")
+    p_cal.add_argument("--confirm", action="store_true",
+                       help="with --invert: run a driven fine solve on the inverted "
+                            "geometry and report fc/IL/BW/S11w and the pole count")
+    p_cal.add_argument("--confirm-base", default=None, metavar="JSON",
+                       help="JSON dict of the non-inverted geometry parameters to hold "
+                            "fixed during --confirm, e.g. '{\"a\": 57.21, \"x_iris\": 28.68}'")
     p_cal.set_defaults(func=cmd_calibrate)
 
     p_des = sub.add_parser("design", help="Bayesian search for a new design")
