@@ -154,7 +154,8 @@ class DualModeTopology:
 
     def calibrate_qe(self, spec: FilterSpec, w_exts: list[float] | None = None,
                      a_mm: float = A_SIW_MM, device: str = "auto",
-                     np_ranks: int = 8) -> dict:
+                     np_ranks: int = 8, fmin_ghz: float = 2.40,
+                     fmax_ghz: float = 3.05, step_ghz: float = 0.010) -> dict:
         """EM Qe(w_ext) external-coupling calibration under the REAL launch.
 
         The dual-mode counterpart to calibrate()'s k12(w_iris), and the piece
@@ -201,8 +202,16 @@ class DualModeTopology:
         for we in w_exts:
             # w_iris=None -> no internal iris row -> single-mode resonator
             p = dict(a=a_mm, w_iris=None, x_iris=None, y_wall=8.62, w_ext=we)
+            # Window sized to the MEASUREMENT, not to f0. The original
+            # +-0.6GHz at 5MHz spent ~92% of its 241 points far from the
+            # resonance: the -3dB band being measured is only ~100MHz wide.
+            # fc also slides down with aperture width (-13.9 MHz/mm measured:
+            # 2.896GHz at 8mm -> 2.785 at 16mm), extrapolating to ~2.62GHz at
+            # 28mm, so the window is offset low rather than centred on f0.
+            # 65 points instead of 241 -- 3.7x fewer solves per point, with
+            # 10MHz still giving ~10 points across a 100MHz band.
             r = run_driven(self, spec, p, f"dmqe_we{we:.1f}",
-                           f0 - 0.6, f0 + 0.6, 0.005, mmax, mmin, hair,
+                           fmin_ghz, fmax_ghz, step_ghz, mmax, mmin, hair,
                            device=device, np_ranks=np_ranks)
             if not r.get("ok"):
                 points[we] = {"ok": False, "err": r.get("err")}
