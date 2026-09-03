@@ -377,7 +377,14 @@ def cmd_calibrate(args) -> int:
         if not hasattr(topo, "calibrate_qe"):
             print(f"calibrate_qe not implemented for topology {topo.name!r}")
             return 1
-        out["qe"] = topo.calibrate_qe(spec, device=args.device, np_ranks=args.np)
+        qe_kw = {}
+        if args.w_ext:
+            qe_kw["w_exts"] = [float(x) for x in args.w_ext.split(",")]
+        if args.qe_window:
+            lo, hi, st = (float(x) for x in args.qe_window.split(","))
+            qe_kw.update(fmin_ghz=lo, fmax_ghz=hi, step_ghz=st)
+        out["qe"] = topo.calibrate_qe(spec, device=args.device,
+                                      np_ranks=args.np, **qe_kw)
         for w, r in sorted(out["qe"].get("points", {}).items(),
                            key=lambda t: float(t[0])):
             if r.get("ok"):
@@ -638,6 +645,15 @@ def main(argv: list[str] | None = None) -> int:
                        help=_DEVICE_HELP)
     p_cal.add_argument("--np", type=int, default=4,
                        help="MPI ranks (CPU only; GPU always uses 1)")
+    p_cal.add_argument("--w-ext", default=None, metavar="LIST",
+                       help="comma-separated w_ext values for the Qe sweep, e.g. "
+                            "'19,22,25,28'. Concentrate these where the target Qe "
+                            "lives: points whose Q_L approaches Qu are ill-conditioned "
+                            "(Qe = 2/(1/Q_L - 1/Qu) subtracts close numbers there)")
+    p_cal.add_argument("--qe-window", default=None, metavar="FMIN,FMAX,STEP",
+                       help="Qe sweep window in GHz, e.g. '2.40,3.05,0.010'. Size it to "
+                            "the -3dB band being measured, not to f0 -- the default "
+                            "used to spend ~92%% of its points far from the resonance")
     p_cal.add_argument("--invert", action="store_true",
                        help="after measuring, invert the fitted curves for this spec's "
                             "k/Qe targets and report the physical geometry (warns loudly "
