@@ -367,6 +367,11 @@ def cmd_calibrate(args) -> int:
     topo = REGISTRY[args.topology]
     spec = _make_spec(args)
     out = {}
+    # Both calibration testbeds must use the cavity actually being designed.
+    # They default to module constants (a=61.05mm, y_wall=6.0mm), so without
+    # this the calibration measures a DIFFERENT resonator than the design --
+    # which is exactly what happened on the first run.
+    cav = _json.loads(args.cavity) if args.cavity else {}
     if args.what in ("k", "both"):
         # Forward the device choice. This was NOT forwarded, so the k sweep
         # always used calibrate()'s own default (GPU for dualmode) regardless
@@ -375,10 +380,13 @@ def cmd_calibrate(args) -> int:
         # failed point as {"ok": False} rather than raising. The whole k
         # curve came back empty and the k inversion produced nothing, which
         # only surfaced later as --confirm failing with "mesh:'w_iris'".
+        k_kw = dict(cav)
+        if args.w_iris:
+            k_kw["w_irises"] = [float(x) for x in args.w_iris.split(",")]
         try:
-            out["k"] = topo.calibrate(spec, device=args.device)
+            out["k"] = topo.calibrate(spec, device=args.device, **k_kw)
         except TypeError:
-            out["k"] = topo.calibrate(spec)      # topology without a device arg
+            out["k"] = topo.calibrate(spec)      # topology without those args
         _kpts = out["k"].get("points", {})
         _kok = sum(1 for r in _kpts.values() if isinstance(r, dict) and r.get("ok"))
         if _kpts and _kok == 0:
@@ -394,7 +402,7 @@ def cmd_calibrate(args) -> int:
         if not hasattr(topo, "calibrate_qe"):
             print(f"calibrate_qe not implemented for topology {topo.name!r}")
             return 1
-        qe_kw = {}
+        qe_kw = dict(cav)
         if args.w_ext:
             qe_kw["w_exts"] = [float(x) for x in args.w_ext.split(",")]
         if args.qe_window:
@@ -681,6 +689,13 @@ def main(argv: list[str] | None = None) -> int:
                        help=_DEVICE_HELP)
     p_cal.add_argument("--np", type=int, default=4,
                        help="MPI ranks (CPU only; GPU always uses 1)")
+    p_cal.add_argument("--cavity", default=None, metavar="JSON",
+                       help="cavity geometry for BOTH calibration testbeds, e.g. "
+                            "'{\"a_mm\": 57.21, \"x_iris_mm\": 28.68, \"y_wall_mm\": 8.62}'. "
+                            "Without it the sweeps use module defaults and measure a "
+                            "different resonator than the one being designed")
+    p_cal.add_argument("--w-iris", default=None, metavar="LIST",
+                       help="comma-separated w_iris values for the k sweep")
     p_cal.add_argument("--w-ext", default=None, metavar="LIST",
                        help="comma-separated w_ext values for the Qe sweep, e.g. "
                             "'19,22,25,28'. Concentrate these where the target Qe "
