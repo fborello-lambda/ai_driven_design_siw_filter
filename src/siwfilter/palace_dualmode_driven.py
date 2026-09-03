@@ -468,6 +468,16 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     y_span = ym - ym_lo
 
+    # Clear a LEAKED gmsh session before starting. Every gmsh.finalize() in
+    # this function sits on a success path, so any exception in between --
+    # notably the empty-mesh failure the CPWG launch hits with thin
+    # fabrication layers -- leaves gmsh initialised. The next build in the
+    # same process then dies with "Gmsh has already been initialized" /
+    # "I'm busy!", so ONE real mesh failure silently became two, and the
+    # second looked like an unrelated bug. Recovering here fixes the whole
+    # class without reindenting 600 lines into a try/finally.
+    if gmsh.isInitialized():
+        gmsh.finalize()
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 1 if show else 0)
     gmsh.model.add("dualmode_driven")
@@ -917,7 +927,20 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             if via_inner_r is not None and span < 2 * via_inner_r + 0.2 * r:
                 absorbing.append(tag)          # open hole: radiates to free space
             else:
-                pec.append(tag); pec_ext_flag[tag] = True    # metal cap / ring
+                # EXTERIOR-ness is a mesh-topology fact, never an assumption.
+                # This branch used to hardcode True ("a via CAP face, i.e.
+                # exterior"), which is right for a bare board but WRONG once
+                # the fabrication stack is on: with ENIG / soldermask /
+                # silkscreen meshed above, a cap at z=h has a volume on both
+                # sides and is an INTERNAL two-sided sheet. Flagging it
+                # exterior handed it to Palace's Boundaries.Conductivity
+                # surface-impedance BC, which is exterior-only -- the exact
+                # invalid-BC trap CLAUDE.md sec 10c says not to re-enter.
+                # Measured with the hardcoded True: the filled+capped variant
+                # returned IL=-28.96dB and S11w=-0.07dB on a geometry that
+                # gives -1.45dB under PEC, i.e. a short, not a loss. Use the
+                # same is_boundary test every other branch already uses.
+                pec.append(tag); pec_ext_flag[tag] = is_boundary   # metal cap / ring
         elif on_main_via and via_plated:
             # Filled vs unfilled via study (2026-09-02, replaces the invalid
             # 2026-09-01 Boundaries.Conductivity attempt): the via wall's
@@ -1055,6 +1078,22 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     ntet = len(gmsh.model.mesh.getElementsByType(4)[0])
     nnode = len(gmsh.model.mesh.getNodes()[0])
+    # An EMPTY mesh is a hard failure, not a small mesh. gmsh reports
+    # boundary-recovery trouble as warnings and still writes a valid-looking
+    # .msh with nothing in it; Palace then "solves" it and the run reads as a
+    # solver problem rather than a meshing one. Measured with the CPWG launch
+    # plus the thin fabrication layers, where the 4.5um ENIG and 12um
+    # silkscreen prisms spanning the 0.2512mm coplanar gap are
+    # extreme-aspect-ratio slivers -- the same stack meshes fine (77-80k
+    # nodes) under the pad-only launch. Fail here, where the cause is still
+    # visible.
+    if ntet == 0 or nnode == 0:
+        gmsh.finalize()
+        raise RuntimeError(
+            f"gmsh produced an EMPTY mesh (nodes={nnode} tets={ntet}) for "
+            f"{out}. Boundary recovery failed -- most likely a sliver from "
+            f"thin stack layers crossing the CPWG gap. Check the gmsh "
+            f"warnings above; do not treat this as a solver failure.")
     legend = {"dielectric": 1, "air": 2, "pec": 10, "port_in": 11,
               "port_out": 12, "absorbing": 13}
     sma_info = None

@@ -50,3 +50,42 @@ TAOGLAS_CPWG: dict[str, float | bool | int] = {
 
 #: Tag for golden entries measured under this launch (golden/README.md).
 LAUNCH_TAG = "cpwg_taoglas"
+
+
+#: The pre-2026-09-02 pad-only launch, restored as a NAMED ALTERNATIVE for
+#: comparison -- not a fork of TAOGLAS_CPWG, and not the default.
+#:
+#: Restored 2026-09-03 to settle a specific question with a measurement
+#: instead of by elimination. Under the CPWG launch the dual-mode cavity
+#: cannot be matched better than -10.35 dB by any combination of its four
+#: geometry parameters (w_iris, w_ext, y_wall and x_iris were each scanned;
+#: return loss improves only in the direction that ruins bandwidth). The
+#: SAME cavity measured -17.7 dB under this pad-only launch, which makes the
+#: launch itself the prime suspect -- it was solved to 50 ohm for the
+#: CASCADE's feed, never for this cavity. Running one geometry under both
+#: launches tests that directly.
+#:
+#: `cpwg_gap_mm=None` is what selects pad-only in
+#: palace_dualmode_driven.build_mesh: no coplanar ground pour, just the
+#: connector pads and their stitching vias.
+TAOGLAS_PAD_ONLY: dict[str, float | bool | int | None] = {
+    "sma_rin_mm": 0.38,
+    "sma_rout_mm": 1.2639,
+    "sma_eps_r": 2.08,
+    "sma_tand": 4.0e-4,
+    "gnd_stitch": True,
+    "n_gnd_stitch": 2,
+    "gnd_stitch_offset_mm": 2.62,
+    "cpwg_gap_mm": None,      # <- no CPWG; pad-only launch
+}
+
+#: Tag for golden entries measured under the pad-only launch.
+PAD_ONLY_TAG = "sma_taoglas"
+
+#: Selectable by name from the CLI. Adding a launch here is the supported
+#: way to compare launches; forking a dict is not (see the module docstring).
+LAUNCHES: dict[str, dict] = {
+    "cpwg": TAOGLAS_CPWG,
+    "pad": TAOGLAS_PAD_ONLY,
+}
+LAUNCH_TAGS: dict[str, str] = {"cpwg": LAUNCH_TAG, "pad": PAD_ONLY_TAG}

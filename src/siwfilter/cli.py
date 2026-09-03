@@ -301,13 +301,30 @@ def cmd_design(args) -> int:
     # overwrote an N=3 run's saved best/log/artifacts (measured this
     # session -- lost the N=3 search's raw result this way).
     prefix = f"{args.topology}_N{spec.N}"
+    # Objective reweighting. Measured 2026-09-03 on dualmode N=2: bandwidth
+    # and return loss are in DIRECT OPPOSITION across every geometry
+    # parameter (w_iris, w_ext at two irises, y_wall -- all scanned on the
+    # assembled filter), so the default w_bw=3.0 charges ~3.5 at the
+    # 310MHz/-10.35dB corner and steers the search away from the best match
+    # this structure can produce. --w-bw 0 chases return loss alone and
+    # accepts whatever bandwidth follows; that is a deliberate spec
+    # trade-off, so it is an explicit flag rather than a changed default.
+    score_kwargs = {}
+    if args.w_bw is not None:
+        score_kwargs["w_bw"] = args.w_bw
+    if args.w_fc is not None:
+        score_kwargs["w_fc"] = args.w_fc
+    if score_kwargs:
+        print(f"objective reweighted: {score_kwargs}")
     result = optimize(topo, spec, budget=args.evals, device=args.device, np_ranks=args.np,
                       fine_sweep=fine_sweep, patience=args.patience,
+                      score_kwargs=score_kwargs or None,
                       log_name=f"opt_{prefix}_log.csv", best_json_name=f"opt_{prefix}_best.json")
     print(f"\nBest design: {result['params']}")
     from .optimize import evaluate
     r = evaluate(topo, spec, result["params"], fine=True, tag_prefix="designfinal",
-                device=args.device, np_ranks=args.np)
+                device=args.device, np_ranks=args.np,
+                score_kwargs=score_kwargs or None)
     _artifacts(topo, spec, result["params"], f"design_{prefix}", r)
     return 0
 
@@ -367,11 +384,36 @@ def cmd_calibrate(args) -> int:
     topo = REGISTRY[args.topology]
     spec = _make_spec(args)
     out = {}
+    if getattr(args, "plot_only", False):
+        p = out_data(f"calibration_{topo.name}_N{spec.N}.json")
+        _plot_calibration(_json.load(open(p)), topo.name, spec.N)
+        return 0
     # Both calibration testbeds must use the cavity actually being designed.
     # They default to module constants (a=61.05mm, y_wall=6.0mm), so without
     # this the calibration measures a DIFFERENT resonator than the design --
     # which is exactly what happened on the first run.
     cav = _json.loads(args.cavity) if args.cavity else {}
+
+    def _cav_for(fn) -> dict:
+        """Keep only the cavity keys this testbed actually accepts.
+
+        The two testbeds are different structures, so they take different
+        cavity keys: the k testbed is a CLOSED two-mode cavity and needs
+        x_iris_mm, while the Qe testbed removes the internal iris entirely
+        (w_iris=None, x_iris=None) and has no such parameter. Passing the
+        same --cavity dict to both raised
+        `calibrate_qe() got an unexpected keyword argument 'x_iris_mm'`
+        AFTER the 9-minute k sweep had already completed, losing the whole
+        Qe sweep, the inversion and the confirm.
+        """
+        import inspect
+        allowed = set(inspect.signature(fn).parameters)
+        drop = sorted(set(cav) - allowed)
+        if drop:
+            print(f"  ({fn.__name__}: ignoring cavity keys {drop} -- not "
+                  f"parameters of this testbed)")
+        return {k: v for k, v in cav.items() if k in allowed}
+
     if args.what in ("k", "both"):
         # Forward the device choice. This was NOT forwarded, so the k sweep
         # always used calibrate()'s own default (GPU for dualmode) regardless
@@ -380,13 +422,13 @@ def cmd_calibrate(args) -> int:
         # failed point as {"ok": False} rather than raising. The whole k
         # curve came back empty and the k inversion produced nothing, which
         # only surfaced later as --confirm failing with "mesh:'w_iris'".
-        k_kw = dict(cav)
+        k_kw = _cav_for(topo.calibrate)
         if args.w_iris:
             k_kw["w_irises"] = [float(x) for x in args.w_iris.split(",")]
-        try:
-            out["k"] = topo.calibrate(spec, device=args.device, **k_kw)
-        except TypeError:
-            out["k"] = topo.calibrate(spec)      # topology without those args
+        # No `except TypeError: calibrate(spec)` fallback here any more: it
+        # silently threw away --device and --cavity on any signature mismatch,
+        # which is how the k sweep ran on the wrong device in the first place.
+        out["k"] = topo.calibrate(spec, device=args.device, **k_kw)
         _kpts = out["k"].get("points", {})
         _kok = sum(1 for r in _kpts.values() if isinstance(r, dict) and r.get("ok"))
         if _kpts and _kok == 0:
@@ -402,7 +444,7 @@ def cmd_calibrate(args) -> int:
         if not hasattr(topo, "calibrate_qe"):
             print(f"calibrate_qe not implemented for topology {topo.name!r}")
             return 1
-        qe_kw = dict(cav)
+        qe_kw = _cav_for(topo.calibrate_qe)
         if args.w_ext:
             qe_kw["w_exts"] = [float(x) for x in args.w_ext.split(",")]
         if args.qe_window:
@@ -504,6 +546,133 @@ def cmd_calibrate(args) -> int:
     _json.dump(out, open(p, "w"), indent=2,
                default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o))
     print(f"WROTE {p}")
+    _plot_calibration(out, topo.name, spec.N)
+    return 0
+
+
+def _plot_calibration(cal: dict, topo_name: str, N: int) -> None:
+    from .report import build_calibration_plot
+    try:
+        build_calibration_plot(cal, f"calibration_{topo_name}_N{N}")
+    except Exception as exc:                       # a plot must never lose a sweep
+        print(f"  (calibration plot skipped: {exc})")
+
+
+def cmd_scan(args) -> int:
+    """Scan one geometry parameter on the ASSEMBLED filter and invert for a
+    target bandwidth.
+
+    Why this exists. `siw calibrate` measures k and Qe on small PROXY
+    structures and inverts the textbook bandpass mapping. For the cascade
+    that transfers. For dual-mode it demonstrably does NOT: on 2026-09-03
+    both couplings were driven onto their synthesis targets (k=0.069,
+    Qe=16.86) and the assembled filter came back 334 MHz wide with ONE
+    reflection zero and -5.9 dB return loss -- worse than the un-calibrated
+    starting point. The reason is structural: the Qe testbed removes the
+    internal iris row to isolate "one resonator", but in a dual-mode cavity
+    the two resonators are two modes of the SAME cavity, so removing the
+    iris does not isolate one of them -- it produces a different, single-mode
+    resonator (measured 120 MHz higher in frequency). There is no proxy to
+    calibrate on, so measure the real structure instead.
+
+    Writes output/data/scan_<topology>_N<N>_<param>.json and a plot; both
+    are incremental, so a scan that is still running is still readable.
+    """
+    import json as _json
+    import numpy as _np
+    from .topologies import REGISTRY
+    from .optimize import evaluate, pole_shape
+    from .config import out_data
+
+    topo = REGISTRY[args.topology]
+    spec = _make_spec(args)
+    base = _parse_params(args.params)
+    name, _, vals_s = args.scan.partition("=")
+    if not vals_s:
+        print("--scan needs NAME=V1,V2,..."); return 1
+    vals = [float(v) for v in vals_s.split(",")]
+    target_bw = args.target_bw if args.target_bw is not None else spec.FBW * spec.f0 / 1e6
+
+    launch = getattr(args, "launch", "cpwg")
+    suffix = "" if launch == "cpwg" else f"_{launch}"
+    path = out_data(f"scan_{topo.name}_N{spec.N}_{name}{suffix}.json")
+    out = {"base": base, "param": name, "values": vals, "launch": launch,
+           "target_bw_mhz": target_bw, "points": {}}
+
+    print(f"scanning {name} over {vals} (target BW {target_bw:.1f} MHz, "
+          f"launch={launch})")
+    for v in vals:
+        P = dict(base); P[name] = v
+        if launch != "cpwg":
+            P["launch"] = launch
+        # The launch is not part of the mesh tag (it is not a dimension), so
+        # two launches at ONE geometry would otherwise write to the same
+        # files. Keep them apart via the prefix.
+        r = evaluate(topo, spec, P, fine=True,
+                     tag_prefix=f"scan_{topo.name}_{name}{suffix}",
+                     device=args.device, np_ranks=args.np)
+        if not r.get("ok"):
+            out["points"][str(v)] = {"ok": False, "err": r.get("err")}
+            print(f"  {name}={v:g}: FAILED {r.get('err')}")
+            _json.dump(out, open(path, "w"), indent=2, default=str)
+            continue
+        sh = pole_shape(_np.array(r["f"]), _np.array(r["s11_db"]), spec.N)
+        # Two guards, both recorded per point rather than averaged into the fit:
+        #   truncated -- a -3dB band running off the sweep window reads
+        #     NARROWER than it is (the failure that made the Qe calibration
+        #     report 61 where the truth was 22);
+        #   n_lobes>1 -- the response is SPLIT into disjoint passbands and the
+        #     `bw` number is one lobe, not the filter's band. Fitting through
+        #     those produced a smooth-looking 35/66/122/284 MHz curve whose
+        #     inversion pointed at the merge threshold, where no geometry
+        #     delivers the target bandwidth.
+        rec = {"ok": True, "fc": r.get("fc_3db", r["fc"]), "bw": r["bw"],
+               "il": r["il"], "s11w": r["s11w"], "poles": sh["n_zeros"],
+               "truncated": bool(r.get("band_truncated")),
+               "n_lobes": int(r.get("n_lobes", 1)),
+               "lobe_split_mhz": float(r.get("lobe_split_mhz", 0.0)),
+               "f_ghz": list(r["f"]), "s11_db": list(r["s11_db"]),
+               "s21_db": list(r["s21_db"])}
+        out["points"][str(v)] = rec
+        print(f"  {name}={v:g}: fc={rec['fc']:.3f}GHz  BW={rec['bw']:.0f}MHz  "
+              f"IL={rec['il']:.2f}dB  S11w={rec['s11w']:.2f}dB  "
+              f"poles={rec['poles']}"
+              + ("  TRUNCATED" if rec["truncated"] else "")
+              + (f"  SPLIT into {rec['n_lobes']} lobes "
+                 f"({rec['lobe_split_mhz']:.0f}MHz notch) -- BW is ONE lobe"
+                 if rec["n_lobes"] > 1 else ""))
+        _json.dump(out, open(path, "w"), indent=2, default=str)
+
+    good = sorted((float(k), p) for k, p in out["points"].items()
+                  if p.get("ok") and not p["truncated"]
+                  and p.get("n_lobes", 1) == 1)
+    if len(good) >= 2:
+        xs = _np.array([g[0] for g in good])
+        bws = _np.array([g[1]["bw"] for g in good])
+        deg = min(2, len(good) - 1)
+        fit = _np.polyfit(bws, xs, deg)
+        star = float(_np.polyval(fit, target_bw))
+        inside = bws.min() <= target_bw <= bws.max()
+        out["inverted"] = {name: round(star, 3), "bracketed": bool(inside)}
+        print(f"\nINVERT: BW={target_bw:.1f}MHz -> {name} = {star:.3f} mm"
+              + ("" if inside else
+                 f"  WARNING: EXTRAPOLATION, measured BW spans "
+                 f"[{bws.min():.0f}, {bws.max():.0f}]MHz"))
+    else:
+        n_split = sum(1 for _, p in out["points"].items()
+                      if p.get("ok") and p.get("n_lobes", 1) > 1)
+        print(f"\nNO INVERSION: only {len(good)} single-passband point(s)"
+              + (f"; {n_split} point(s) were SPLIT into disjoint lobes, where "
+                 f"bandwidth is not defined for the filter as a whole. Move the "
+                 f"mode splitting (w_iris) rather than the loading (w_ext)."
+                 if n_split else "."))
+    _json.dump(out, open(path, "w"), indent=2, default=str)
+    print(f"WROTE {path}")
+    try:
+        from .report import build_scan_plot
+        build_scan_plot(out, f"scan_{topo.name}_N{spec.N}_{name}")
+    except Exception as exc:
+        print(f"  (scan plot skipped: {exc})")
     return 0
 
 
@@ -605,9 +774,124 @@ def cmd_stackup(args) -> int:
     return 0 if ok else 1
 
 
+#: The fabrication variants, as PARAMETER OVERLAYS on one fixed geometry.
+#: Keys match report.FAB_VARIANTS so the runner and the plotter cannot drift.
+#: Note the soldermask in this model covers ONLY the two feed launch regions
+#: (palace_dualmode_driven builds mask_in/mask_out over the launches, not the
+#: cavity), so "mask opened over the feed" is precisely "no soldermask".
+def _fab_variant_specs():
+    # NOTE: deliberately NO VIA_COVERED / VIA_OPEN here. Those set
+    # via_conductivity_sm, which makes every SIW via a volumetric lossy
+    # conductor requiring the 1.21 um copper skin depth to be resolved
+    # against a 200 um finest cell -- 165x too coarse. The result is
+    # enormous spurious loss (measured IL = -28.96 dB where PEC gives
+    # -1.45 dB), and since the via fence IS the waveguide wall it destroys
+    # the cavity rather than perturbing it. See report.FAB_VARIANTS for the
+    # full reasoning, including why tented-vs-open is consequently not
+    # answerable at this mesh density.
+    # ONE-FACTOR-AT-A-TIME LADDER (2026-09-03). The combined stack returns
+    # IL=-29dB / S11w=-0.1dB / 0 zeros where PEC gives -1.45dB, and TWO
+    # successive guesses at the cause were both wrong: the via-cap exterior
+    # flag (fix changed nothing) and the volumetric via conductor (removing
+    # it changed nothing). Guessing a third time is not the method. Each
+    # cell below adds exactly ONE ingredient to the PEC baseline, so the
+    # culprit is identified by measurement instead of inference.
+    from .topologies.dualmode import (JLCPCB_METAL, JLCPCB_ENIG,
+                                      JLCPCB_SOLDERMASK, JLCPCB_SILKSCREEN)
+    return [
+        ("pec_optimized",   {}),
+        ("only_cu",         {**JLCPCB_METAL}),       # exterior-plane surface impedance
+        ("only_enig",       {**JLCPCB_ENIG}),        # ENIG conductor domain
+        ("only_mask",       {**JLCPCB_SOLDERMASK}),  # feed-region dielectric
+        ("only_silk",       {**JLCPCB_SILKSCREEN}),  # silkscreen dielectric
+    ]
+
+
 def cmd_compare_fab_variants(args) -> int:
     from .report import build_fab_variant_comparison
-    ok = build_fab_variant_comparison(result_json=args.result_json, f0_ghz=args.f0,
+    from .config import out_data
+
+    result_json = args.result_json or out_data("four_variants_result.json")
+    if getattr(args, "run", False):
+        import json as _json
+        import numpy as _np
+        from .topologies import REGISTRY
+        from .optimize import evaluate, pole_shape
+        if not args.params:
+            print("--run needs --params (the fixed geometry to hold across variants)")
+            return 1
+        from .config import SPEC, FilterSpec
+        topo = REGISTRY["dualmode"]
+        spec = FilterSpec(f0=SPEC.f0, FBW=SPEC.FBW, N=args.N,
+                          ripple_db=SPEC.ripple_db,
+                          substrate_name=SPEC.substrate_name,
+                          d_via=SPEC.d_via, p_via=SPEC.p_via)
+        base = _parse_params(args.params)
+        out = _json.load(open(result_json)) if (args.resume and os.path.exists(result_json)) else {}
+        out["_geometry"] = base
+        print(f"fabrication variants at FIXED geometry {base}")
+        for key, overlay in _fab_variant_specs():
+            # Resume skips only SUCCEEDED variants. Skipping failed ones too
+            # would make --resume permanently entrench a transient failure
+            # (the first run lost three variants to an OOM kill, which is a
+            # resource limit, not a property of the design).
+            if key != "_geometry" and out.get(key, {}).get("ok"):
+                print(f"  {key}: already succeeded, skipping (--resume)")
+                continue
+            P = dict(base, **overlay)
+            # Distinct tag per variant: the overlay is mostly non-numeric
+            # (material flags), and the mesh tag only encodes numeric params,
+            # so without this every variant would collide on one set of files.
+            r = evaluate(topo, spec, P, fine=True, tag_prefix=f"fabvar_{key}",
+                         device=args.device, np_ranks=args.np)
+            if not r.get("ok"):
+                print(f"  {key}: FAILED {r.get('err')}")
+                out[key] = {"ok": False, "err": str(r.get("err"))}
+                _json.dump(out, open(result_json, "w"), indent=2, default=str)
+                continue
+            sh = pole_shape(_np.array(r["f"]), _np.array(r["s11_db"]), spec.N)
+            out[key] = {"ok": True, "params": {k: v for k, v in P.items()},
+                        "metrics": {k: v for k, v in r.items()
+                                    if k not in ("f", "s11_db", "s21_db", "csv")},
+                        "f_ghz": list(r["f"]), "s11_db": list(r["s11_db"]),
+                        "s21_db": list(r["s21_db"]), "poles": sh["n_zeros"]}
+            m = out[key]["metrics"]
+            print(f"  {key}: fc={m.get('fc_3db', m['fc']):.3f}GHz  IL={m['il']:.2f}dB  "
+                  f"BW={m['bw']:.0f}MHz  S11w={m['s11w']:.2f}dB  poles={sh['n_zeros']}"
+                  f"  lobes={m.get('n_lobes', 1)}")
+            # PHYSICS GUARD against the PEC cell. A fabrication stack adds
+            # conductor and dielectric loss -- a fraction of a dB. It cannot
+            # add tens of dB, and it cannot IMPROVE the match to near-total
+            # reflection. Both directions have caught real modelling bugs
+            # here: an unassigned material domain once returned LESS loss
+            # than lossless metal, and an exterior-only surface-impedance BC
+            # applied to internal faces returned IL=-28.96dB with
+            # S11w=-0.07dB where PEC gives -1.45dB. Say so loudly rather
+            # than letting either land in a comparison table as if it were a
+            # fabrication penalty.
+            pec_m = (out.get("pec_optimized") or {}).get("metrics")
+            if pec_m and key != "pec_optimized":
+                d_il = m["il"] - pec_m["il"]
+                if d_il > 0.05:
+                    print(f"    IMPOSSIBLE: IL {m['il']:.2f}dB BEATS the lossless PEC "
+                          f"cell ({pec_m['il']:.2f}dB) by {d_il:.2f}dB. A lossy stack "
+                          f"cannot lose less than lossless metal -- this is a modelling "
+                          f"bug, not a result.")
+                elif d_il < -6.0:
+                    print(f"    IMPLAUSIBLE: IL {m['il']:.2f}dB is {-d_il:.1f}dB worse "
+                          f"than PEC ({pec_m['il']:.2f}dB). A fabrication stack costs a "
+                          f"fraction of a dB; this size of jump means a short/open in "
+                          f"the model. Check Boundaries.Conductivity is applied only to "
+                          f"true exterior faces.")
+                if m["s11w"] > -0.5:
+                    print(f"    IMPLAUSIBLE: S11w={m['s11w']:.2f}dB is near-total "
+                          f"reflection -- the structure is not behaving as a filter.")
+                if sh["n_zeros"] == 0:
+                    print(f"    WARNING: 0 reflection zeros (expected {spec.N}).")
+            _json.dump(out, open(result_json, "w"), indent=2, default=str)
+        print(f"WROTE {result_json}")
+
+    ok = build_fab_variant_comparison(result_json=result_json, f0_ghz=args.f0,
                                       fbw=args.fbw, spec_db=args.spec_db,
                                       out_name=args.out_name)
     return 0 if ok else 1
@@ -705,6 +989,9 @@ def main(argv: list[str] | None = None) -> int:
                        help="Qe sweep window in GHz, e.g. '2.40,3.05,0.010'. Size it to "
                             "the -3dB band being measured, not to f0 -- the default "
                             "used to spend ~92%% of its points far from the resonance")
+    p_cal.add_argument("--plot-only", action="store_true",
+                       help="skip the sweeps: re-render the calibration figure from "
+                            "the cached calibration_<topology>_N<N>.json")
     p_cal.add_argument("--invert", action="store_true",
                        help="after measuring, invert the fitted curves for this spec's "
                             "k/Qe targets and report the physical geometry (warns loudly "
@@ -735,6 +1022,13 @@ def main(argv: list[str] | None = None) -> int:
     p_des.add_argument("--patience", type=int, default=None, metavar="N",
                        help="stop after N consecutive non-improving evals "
                             "(default: run the full budget)")
+    p_des.add_argument("--w-bw", type=float, default=None, metavar="W",
+                       help="weight on the bandwidth error term (default 3.0). Use 0 to "
+                            "ignore bandwidth entirely and optimise for return loss -- on "
+                            "dualmode N=2 the two are in direct opposition, so this is how "
+                            "you pick which end of that trade to land on.")
+    p_des.add_argument("--w-fc", type=float, default=None, metavar="W",
+                       help="weight on the centre-frequency error term (default 0.05)")
     p_des.add_argument("--calibrate", action="store_true", help="run the cheap eigenmode pre-pass first")
     p_des.add_argument("--calibrate-device", default=None, choices=["CPU", "GPU"],
                        help="device for the --calibrate eigenmode pre-pass. Default: auto -- GPU "
@@ -803,6 +1097,29 @@ def main(argv: list[str] | None = None) -> int:
     p_swp.add_argument("--np", type=int, default=4)
     p_swp.set_defaults(func=cmd_sweep)
 
+    p_scn = sub.add_parser("scan",
+                           help="1-D parameter scan on the ASSEMBLED filter: measure "
+                                "bandwidth / return loss / pole count against one "
+                                "geometry parameter, and invert for a target bandwidth")
+    p_scn.add_argument("--topology", required=True, choices=_TOPOLOGY_CHOICES)
+    _add_spec_args(p_scn)
+    p_scn.add_argument("--params", required=True, help="base geometry, k=v,k=v,... (mm)")
+    p_scn.add_argument("--scan", required=True, metavar="NAME=V1,V2,...",
+                       help="parameter to scan and its values, e.g. 'w_ext=12.5,13.5,14.5'")
+    p_scn.add_argument("--launch", default="cpwg", choices=["cpwg", "pad"],
+                       help="launch footprint (dualmode only): 'cpwg' (default) is the "
+                            "impedance-matched CPWG launch; 'pad' is the archived "
+                            "pad-only launch, for comparing launches at a FIXED cavity "
+                            "geometry. Results under 'pad' are tagged sma_taoglas, not "
+                            "cpwg_taoglas -- do not mix them in one golden entry.")
+    p_scn.add_argument("--target-bw", type=float, default=None, metavar="MHZ",
+                       help="invert the measured bandwidth curve for this value "
+                            "(default: the spec's own FBW*f0)")
+    p_scn.add_argument("--device", default="auto", choices=["auto", "CPU", "GPU"],
+                       help=_DEVICE_HELP)
+    p_scn.add_argument("--np", type=int, default=8)
+    p_scn.set_defaults(func=cmd_scan)
+
     p_stk = sub.add_parser("stackup",
                            help="cross-section view of the real fabrication stack at the feed "
                                 "(substrate / copper / ENIG / soldermask / silkscreen), drawn "
@@ -826,6 +1143,25 @@ def main(argv: list[str] | None = None) -> int:
                                 "still solving; also saves the plotted curves + metrics as JSON.")
     p_fab.add_argument("--result-json", default=None,
                        help="variant sweep results (default: output/data/four_variants_result.json)")
+    p_fab.add_argument("--run", action="store_true",
+                       help="RUN the variants first (dualmode) instead of only plotting a "
+                            "previous sweep. Needs --params: the one fixed geometry every "
+                            "variant is evaluated at, so any difference is the stack alone.")
+    p_fab.add_argument("--params", default=None,
+                       help="fixed geometry for --run, k=v,k=v,... (mm)")
+    p_fab.add_argument("--resume", action="store_true",
+                       help="with --run, keep variants already in the result JSON and only "
+                            "solve the missing ones")
+    # NOT _add_spec_args here: this parser already owns --f0 in GHz for the
+    # plot's FBW shading, while the spec's --f0 is in Hz. Two flags of the
+    # same name with different units is exactly the kind of thing that
+    # produces a silently wrong figure, so the spec is taken from config
+    # defaults with only the order overridable.
+    p_fab.add_argument("--N", type=int, default=2, help="filter order (default 2)")
+    p_fab.add_argument("--device", default="auto", choices=["auto", "CPU", "GPU"],
+                       help=_DEVICE_HELP)
+    p_fab.add_argument("--np", type=int, default=8,
+                       help="MPI ranks (CPU only; GPU always uses 1)")
     p_fab.add_argument("--f0", type=float, default=2.87, help="GHz, for the FBW shading")
     p_fab.add_argument("--fbw", type=float, default=0.05, help="fractional BW, for the shading")
     p_fab.add_argument("--spec-db", type=float, default=-16.0, help="S11 spec line")

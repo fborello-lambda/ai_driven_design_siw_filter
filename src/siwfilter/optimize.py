@@ -311,7 +311,26 @@ def band_edges(f: np.ndarray, s21_db: np.ndarray) -> dict:
     idx = np.flatnonzero(s21_db >= thr)
     if idx.size == 0:
         return {"bw": 0.0, "fc_3db": float(f[int(np.argmax(s21_db))]),
-                "f_lo": 0.0, "f_hi": 0.0, "band_truncated": True}
+                "f_lo": 0.0, "f_hi": 0.0, "band_truncated": True,
+                "n_lobes": 0, "lobe_split_mhz": 0.0}
+
+    # COUNT the lobes as well as measuring the one around the peak. Returning
+    # only the peak's contiguous run is right (see above), but saying nothing
+    # about the others makes a SPLIT response numerically indistinguishable
+    # from a narrow one: on 2026-09-03 a w_ext scan reported a smooth
+    # 35/66/122/284 MHz "bandwidth curve" that was actually the width of one
+    # of TWO disjoint passbands at three of its four points, and inverting it
+    # for the 143.5 MHz target seeded a search at the merge threshold, where
+    # no geometry produces that bandwidth at all. n_lobes>1 means the number
+    # reported in `bw` is one lobe, not the filter's passband.
+    _splits = np.flatnonzero(np.diff(idx) > 1)
+    n_lobes = int(_splits.size) + 1
+    lobe_split = 0.0
+    if n_lobes > 1:
+        # widest sub-threshold notch between consecutive lobes, in MHz --
+        # how far the response is from merging into one passband
+        gaps = [(float(f[idx[s + 1]]) - float(f[idx[s]])) * 1000.0 for s in _splits]
+        lobe_split = float(max(gaps))
 
     def _cross(i, j):
         """f where s21 crosses thr on the segment i->j."""
@@ -332,7 +351,8 @@ def band_edges(f: np.ndarray, s21_db: np.ndarray) -> dict:
     f_lo = _cross(i0 - 1, i0) if i0 > 0 else float(f[0])
     f_hi = _cross(i1 + 1, i1) if i1 < len(f) - 1 else float(f[-1])
     return {"bw": (f_hi - f_lo) * 1000.0, "fc_3db": 0.5 * (f_lo + f_hi),
-            "f_lo": f_lo, "f_hi": f_hi, "band_truncated": trunc}
+            "f_lo": f_lo, "f_hi": f_hi, "band_truncated": trunc,
+            "n_lobes": n_lobes, "lobe_split_mhz": lobe_split}
 
 
 def pole_shape(f: np.ndarray, s11_db: np.ndarray, n_expected: int,
@@ -943,8 +963,15 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
         except ValueError:
             cstep = 0.02
         fmin, fmax, step = fw0 - 0.9 * (fw1 - fw0), fw1 + 0.9 * (fw1 - fw0), cstep
+    # Only NUMERIC params go in the tag. Params also carry non-dimensional
+    # conditions -- material flags, and now a launch name -- and formatting
+    # those with :.2f raises (None) or is meaningless (a string). The tag is
+    # a filename describing the GEOMETRY; conditions are recorded in the
+    # result JSON. Callers comparing two conditions at one geometry must use
+    # distinct tag_prefixes, or the two runs collide on disk.
     tag = (f"{tag_prefix}F_" if fine else f"{tag_prefix}_") + "_".join(
-        f"{k}{v:.2f}" for k, v in sorted(params.items()))
+        f"{k}{v:.2f}" for k, v in sorted(params.items())
+        if isinstance(v, (int, float)) and not isinstance(v, bool))
     # Filesystem safety: this tag becomes a filename directly (mesh/.json/
     # postpro dir), and gains a "scr_" prefix + ".msh"/".json" suffix
     # downstream -- a wide param dict (e.g. v8's 16D box, slot_* dims added
@@ -1000,7 +1027,7 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
             fine_sweep: tuple[float, float, float] | None = None,
             device: str = "auto", np_ranks: int = CPU_NP,
             log_name: str | None = None, best_json_name: str | None = None,
-            patience: int | None = None) -> dict:
+            patience: int | None = None, score_kwargs: dict | None = None) -> dict:
     """GP-surrogate coarse search over topology.param_space(spec), fine-mesh
     confirm of the winner, fab-tolerance (0.1mm rounding) check. Returns the
     fine-confirmed best {params, metrics}.
@@ -1054,7 +1081,7 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
     n = 0
     n_screened = 0
     r = evaluate(topology, spec, warm, fine=False, tag_prefix=f"opt{topology.name}",
-                device=device, np_ranks=np_ranks)
+                device=device, np_ranks=np_ranks, score_kwargs=score_kwargs)
     n += 1; log_row(n, warm, r)
     opt.tell([warm[k] for k in order], r["score"])
     best_p, best = warm, r
@@ -1065,7 +1092,7 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
         x = opt.ask()
         p = {**fixed, **_to_dict(order, x)}
         r = evaluate(topology, spec, p, fine=False, tag_prefix=f"opt{topology.name}",
-                    device=device, np_ranks=np_ranks)
+                    device=device, np_ranks=np_ranks, score_kwargs=score_kwargs)
         n += 1; log_row(n, p, r)
         opt.tell(x, r["score"])
         tag = "*" if r["score"] < best["score"] - 1e-4 else " "
@@ -1096,13 +1123,15 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
                 f"bw={r['bw']:.0f} il={r['il']:.2f} score={r['score']:.3f} ===")
 
     fine = evaluate(topology, spec, best_p, fine=True, tag_prefix=f"opt{topology.name}",
-                    device=device, np_ranks=np_ranks, fine_sweep_ghz=fine_sweep)
+                    device=device, np_ranks=np_ranks, fine_sweep_ghz=fine_sweep,
+                    score_kwargs=score_kwargs)
     print(_report("FINE confirm", fine), flush=True)
 
     # Fab-tolerance check: round to 0.1mm (real PCB fab resolution), re-confirm.
     rounded_p = {k: round(v, 1) for k, v in best_p.items()}
     fab = evaluate(topology, spec, rounded_p, fine=True, tag_prefix=f"opt{topology.name}fab",
-                   device=device, np_ranks=np_ranks, fine_sweep_ghz=fine_sweep)
+                   device=device, np_ranks=np_ranks, fine_sweep_ghz=fine_sweep,
+                   score_kwargs=score_kwargs)
     print(_report(f"FAB-TOLERANCE (0.1mm) {rounded_p}", fab), flush=True)
 
     result = {"params": best_p, "coarse_score": best.get("score"),

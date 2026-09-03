@@ -132,7 +132,13 @@ class DualModeTopology:
             # not a generic 1oz assumption (RO4350B_0.76mm is 0.5oz = 17.5um).
             p["metal_thickness_um"] = spec.substrate.cu_thickness * 1e6
         p.setdefault("with_sma", True)
-        for k, v in TAOGLAS_SMA.items():   # caller can still override any of these
+        # Which launch footprint. Defaults to the CPWG one; "pad" selects the
+        # archived pad-only launch for a like-for-like comparison at fixed
+        # cavity geometry (see topologies/launch.py LAUNCHES). Not a
+        # dimension -- it never enters the search box or the mesh tag.
+        from .launch import LAUNCHES
+        launch = LAUNCHES[str(p.pop("launch", "cpwg"))]
+        for k, v in launch.items():        # caller can still override any of these
             p.setdefault(k, v)
         res = _build_mesh(a_mm=a, w_iris_mm=w_iris, x_iris_mm=x_iris, y_wall_mm=y_wall,
                           w_ext_mm=w_ext, out_name=out_name, **p)
@@ -334,9 +340,27 @@ class DualModeTopology:
             if len(freqs) < 2:
                 results[w] = {"ok": False, "freqs": freqs.tolist()}
                 continue
-            gaps = np.diff(freqs)
-            i = int(np.argmin(gaps))
-            f1, f2 = float(freqs[i]), float(freqs[i + 1])
+            # Select the split pair by PROXIMITY TO f0, not by smallest gap.
+            # Palace returns N converged eigenvalues near the target without
+            # hard-clipping them to [Target, TargetUpper], so the list also
+            # carries higher-order modes -- and those cluster far more tightly
+            # than the degenerate pair we want. Measured here at w_iris=16mm:
+            #   2.9016  3.1386 | 3.9440 3.9701 | 4.7652 5.0353 5.3152
+            #   gaps:   0.237    0.805  0.026    0.795  0.270  0.280
+            # The old argmin(gaps) rule picked the 0.026 GHz pair at ~3.96 GHz
+            # (a higher-order family), giving k~0.005 against a target of
+            # 0.069 and barely varying with w_iris -- a meaningless curve that
+            # looked plausible. This is the SAME bug already found and fixed
+            # in cascade.calibrate (CLAUDE.md sec 0: "eigenmode pair =
+            # smallest gap ... k=0.0028 instead of 0.0583, 21x error",
+            # commit a5877cd); the fix was never ported here.
+            f0_ghz = spec.f0 / 1e9
+            in_win = freqs[np.abs(freqs - f0_ghz) <= window]
+            if len(in_win) < 2:
+                results[w] = {"ok": False, "freqs": freqs.tolist(),
+                              "err": f"<2 modes within +-{window} GHz of f0"}
+                continue
+            f1, f2 = float(in_win[0]), float(in_win[1])
             k = abs(f2**2 - f1**2) / (f2**2 + f1**2)
             results[w] = {"ok": True, "f1": f1, "f2": f2, "k": k, "fc": (f1 + f2) / 2.0}
         ok = [(w, r["k"]) for w, r in results.items() if r.get("ok")]

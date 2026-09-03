@@ -1,0 +1,75 @@
+{
+ "_comment": "Golden design constants. See golden/README.md. Do not hand-edit numbers without re-running the CLI.",
+ "topology": "dualmode",
+ "N": 2,
+ "spec": {
+  "f0_hz": 2870000000.0,
+  "FBW": 0.05,
+  "ripple_db": 0.1,
+  "substrate": "RO4350B_0.76mm",
+  "eps_r": 3.66,
+  "tan_d": 0.0037,
+  "h_mm": 0.76,
+  "d_via_mm": 1.5,
+  "p_via_mm": 3.0
+ },
+ "params": {
+  "a": 57.158,
+  "w_iris": 15.304,
+  "x_iris": 28.685,
+  "y_wall": 9.849,
+  "w_ext": 16.352
+ },
+ "params_fab_rounded_0p1mm": {
+  "a": 57.2,
+  "w_iris": 15.3,
+  "x_iris": 28.7,
+  "y_wall": 9.8,
+  "w_ext": 16.4
+ },
+ "launch": {
+  "model": "cpwg_taoglas",
+  "description": "Real Taoglas EMPCB.SMAFSTJ.B.HT SMA + impedance-matched CPWG launch (gap 0.2512mm, ground inner edge 0.8512mm, feed 1.2mm, 6 stitch vias/side), topologies/launch.py TAOGLAS_CPWG -- the dual-mode default since 2026-09-02."
+ },
+ "metrics": {
+  "fc_ghz": 2.9039,
+  "il_db": -1.45,
+  "bw_mhz": 316.6,
+  "s11w_db": -10.76,
+  "board_mm": 119.0
+ },
+ "shape_check": {
+  "reflection_zeros_ghz": [
+   2.787,
+   2.897
+  ],
+  "n_zeros": 2,
+  "passband_lobes": 1,
+  "band_truncated": false,
+  "boundary_warnings": 0
+ },
+ "fab_tolerance_0p1mm": {
+  "s11w_db": -10.25,
+  "bw_mhz": 319.0,
+  "fc_ghz": 2.897,
+  "il_db": -1.44,
+  "note": "rounding every dimension to PCB resolution costs only 0.5dB"
+ },
+ "real_copper": {
+  "il_db": -1.77,
+  "s11w_db": -10.55,
+  "bw_mhz": 317.5,
+  "fc_ghz": 2.9034,
+  "delta_il_db": -0.32,
+  "delta_s11w_db": 0.22,
+  "note": "Exterior ground planes as real copper (Boundaries.Conductivity surface impedance, 5.96e7 S/m, 17.5um). The ONLY trustworthy fabrication number: the thin dielectric/finish layers are unresolvable at this mesh density."
+ },
+ "known_open_item": "MEETS NEITHER the -16dB return-loss spec (-10.76dB) nor the 143.5MHz bandwidth target (316.6MHz), and this is a deliberate, measured trade rather than a tuning failure. Four 1-D scans on the assembled filter (w_iris; w_ext at two irises; y_wall) show bandwidth and return loss in DIRECT OPPOSITION on every geometry parameter: bandwidth reaches 145.6MHz exactly (FBW 4.94%) at w_iris=11mm but the match there collapses to -1.75dB. The user chose the good-match end (2026-09-03). A 30-eval local GP over a 5D +-2mm box CONFIRMED this geometry rather than improving it -- neighbouring probes came back worse and the 0.41dB apparent gain over the previous best is within the measured coarse-mesh noise floor.",
+ "fabrication_stack_not_modelled": "Soldermask (20um), silkscreen (12um) and ENIG (4.5um) are EXCLUDED from the EM model: each is a full-board layer inside a mesh whose finest cell is 200um, so they mesh as extreme-aspect-ratio slivers (DOF count rises only ~3%). Measured damage scales monotonically with THINNESS -- mask -2.54dB, silkscreen -4.02dB, ENIG -7.19dB IL -- across two dielectrics and a conductor with unrelated material properties, which no physical mechanism produces. Resolving 4.5um needs ~1um cells, a ~1000x local refinement. The mask-over-feed decision therefore rests on engineering judgement (open it: a 20um eps_r=3.8 film across the 0.2512mm coplanar gap perturbs an already-weak launch), not on simulation.",
+ "provenance": {
+  "git_commit_when_saved": "5c1fed1",
+  "saved": "2026-09-03",
+  "reproduce_with": "uv run siw design --topology dualmode --N 2 --seed a=57.21,w_iris=15.26,x_iris=28.68,y_wall=8.62,w_ext=16.31 --span 2 --patience 14 --evals 30 --w-bw 0 --device CPU --np 8",
+  "fab_study_reproduce_with": "uv run siw compare-fab-variants --run --params a=57.158,w_iris=15.304,x_iris=28.685,y_wall=9.849,w_ext=16.352 --N 2 --device CPU --np 4"
+ }
+}

@@ -269,11 +269,37 @@ def build_design_comparison(golden_paths: list[str], f0_ghz: float = 2.87,
 # Unlike build_design_comparison (different designs, stacked per-design
 # subplots), these are the SAME geometry under different fabrication stacks,
 # so they belong on one shared pair of axes to be comparable at a glance.
+#: Fabrication variants. REVISED 2026-09-03 to drop the via-fill dimension.
+#:
+#: Setting via_conductivity_sm turns every SIW via into a VOLUMETRIC lossy
+#: conductor that Palace solves fields inside, which needs the copper skin
+#: depth resolved: 1.21 um at 2.9 GHz against a 200 um finest cell, 165x too
+#: coarse. The field then diffuses into an unresolved conductor and the solver
+#: books enormous spurious loss -- measured IL = -28.96 dB with S11w =
+#: -0.07 dB where the identical geometry gives -1.45 dB under PEC. The via
+#: fence IS the waveguide wall, so an artificially lossy fence destroys the
+#: cavity rather than perturbing it. Reproduced to four significant figures
+#: across two independent solves, i.e. deterministic model behaviour.
+#:
+#: Because `via_plated = via_conductivity_sm is not None` gates the hollow
+#: barrel geometry, dropping the conductor also drops tented-vs-open: that
+#: comparison is NOT ANSWERABLE at this mesh density. The older pad-only
+#: study's "<0.03 dB difference" came from the same defective path and was
+#: never a real measurement.
+#:
+#: What remains is both resolvable and the actual fabrication decision: the
+#: dielectric stack over the feed, plus real copper on the exterior ground
+#: planes (a surface-impedance BC, valid there because those faces are truly
+#: one-sided). Vias stay PEC -- their conductor loss is negligible beside the
+#: dielectric loss already modelled.
 FAB_VARIANTS = [
-    ("pec_optimized",  "1. PEC (as optimized)",             "black",      "-",  2.2),
-    ("cu_silk_tented", "2. Cu+ENIG+mask+silk, vias tented", "tab:red",    "-",  1.6),
-    ("cu_silk_open",   "3. Cu+ENIG+mask+silk, vias open",   "tab:orange", "--", 1.6),
-    ("cu_nosilk",      "4. Cu+ENIG+mask, no silkscreen",    "tab:blue",   "-.", 1.6),
+    ("pec_optimized",   "PEC (idealised, as optimised)",      "black",      "-",  2.2),
+    ("only_cu",         "Real copper on exterior planes",     "tab:red",    "-",  1.8),
+    # Diagnostic cells, kept so the figure shows WHY the dielectric layers
+    # are excluded rather than just omitting them.
+    ("only_mask",       "soldermask 20um (UNRESOLVED)",       "tab:brown",  ":",  1.2),
+    ("only_silk",       "silkscreen 12um (UNRESOLVED)",       "tab:gray",   ":",  1.2),
+    ("only_enig",       "ENIG 4.5um (UNRESOLVED)",            "tab:purple", ":",  1.2),
 ]
 
 
@@ -689,6 +715,148 @@ def assert_sweep_complete(csv_path: str, expected: int | None = None) -> int:
             f"{csv_path}: {n1} rows, expected {expected}. Partial sweep -- "
             f"the upper part of the band is missing.")
     return n1
+
+
+def build_calibration_plot(cal: dict | str, out_name: str = "calibration") -> str:
+    """Plot the two measured calibration curves with their synthesis targets.
+
+    `cal` is the dict `siw calibrate` writes (or a path to that JSON). Left
+    panel: k12(w_iris) from the closed-cavity eigenmode pair. Right panel:
+    Qe(w_ext), log scale, from the doubly-loaded resonator. Each panel marks
+    the target and the inverted geometry, so an inversion that lands outside
+    its own measured bracket is visible rather than only warned about in
+    a line of console text.
+
+    Points the sweeps REJECTED (window-truncated bands, failed solves) are
+    drawn as hollow crosses rather than hidden -- a rejected point is a
+    measurement about the sweep window, and dropping it silently is how two
+    bogus Qe=8.52 points went unnoticed long enough to corrupt a fit.
+    """
+    if isinstance(cal, str):
+        with open(cal) as fh:
+            cal = json.load(fh)
+    tgt = cal.get("targets", {})
+    inv = cal.get("inverted_geometry", {})
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+
+    def _panel(ax, block, key, xlab, ylab, title, target, inverted, logy):
+        pts = (block or {}).get("points", {})
+        ok = sorted((float(w), d[key]) for w, d in pts.items()
+                    if isinstance(d, dict) and d.get("ok"))
+        bad = sorted(float(w) for w, d in pts.items()
+                     if isinstance(d, dict) and not d.get("ok"))
+        if ok:
+            xs = [p[0] for p in ok]
+            ys = [p[1] for p in ok]
+            ax.plot(xs, ys, "o-", color="#1f77b4", label="measured")
+            for x, y in ok:
+                ax.annotate(f"{y:.4g}", (x, y), textcoords="offset points",
+                            xytext=(0, 7), ha="center", fontsize=7)
+        for x in bad:
+            ax.axvline(x, color="#d62728", ls=":", lw=1, alpha=0.7)
+            ax.plot([x], [ax.get_ylim()[0]], "x", color="#d62728", ms=8)
+        if target:
+            ax.axhline(target, color="#2ca02c", ls="--", lw=1.4,
+                       label=f"target {target:.4g}")
+        if inverted:
+            ax.axvline(inverted, color="#ff7f0e", ls="-.", lw=1.4,
+                       label=f"inverted {inverted:.3g} mm")
+        if logy:
+            ax.set_yscale("log")
+        ax.set_xlabel(xlab); ax.set_ylabel(ylab); ax.set_title(title)
+        ax.grid(alpha=0.3); ax.legend(fontsize=8)
+        if bad:
+            ax.text(0.02, 0.02, f"{len(bad)} rejected point(s)", fontsize=7,
+                    color="#d62728", transform=ax.transAxes)
+
+    _panel(axes[0], cal.get("k"), "k", "w_iris (mm)", "k12",
+           "Internal coupling (closed-cavity eigenmode)",
+           tgt.get("k"), inv.get("w_iris"), logy=False)
+    _panel(axes[1], cal.get("qe"), "Qe", "w_ext (mm)", "Qe",
+           "External coupling (doubly-loaded resonator)",
+           tgt.get("Qe"), inv.get("w_ext"), logy=True)
+
+    fig.suptitle("Dual-mode calibration: measured couplings vs synthesis targets")
+    fig.tight_layout()
+    path = out_img(f"{out_name}.png")
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"wrote {path}")
+    return path
+
+
+def build_scan_plot(scan: dict | str, out_name: str = "scan") -> str:
+    """Plot a `siw scan` result: the S-parameter family, plus bandwidth and
+    return loss against the scanned parameter with the targets marked.
+
+    Pole count is annotated on every trend point, because a scan can walk
+    straight through a region where the response is structurally the wrong
+    order while its bandwidth number keeps looking reasonable -- that is
+    exactly what the failed dual-mode calibration produced (334 MHz, one
+    reflection zero, and nothing in the scalar metrics saying so).
+    """
+    if isinstance(scan, str):
+        with open(scan) as fh:
+            scan = json.load(fh)
+    name = scan.get("param", "param")
+    tgt_bw = scan.get("target_bw_mhz")
+    pts = sorted((float(k), v) for k, v in scan.get("points", {}).items()
+                 if v.get("ok"))
+    if not pts:
+        raise ValueError("scan has no successful points yet")
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.3))
+    cmap = plt.get_cmap("viridis")
+    for i, (x, p) in enumerate(pts):
+        c = cmap(i / max(len(pts) - 1, 1))
+        axes[0].plot(p["f_ghz"], p["s11_db"], color=c, lw=1.4,
+                     label=f"{name}={x:g}")
+        axes[0].plot(p["f_ghz"], p["s21_db"], color=c, lw=1.0, ls="--", alpha=0.7)
+    axes[0].axhline(-16, color="#2ca02c", ls=":", lw=1.2)
+    axes[0].set_xlabel("f (GHz)"); axes[0].set_ylabel("dB")
+    axes[0].set_title("S11 (solid) and S21 (dashed)")
+    axes[0].set_ylim(-40, 2); axes[0].grid(alpha=0.3); axes[0].legend(fontsize=7)
+
+    xs = [p[0] for p in pts]
+    bws = [p[1]["bw"] for p in pts]
+    axes[1].plot(xs, bws, "-", color="#1f77b4", zorder=1)
+    # Split responses are drawn hollow and red: their "bandwidth" is the width
+    # of ONE of several disjoint lobes, so joining them into a trend line is
+    # exactly the mistake that produced a smooth curve out of a discontinuity.
+    for x, p in pts:
+        split = p.get("n_lobes", 1) > 1
+        axes[1].plot([x], [p["bw"]], "o", ms=7, zorder=2,
+                     mfc="none" if split else "#1f77b4",
+                     mec="#d62728" if split else "#1f77b4", mew=1.6)
+        axes[1].annotate(f"{p['poles']}p" + (f"\n{p['n_lobes']} lobes" if split else ""),
+                         (x, p["bw"]), fontsize=7, ha="center",
+                         color="#d62728" if split else "black",
+                         textcoords="offset points", xytext=(0, 7))
+    if tgt_bw:
+        axes[1].axhline(tgt_bw, color="#2ca02c", ls="--", lw=1.4,
+                        label=f"target {tgt_bw:.0f} MHz")
+        axes[1].legend(fontsize=8)
+    inv = (scan.get("inverted") or {}).get(name)
+    if inv:
+        for ax in axes[1:]:
+            ax.axvline(inv, color="#ff7f0e", ls="-.", lw=1.4)
+    axes[1].set_xlabel(f"{name} (mm)"); axes[1].set_ylabel("-3dB bandwidth (MHz)")
+    axes[1].set_title("Bandwidth (label = reflection zeros)")
+    axes[1].grid(alpha=0.3)
+
+    axes[2].plot(xs, [p[1]["s11w"] for p in pts], "o-", color="#d62728")
+    axes[2].axhline(-16, color="#2ca02c", ls="--", lw=1.4, label="target -16 dB")
+    axes[2].set_xlabel(f"{name} (mm)"); axes[2].set_ylabel("worst in-band S11 (dB)")
+    axes[2].set_title("Return loss"); axes[2].grid(alpha=0.3); axes[2].legend(fontsize=8)
+
+    fig.suptitle(f"Assembled-filter scan over {name}")
+    fig.tight_layout()
+    path = out_img(f"{out_name}.png")
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"wrote {path}")
+    return path
 
 
 def sync_figs() -> list[str]:
