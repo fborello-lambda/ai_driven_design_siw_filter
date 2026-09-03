@@ -155,7 +155,8 @@ class DualModeTopology:
     def calibrate_qe(self, spec: FilterSpec, w_exts: list[float] | None = None,
                      a_mm: float = A_SIW_MM, device: str = "auto",
                      np_ranks: int = 8, fmin_ghz: float = 2.40,
-                     fmax_ghz: float = 3.05, step_ghz: float = 0.010) -> dict:
+                     fmax_ghz: float = 3.05, step_ghz: float = 0.010,
+                     y_wall_mm: float = 8.62) -> dict:
         """EM Qe(w_ext) external-coupling calibration under the REAL launch.
 
         The dual-mode counterpart to calibrate()'s k12(w_iris), and the piece
@@ -201,7 +202,7 @@ class DualModeTopology:
         points: dict[float, dict] = {}
         for we in w_exts:
             # w_iris=None -> no internal iris row -> single-mode resonator
-            p = dict(a=a_mm, w_iris=None, x_iris=None, y_wall=8.62, w_ext=we)
+            p = dict(a=a_mm, w_iris=None, x_iris=None, y_wall=y_wall_mm, w_ext=we)
             # Window sized to the MEASUREMENT, not to f0. The original
             # +-0.6GHz at 5MHz spent ~92% of its 241 points far from the
             # resonance: the -3dB band being measured is only ~100MHz wide.
@@ -223,6 +224,21 @@ class DualModeTopology:
             if bw <= 0:
                 points[we] = {"ok": False, "err": "no -3dB band"}
                 print(f"  w_ext={we:.1f}: no -3dB band", flush=True)
+                continue
+            # TRUNCATION GUARD. band_edges() returns the sweep window itself
+            # when the -3dB band runs past its edge, which is indistinguishable
+            # from a genuine measurement of exactly that width. Measured: 25mm
+            # and 28mm both returned bw=650.0MHz, exactly fmax-fmin, and the
+            # identical Qe=8.52 at two different apertures then dragged the
+            # inversion fit outside its own bracket. Reject instead.
+            span_mhz = (fmax_ghz - fmin_ghz) * 1000.0
+            if bw >= 0.98 * span_mhz:
+                points[we] = {"ok": False,
+                              "err": f"-3dB band ({bw:.1f}MHz) fills the sweep "
+                                     f"window ({span_mhz:.0f}MHz) -- truncated, "
+                                     f"widen --qe-window"}
+                print(f"  w_ext={we:5.1f}mm  TRUNCATED: band {bw:.0f}MHz >= window "
+                      f"{span_mhz:.0f}MHz, widen --qe-window", flush=True)
                 continue
             q_l = (fc * 1000.0) / bw
             inv = 1.0 / q_l - 1.0 / qu

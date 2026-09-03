@@ -368,7 +368,24 @@ def cmd_calibrate(args) -> int:
     spec = _make_spec(args)
     out = {}
     if args.what in ("k", "both"):
-        out["k"] = topo.calibrate(spec)
+        # Forward the device choice. This was NOT forwarded, so the k sweep
+        # always used calibrate()'s own default (GPU for dualmode) regardless
+        # of --device, and every one of its 6 eigenmode points died with
+        # CUDA_ERROR_OUT_OF_MEMORY -- silently, since calibrate() records a
+        # failed point as {"ok": False} rather than raising. The whole k
+        # curve came back empty and the k inversion produced nothing, which
+        # only surfaced later as --confirm failing with "mesh:'w_iris'".
+        try:
+            out["k"] = topo.calibrate(spec, device=args.device)
+        except TypeError:
+            out["k"] = topo.calibrate(spec)      # topology without a device arg
+        _kpts = out["k"].get("points", {})
+        _kok = sum(1 for r in _kpts.values() if isinstance(r, dict) and r.get("ok"))
+        if _kpts and _kok == 0:
+            print(f"  ERROR: all {len(_kpts)} k points FAILED -- the k curve is empty, "
+                  f"so no w_iris can be inverted. Check the newest "
+                  f"output/data/dmcal_wi*.log; a CUDA out-of-memory there means "
+                  f"retrying with --device CPU.")
         pts = out["k"].get("points", {})
         for w, r in sorted(pts.items(), key=lambda t: float(t[0])):
             if r.get("ok"):
@@ -411,8 +428,27 @@ def cmd_calibrate(args) -> int:
                 print(f"  WARNING: Qe target {qe_t:.2f} is OUTSIDE the measured "
                       f"range [{min(qes):.1f}, {max(qes):.1f}] -- this is an "
                       f"EXTRAPOLATION. Widen the w_ext sweep instead of trusting it.")
+            # BRACKET CHECK. The range test above only asks whether the
+            # target lies between the extreme measured Qe values; it cannot
+            # tell that some of those values are junk. Measured: two
+            # window-truncated points shared Qe=8.52, dragging the quadratic
+            # so it returned w_ext=15.51mm when the target was bracketed by
+            # 16mm and 19mm -- an answer outside its own bracket, reported
+            # without complaint. Verify the inverted value actually sits
+            # between the two points that straddle the target.
+            okp = sorted((float(w), d["Qe"])
+                         for w, d in out["qe"]["points"].items() if d.get("ok"))
+            lo = max((w for w, q in okp if q >= qe_t), default=None)
+            hi = min((w for w, q in okp if q <= qe_t), default=None)
+            if lo is not None and hi is not None and not (min(lo, hi) - 1e-9 <= we <= max(lo, hi) + 1e-9):
+                print(f"  WARNING: inverted w_ext={we:.3f}mm falls OUTSIDE its own "
+                      f"bracket [{min(lo,hi):.1f}, {max(lo,hi):.1f}]mm -- the fit is "
+                      f"not tracking the data. Check for rejected//truncated points "
+                      f"and re-sweep near the bracket before trusting this.")
             geom["w_ext"] = round(we, 3)
-            print(f"  Qe={qe_t:.2f} -> w_ext = {we:.3f} mm")
+            print(f"  Qe={qe_t:.2f} -> w_ext = {we:.3f} mm"
+                  + (f"  (bracketed by {min(lo,hi):.1f}-{max(lo,hi):.1f}mm)"
+                     if lo is not None and hi is not None else ""))
         elif "qe" in out:
             print("  Qe inversion unavailable (need >=3 usable points)")
 
