@@ -259,7 +259,56 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
         f"board [{bx[0]:.3f}, {bx[1]:.3f}] mm -- the edge-mount SMA "
         f"straddles this edge", section="rules")
 
-    # ---- 9. drawing vs mesh -------------------------------------------
+    # ---- 9. the CST macro places the same solids -----------------------
+    # cst_export has now produced TWO silent unit errors: `gnd_stitch_layout`
+    # fed metres where it wanted mm (0 stitching vias emitted), then the fix
+    # over-applied and the whole CPWG launch came out at 1000x -- SMA pin at
+    # radius 380mm, stitching vias 30 metres off the board -- on a macro
+    # whose cavity section was perfectly correct. Neither raised. So the .bas
+    # is now checked the same way the gerbers are: by reading it.
+    from .config import out_bas
+    bas = out_bas(f"{stem}.bas")
+    if os.path.exists(bas):
+        txt = open(bas, errors="replace").read()
+        xs = sorted({round(float(m), 4) for m in
+                     re.findall(r'\.Xcenter ""(-?[\d.]+)""', txt)})
+        want = {round(x * MM, 4) for x, y in
+                list(g.vias) + list(g.ext_iris_vias)}
+        if launch.get("cpwg_gap_mm") is not None:
+            from .palace_dualmode_driven import gnd_stitch_layout
+            gk = launch.get
+            _, gv = gnd_stitch_layout(
+                -(g.L_taper + g.L_feed) * MM,
+                (g.L_inner + g.L_taper + g.L_feed) * MM,
+                g.W_ms * MM, g.board[3] * MM, g.board[2] * MM,
+                n_gnd_stitch=gk("n_gnd_stitch", 6),
+                gnd_stitch_offset_mm=gk("gnd_stitch_offset_mm", 2.62),
+                gnd_stitch_pitch_mm=gk("gnd_stitch_pitch_mm", 1.2),
+                gnd_via_d_mm=gk("gnd_via_d_mm", 0.6),
+                gnd_clearance_mm=gk("gnd_clearance_mm", 0.3),
+                cpwg_gap_mm=gk("cpwg_gap_mm"),
+                cpwg_y_gnd_mm=gk("cpwg_y_gnd_mm"),
+                cpwg_y_out_mm=gk("cpwg_y_out_mm"),
+                cpwg_len_mm=gk("cpwg_len_mm", 5.0),
+                cpwg_taper_mm=gk("cpwg_taper_mm", 4.0))
+            want |= {round(x, 4) for x, _ in gv}
+        want = sorted(want)
+        hit = (len(xs) == len(want)
+               and all(abs(a - b) < 1e-3 for a, b in zip(xs, want)))
+        add("CST macro places the same vias", hit,
+            f"{len(xs)} distinct x positions in {os.path.basename(bas)} vs "
+            f"{len(want)} from the mesh helpers"
+            + ("" if hit else f" -- MISMATCH, e.g. {xs[:4]} vs {want[:4]}"),
+            section="model")
+        # A pure magnitude check on top: any 1000x slip puts something
+        # metres away from a 166mm board.
+        biggest = max((abs(v) for v in xs), default=0.0)
+        span = (g.board[1] - g.board[0]) * MM
+        add("CST macro coordinates are in millimetres", biggest < 2 * span,
+            f"largest |x| is {biggest:.3f} mm against a {span:.1f} mm board",
+            section="model")
+
+    # ---- 10. drawing vs mesh ------------------------------------------
     if with_mesh:
         from .report import verify_cascade_drawing_matches_mesh
         import contextlib

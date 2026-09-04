@@ -22,8 +22,22 @@ MM = 1e3  # metres -> mm (CST units set to mm)
 
 
 def _f(x: float) -> str:
-    """Format a length in mm for VBA."""
+    """Format a length given in METRES as mm for VBA.
+
+    `Geometry` stores metres, so this is the right formatter for anything
+    read off `g`. It is the WRONG one for the launch dict, whose fields are
+    already millimetres (`cpwg_w_feed_mm`, `sma_rin_mm`, ...) and for
+    `gnd_stitch_layout`, which works in mm -- use `_fmm` there. Mixing them
+    scales by 1000 without any error: the whole CPWG launch was emitted at
+    1000x, with the SMA pin at radius 380mm and the stitching vias 30
+    metres off the board, on a macro whose cavity section was correct.
+    """
     return f"{x * MM:.4f}"
+
+
+def _fmm(x: float) -> str:
+    """Format a length ALREADY in millimetres for VBA. See `_f`."""
+    return f"{x:.4f}"
 
 
 def _hist(header: str, body_lines: list[str]) -> str:
@@ -85,7 +99,6 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         ("rvia",   _f(spec.d_via / 2),  "via radius [mm]"),
         ("p_via",  _f(spec.p_via),      "via pitch [mm]"),
         ("a_siw",  _f(g.a_siw),         "via-row spacing (SIW width) [mm]"),
-        ("L_cav",  _f(g.L_cav),         "cavity length [mm]"),
         ("L_taper", _f(Lt),             "ms->SIW taper length [mm]"),
         ("L_feed", _f(Lf),              "50-ohm feed length [mm]"),
         ("W_ms",   _f(W),               "50-ohm microstrip width [mm]"),
@@ -93,6 +106,15 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         ("Wsub",   _f(ymax - ymin),     "board width [mm]"),
         ("h_air",  _f(h_air),           "air above board [mm]"),
     ]
+    # One L_cav per cavity. A single "L_cav" used to be emitted from
+    # `g.L_cav`, the SYNTHESIS nominal (34.400mm) -- which on this design is
+    # neither of the two cavity lengths actually built (34.239 / 35.503). The
+    # solids are placed from baked via coordinates, so the geometry was
+    # right and only the GUI label lied; a label that lies about the one
+    # dimension a person would tune is still a defect.
+    for i, Lc in enumerate(g.L_cavs, start=1):
+        params.append((f"L_cav{i}", _f(Lc), f"cavity {i} length [mm] "
+                                            f"(read-only: vias are baked)"))
     for i, w in enumerate(g.iris_widths, start=1):
         params.append((f"w_iris{i}{i+1}", _f(w), f"iris {i}-{i+1} width [mm]"))
     # External coupling aperture (input/output iris) -> controls Qe -> bandwidth.
@@ -197,31 +219,31 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # and tapers out to the microstrip width where the pours end. The two
         # 50-ohm widths differ (a CPWG's impedance is set by its gap), so a
         # constant-width feed here would NOT be the simulated structure.
-        wp = launch["cpwg_w_feed_mm"]; hp2 = _f(wp / 2.0)
+        wp = launch["cpwg_w_feed_mm"]; hp2 = _fmm(wp / 2.0)
         clen = launch.get("cpwg_len_mm", 5.0); ctap = launch.get("cpwg_taper_mm", 4.0)
         traces = {
             "feed_in": [(xmin_e, hp2),
-                        (f"{xmin_e}+{_f(clen)}", hp2),
-                        (f"{xmin_e}+{_f(clen + ctap)}", hp),
+                        (f"{xmin_e}+{_fmm(clen)}", hp2),
+                        (f"{xmin_e}+{_fmm(clen + ctap)}", hp),
                         ("-L_taper", hp), ("-L_taper", f"-({hp})"),
-                        (f"{xmin_e}+{_f(clen + ctap)}", f"-({hp})"),
-                        (f"{xmin_e}+{_f(clen)}", f"-({hp2})"),
+                        (f"{xmin_e}+{_fmm(clen + ctap)}", f"-({hp})"),
+                        (f"{xmin_e}+{_fmm(clen)}", f"-({hp2})"),
                         (xmin_e, f"-({hp2})")],
             "feed_out": [(xmax_e, hp2),
-                         (f"{xmax_e}-{_f(clen)}", hp2),
-                         (f"{xmax_e}-{_f(clen + ctap)}", hp),
+                         (f"{xmax_e}-{_fmm(clen)}", hp2),
+                         (f"{xmax_e}-{_fmm(clen + ctap)}", hp),
                          (f"{Li}+L_taper", hp), (f"{Li}+L_taper", f"-({hp})"),
-                         (f"{xmax_e}-{_f(clen + ctap)}", f"-({hp})"),
-                         (f"{xmax_e}-{_f(clen)}", f"-({hp2})"),
+                         (f"{xmax_e}-{_fmm(clen + ctap)}", f"-({hp})"),
+                         (f"{xmax_e}-{_fmm(clen)}", f"-({hp2})"),
                          (xmax_e, f"-({hp2})")],
         }
         y_g, y_o = launch["cpwg_y_gnd_mm"], launch["cpwg_y_out_mm"]
         for side, sgn in (("top", 1.0), ("bot", -1.0)):
-            for end, xa, xb in (("in", xmin_e, f"{xmin_e}+{_f(clen)}"),
-                                ("out", f"{xmax_e}-{_f(clen)}", xmax_e)):
+            for end, xa, xb in (("in", xmin_e, f"{xmin_e}+{_fmm(clen)}"),
+                                ("out", f"{xmax_e}-{_fmm(clen)}", xmax_e)):
                 traces[f"cpwg_gnd_{end}_{side}"] = [
-                    (xa, _f(sgn * y_g)), (xb, _f(sgn * y_g)),
-                    (xb, _f(sgn * y_o)), (xa, _f(sgn * y_o))]
+                    (xa, _fmm(sgn * y_g)), (xb, _fmm(sgn * y_g)),
+                    (xb, _fmm(sgn * y_o)), (xa, _fmm(sgn * y_o))]
     for name, pts in traces.items():
         body = ["With Extrude", ".Reset", f'.Name "{name}"',
                 '.Component "component1"', '.Material "PEC"',
@@ -264,8 +286,8 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
             s.append(_hist(f"define cylinder: component1:gndvia{i:03d}", [
                 "With Cylinder", ".Reset", f'.Name "gndvia{i:03d}"',
                 '.Component "component1"', '.Material "PEC"',
-                '.Axis "z"', f'.Outerradius "{_f(rg)}"', '.Innerradius "0"',
-                f'.Xcenter "{_f(vx)}"', f'.Ycenter "{_f(vy)}"',
+                '.Axis "z"', f'.Outerradius "{_fmm(rg)}"', '.Innerradius "0"',
+                f'.Xcenter "{_fmm(vx)}"', f'.Ycenter "{_fmm(vy)}"',
                 '.Zrange "-t_cu", "h_sub+t_cu"', '.Segments "0"',
                 ".Create", "End With"]))
 
@@ -281,19 +303,19 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
             '.TanDModel "ConstTanD"', '.Colour "0.9", "0.9", "0.9"',
             ".Create", "End With"]))
         for tag, x_edge, sgn in (("in", xmin_e, -1.0), ("out", xmax_e, 1.0)):
-            far = f"{x_edge}{'-' if sgn < 0 else '+'}{_f(sma_len_mm)}"
+            far = f"{x_edge}{'-' if sgn < 0 else '+'}{_fmm(sma_len_mm)}"
             s.append(_hist(f"define cylinder: component1:sma_{tag}_ptfe", [
                 "With Cylinder", ".Reset", f'.Name "sma_{tag}_ptfe"',
                 '.Component "component1"', '.Material "PTFE_sma"',
-                '.Axis "x"', f'.Outerradius "{_f(rout)}"',
-                f'.Innerradius "{_f(rin)}"',
+                '.Axis "x"', f'.Outerradius "{_fmm(rout)}"',
+                f'.Innerradius "{_fmm(rin)}"',
                 f'.Xrange "{far}", "{x_edge}"',
                 '.Ycenter "0"', '.Zcenter "h_sub/2"', '.Segments "0"',
                 ".Create", "End With"]))
             s.append(_hist(f"define cylinder: component1:sma_{tag}_pin", [
                 "With Cylinder", ".Reset", f'.Name "sma_{tag}_pin"',
                 '.Component "component1"', '.Material "PEC"',
-                '.Axis "x"', f'.Outerradius "{_f(rin)}"', '.Innerradius "0"',
+                '.Axis "x"', f'.Outerradius "{_fmm(rin)}"', '.Innerradius "0"',
                 f'.Xrange "{far}", "{x_edge}"',
                 '.Ycenter "0"', '.Zcenter "h_sub/2"', '.Segments "0"',
                 ".Create", "End With"]))
@@ -325,14 +347,14 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         s.append("\n' ---- coaxial ports on the SMA stubs -----------------------------\n")
         for n, (x_edge, sgn, orient) in enumerate(
                 [(xmin_e, -1.0, "xmin"), (xmax_e, 1.0, "xmax")], start=1):
-            face = f"{x_edge}{'-' if sgn < 0 else '+'}{_f(sma_len_mm)}"
+            face = f"{x_edge}{'-' if sgn < 0 else '+'}{_fmm(sma_len_mm)}"
             s.append(_hist(f"define port{n} (coax)", [
                 "With Port", ".Reset", f'.PortNumber "{n}"',
                 '.NumberOfModes "1"', '.Coordinates "Free"',
                 f'.Orientation "{orient}"', '.PortOnBound "True"',
                 f'.Xrange "{face}", "{face}"',
-                f'.Yrange "{_f(-rout)}", "{_f(rout)}"',
-                f'.Zrange "h_sub/2-{_f(rout)}", "h_sub/2+{_f(rout)}"',
+                f'.Yrange "{_fmm(-rout)}", "{_fmm(rout)}"',
+                f'.Zrange "h_sub/2-{_fmm(rout)}", "h_sub/2+{_fmm(rout)}"',
                 ".Create", "End With"]))
         _emit_ports = False
     else:
@@ -349,7 +371,7 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
             '.NumberOfModes "1"', '.Coordinates "Free"',
             f'.Orientation "{orient}"', '.PortOnBound "True"',
             f'.Xrange "{xface_e}", "{xface_e}"',
-            f'.Yrange "{_f(-wp/2)}", "{_f(wp/2)}"',
+            f'.Yrange "{_fmm(-wp/2)}", "{_fmm(wp/2)}"',
             '.Zrange "-t_cu", "h_sub*5"',
             ".Create", "End With",
         ]))
