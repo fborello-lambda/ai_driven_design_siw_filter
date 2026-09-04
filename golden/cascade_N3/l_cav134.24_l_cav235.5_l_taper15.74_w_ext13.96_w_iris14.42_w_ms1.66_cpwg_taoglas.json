@@ -39,5 +39,47 @@
     "reproduce_with": "siw sweep --topology cascade --N 3 --params l_cav1=34.239,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 --fmin 2.57 --fmax 3.17 --step 0.005 --np 8",
     "git_commit_when_saved": "40f8720",
     "saved": "2026-09-01"
+  },
+  "pec_regression_check": {
+    "date": "2026-09-04",
+    "why": "Re-ran the golden's own reproduce_with sweep after porting the real-metal exterior-face split into palace_driven and after fixing the board outline in siw_geometry. Confirms neither touched the PEC path.",
+    "command": "siw sweep --topology cascade --N 3 --params l_cav1=34.239,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 --fmin 2.57 --fmax 3.17 --step 0.005 --device CPU --np 4",
+    "result": {
+      "fc_ghz": 2.879,
+      "il_db": -1.85,
+      "bw_mhz": 189,
+      "s11w_db": -13.37
+    },
+    "verdict": "reproduces the metrics block to every digit"
+  },
+  "real_copper": {
+    "date": "2026-09-04",
+    "model": "Boundaries.Conductivity surface impedance on the EXTERIOR ground planes only (170 of 176 PEC faces split out; internal via barrels and the trace stay PEC because that BC is exterior-only). sigma = 5.96e7 S/m, 17.5 um.",
+    "command": "siw compare-fab-variants --run --topology cascade --N 3 --params l_cav1=34.239,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 --device CPU --np 4 --result-json output/data/fab_variants_cascade_N3.json --out-name fab_variant_comparison_cascade_N3",
+    "pec_reference": {
+      "fc_ghz": 2.879,
+      "il_db": -1.85,
+      "bw_mhz": 188,
+      "s11w_db": -14.92,
+      "poles": 3,
+      "lobes": 1
+    },
+    "copper": {
+      "fc_ghz": 2.878,
+      "il_db": -2.44,
+      "bw_mhz": 187,
+      "s11w_db": -13.82,
+      "poles": 3,
+      "lobes": 1
+    },
+    "delta": {
+      "d_il_db": -0.59,
+      "d_s11w_db": 1.1,
+      "d_bw_mhz": -1,
+      "d_fc_mhz": -1
+    },
+    "note": "The PEC reference here is the FINE-CONFIRM preset (-14.92 dB), not the sweep preset in `metrics` (-13.37 dB) -- the same preset difference already recorded in shape_check. Compare copper against the PEC cell of the SAME run, never across presets. Cost is 0.59 dB of insertion loss, nearly double the dual-mode board's 0.32 dB, which is expected: three cavities and 47 mm more wall. Shape is unchanged (3 zeros, 1 lobe).",
+    "figure": "docs/fab_variant_comparison_cascade_N3.png",
+    "not_modelled": "Soldermask, silkscreen and ENIG. All are unresolvable at this mesh density (damage scales with layer THINNESS -- the signature of sliver elements) and the board is being ordered bare in any case. ENIG is additionally an RF no-op here: it plates the OUTER face of the ground planes, ~14 skin depths from the current."
   }
 }
