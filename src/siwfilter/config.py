@@ -141,7 +141,21 @@ MU0 = 4e-7 * math.pi       # vacuum permeability [H/m]
 #   h     : substrate thickness [m]
 #   cu_oz : copper cladding weight [oz] (1 oz ~= 35 um)
 SUBSTRATES = {
-    # Rogers RO4350B — design Dk 3.66, tand 0.0037 @10GHz
+    # Rogers RO4350B — DESIGN Dk 3.66, tand 0.0037 @10GHz.
+    #
+    # DO NOT "CORRECT" THIS TO 3.48. RO4350B's datasheet carries two Dk
+    # numbers and they are not alternatives:
+    #   3.48 +-0.05  the SPEC value, IPC-TM-650 2.5.5.5 clamped stripline
+    #                @10GHz. Board houses quote it -- JLCPCB's material
+    #                picker literally reads "RO4350B(Dk=3.48, Df=0.0037)".
+    #   3.66         the DESIGN value Rogers tells you to use for microstrip
+    #                and stripline modelling. The clamped-stripline fixture
+    #                has an air gap that reads Dk low, and 3.66 also folds in
+    #                copper-roughness effects the test coupon does not see.
+    # Same laminate, two test conditions. Every dimension in this project was
+    # synthesised at 3.66; switching to 3.48 would scale every resonance by
+    # sqrt(3.66/3.48) = 1.0255, i.e. fc 2.879 -> 2.953 GHz, a 74 MHz error --
+    # eight times the deviation currently recorded against spec.
     "RO4350B_1.52mm": dict(eps_r=3.66, tan_d=0.0037, h=1.52e-3,  cu_oz=1.0),
     "RO4350B_0.76mm": dict(eps_r=3.66, tan_d=0.0037, h=0.76e-3,  cu_oz=0.5),
     "RO4350B_0.25mm": dict(eps_r=3.66, tan_d=0.0037, h=0.25e-3,  cu_oz=1.0),
