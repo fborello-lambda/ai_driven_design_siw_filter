@@ -726,7 +726,7 @@ def cmd_kicad(args) -> int:
     from .topologies import REGISTRY
     from .topologies.launch import LAUNCHES
     from .kicad_export import (write_kicad_pcb, run_kicad_cli, zip_for_fab,
-                               write_fab_notes)
+                               write_fab_notes, render_3d, render_drill_map)
 
     topo = REGISTRY[args.topology]
     spec = FilterSpec(f0=SPEC.f0, FBW=SPEC.FBW,
@@ -751,6 +751,11 @@ def cmd_kicad(args) -> int:
     done = run_kicad_cli(pcb, outdir)
     write_fab_notes(os.path.join(outdir, "FAB_NOTES.md"), g, spec=spec,
                     soldermask=mask, launch=launch)
+    render_drill_map(outdir)
+    if done.get("step") == "ok":
+        from .config import out_img
+        render_3d(os.path.join(outdir, "board.step"),
+                  out_img(f"{stem}_3d.png"))
     if args.zip:
         zip_for_fab(outdir, os.path.join(outdir, f"{stem}_jlcpcb.zip"))
 

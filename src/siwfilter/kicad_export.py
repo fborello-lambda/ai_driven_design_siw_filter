@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import uuid
 
 from .config import FilterSpec, SPEC
@@ -219,8 +220,19 @@ def run_kicad_cli(pcb: str, outdir: str) -> dict:
                      os.path.join(outdir, "bottom.svg"), "--page-size-mode", "2",
                      "--exclude-drawing-sheet", "--fit-page-to-board", "--mirror",
                      "--layers", "B.Cu,Edge.Cuts", pcb]),
+        # STEP as a real B-rep SOLID, not a tessellation: the board body with
+        # the drill holes cut through it, plus the copper as solid layers.
+        #
+        # The defaults are useless here. Without --include-tracks /
+        # --include-zones the export is the bare dielectric slab -- 9kB, no
+        # copper at all -- and without --cut-vias-in-body the 118 holes are
+        # not even cut, so the file looks like a plain rectangle of FR4 and
+        # says nothing about the design. With them it is 1.2MB / ~28k
+        # entities and shows the waveguide.
         ("step",    ["pcb", "export", "step", "--output",
-                     os.path.join(outdir, "board.step"), pcb]),
+                     os.path.join(outdir, "board.step"), "--force",
+                     "--no-components", "--include-tracks", "--include-pads",
+                     "--include-zones", "--cut-vias-in-body", pcb]),
     ]
     for name, argv in jobs:
         r = subprocess.run(["kicad-cli", *argv], capture_output=True, text=True)
@@ -230,6 +242,81 @@ def run_kicad_cli(pcb: str, outdir: str) -> dict:
             done[name] = f"FAILED: {(r.stderr or r.stdout).strip()[:160]}"
         print(f"  kicad-cli {name}: {done[name]}")
     return done
+
+
+_RENDER_SRC = r'''
+import sys, gmsh
+step, png, rx, rz = sys.argv[1], sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
+gmsh.initialize(); gmsh.option.setNumber("General.Terminal", 0)
+gmsh.merge(step)
+o = gmsh.option.setNumber
+o("General.GraphicsWidth", 5200); o("General.GraphicsHeight", 2200)
+o("General.Trackball", 0)
+o("General.RotationX", rx); o("General.RotationY", 0); o("General.RotationZ", rz)
+o("General.SmallAxes", 0); o("General.Axes", 0)
+o("Geometry.Surfaces", 1); o("Geometry.SurfaceType", 2)
+o("Geometry.Points", 0); o("Geometry.Curves", 0); o("Geometry.Volumes", 0)
+o("Geometry.LightTwoSide", 1)
+gmsh.option.setColor("General.Background", 255, 255, 255)
+gmsh.option.setColor("General.BackgroundGradient", 255, 255, 255)
+gmsh.option.setColor("General.Foreground", 0, 0, 0)
+gmsh.option.setColor("General.Text", 0, 0, 0)
+gmsh.fltk.initialize(); gmsh.fltk.update()
+gmsh.write(png)
+gmsh.finalize()
+'''
+
+
+def render_3d(step: str, png: str, rx: float = 300.0, rz: float = 340.0) -> str | None:
+    """Render the STEP solid to a PNG, offscreen.
+
+    Uses gmsh's OCC viewer under Xvfb: gmsh can already read STEP (it is the
+    mesher this project uses) so no extra CAD dependency is pulled in for a
+    picture. The DELIVERABLE stays the STEP solid -- this only draws it.
+    Returns None, with a reason printed, if gmsh or Xvfb is unavailable.
+    """
+    import shutil
+    import tempfile
+    if not shutil.which("xvfb-run"):
+        print("  render_3d skipped: xvfb-run not installed (STEP is fine)")
+        return None
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as fh:
+        fh.write(_RENDER_SRC)
+        script = fh.name
+    try:
+        # The virtual screen must be BIGGER than the requested GL window or
+        # the render is silently clipped to Xvfb's 1280x1024 default -- the
+        # PNG still appears, just at a fraction of the resolution asked for.
+        r = subprocess.run(["xvfb-run", "-a", "-s", "-screen 0 5600x2600x24",
+                            sys.executable, script,
+                            step, png, str(rx), str(rz)],
+                           capture_output=True, text=True)
+    finally:
+        os.unlink(script)
+    if r.returncode != 0 or not os.path.exists(png):
+        print(f"  render_3d FAILED: {(r.stderr or r.stdout).strip()[:200]}")
+        return None
+    print(f"  render_3d: {png}")
+    return png
+
+
+def render_drill_map(outdir: str) -> list[str]:
+    """Turn the drill-map PDFs into PNGs so the hole plan is reviewable
+    without opening a PDF. Best effort; the PDFs are the real artifact."""
+    import glob
+    import shutil
+    if not shutil.which("pdftoppm"):
+        print("  drill map PNG skipped: pdftoppm not installed")
+        return []
+    out = []
+    for pdf in sorted(glob.glob(os.path.join(outdir, "*drl_map.pdf"))):
+        stem = pdf[:-4]
+        r = subprocess.run(["pdftoppm", "-r", "150", "-png", "-singlefile",
+                            pdf, stem], capture_output=True, text=True)
+        if r.returncode == 0:
+            out.append(stem + ".png")
+            print(f"  drill map: {stem}.png")
+    return out
 
 
 def zip_for_fab(outdir: str, zip_path: str) -> str:
