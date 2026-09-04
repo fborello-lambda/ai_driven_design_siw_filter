@@ -83,10 +83,21 @@ def write_kicad_pcb(g: Geometry, path: str, launch: dict | None = None,
     d_via = spec.d_via * MM
     # Annular ring: JLCPCB's minimum is 0.13mm; 0.15 gives margin.
     pad = d_via + 2 * 0.15
+    cu = sub.cu_thickness * MM      # 0.5 oz = 0.0175 mm on this board
+    mask_t = 0.01                   # typical LPI soldermask, when present
 
     s = ['(kicad_pcb (version 20241229) (generator "siwfilter") '
          '(generator_version "9.0")\n',
-         '  (general (thickness %.3f) (legacy_teardrops no))\n' % (sub.h * MM),
+         # An explicit STACKUP, not just a total thickness. Without one KiCad
+         # assumes its own defaults and carves them out of
+         # (general (thickness)): 0.76 there produced a 0.670mm dielectric in
+         # the STEP, and padding the number by hand only moved the error
+         # (0.740). The dielectric thickness is the one dimension the
+         # filter's physics depends on, so it is stated outright -- along
+         # with eps_r, tan_d and the finish, which also travel into the
+         # gerber job file for the fab.
+         '  (general (thickness %.4f) (legacy_teardrops no))\n'
+         % (sub.h * MM + 2 * cu + 2 * (mask_t if soldermask else 0.0)),
          '  (paper "A3")\n',
          '  (layers\n'
          '    (0 "F.Cu" signal)\n    (2 "B.Cu" signal)\n'
@@ -95,7 +106,22 @@ def write_kicad_pcb(g: Geometry, path: str, launch: dict | None = None,
          '    (16 "B.Mask" user)\n    (44 "Edge.Cuts" user)\n'
          '    (46 "Cmts.User" user)\n  )\n',
          '  (setup (pad_to_mask_clearance 0)\n'
-         '    (grid_origin 0 0)\n  )\n',
+         '    (stackup\n'
+         '      (layer "F.SilkS" (type "Top Silk Screen"))\n'
+         + (f'      (layer "F.Mask" (type "Top Solder Mask") '
+            f'(thickness {mask_t:.4f}))\n' if soldermask else '')
+         + f'      (layer "F.Cu" (type "copper") (thickness {cu:.4f}))\n'
+           f'      (layer "dielectric 1" (type "core") '
+           f'(thickness {sub.h*MM:.4f}) (material "{spec.substrate_name}") '
+           f'(epsilon_r {sub.eps_r}) (loss_tangent {sub.tan_d}))\n'
+           f'      (layer "B.Cu" (type "copper") (thickness {cu:.4f}))\n'
+         + (f'      (layer "B.Mask" (type "Bottom Solder Mask") '
+            f'(thickness {mask_t:.4f}))\n' if soldermask else '')
+         + '      (layer "B.SilkS" (type "Bottom Silk Screen"))\n'
+           '      (copper_finish "ENIG")\n'
+           '      (dielectric_constraints no)\n'
+           '    )\n'
+           '    (grid_origin 0 0)\n  )\n',
          '  (net 0 "")\n  (net 1 "GND")\n  (net 2 "RF")\n']
 
     # ---- board outline -------------------------------------------------
@@ -247,8 +273,24 @@ def run_kicad_cli(pcb: str, outdir: str) -> dict:
 _RENDER_SRC = r'''
 import sys, gmsh
 step, png, rx, rz = sys.argv[1], sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
+only_vias = len(sys.argv) > 5 and sys.argv[5] == "vias"
 gmsh.initialize(); gmsh.option.setNumber("General.Terminal", 0)
 gmsh.merge(step)
+if only_vias:
+    # Hide the dielectric body and the top copper, leaving the plated via
+    # barrels standing on the bottom ground plane. Selected by geometry, not
+    # by entity number or by a hardcoded copper thickness: a barrel is the
+    # only solid spanning the FULL stack, and the ground plane is the thin
+    # solid sitting at the model's lowest z. Both survive a re-export and a
+    # change of stackup.
+    ents = gmsh.model.getEntities(3)
+    bbs = {(d, t): gmsh.model.getBoundingBox(d, t) for d, t in ents}
+    full = max(bb[5] - bb[2] for bb in bbs.values())
+    zmin = min(bb[2] for bb in bbs.values())
+    for dt, bb in bbs.items():
+        z0, dz = bb[2], bb[5] - bb[2]
+        keep = abs(dz - full) < 1e-4 or (abs(z0 - zmin) < 1e-4 and dz < full / 4)
+        gmsh.model.setVisibility([dt], 1 if keep else 0, recursive=True)
 o = gmsh.option.setNumber
 o("General.GraphicsWidth", 5200); o("General.GraphicsHeight", 2200)
 o("General.Trackball", 0)
@@ -267,7 +309,8 @@ gmsh.finalize()
 '''
 
 
-def render_3d(step: str, png: str, rx: float = 300.0, rz: float = 340.0) -> str | None:
+def render_3d(step: str, png: str, rx: float = 300.0, rz: float = 340.0,
+              only_vias: bool = False) -> str | None:
     """Render the STEP solid to a PNG, offscreen.
 
     Uses gmsh's OCC viewer under Xvfb: gmsh can already read STEP (it is the
@@ -289,15 +332,35 @@ def render_3d(step: str, png: str, rx: float = 300.0, rz: float = 340.0) -> str 
         # PNG still appears, just at a fraction of the resolution asked for.
         r = subprocess.run(["xvfb-run", "-a", "-s", "-screen 0 5600x2600x24",
                             sys.executable, script,
-                            step, png, str(rx), str(rz)],
+                            step, png, str(rx), str(rz)]
+                           + (["vias"] if only_vias else []),
                            capture_output=True, text=True)
     finally:
         os.unlink(script)
     if r.returncode != 0 or not os.path.exists(png):
         print(f"  render_3d FAILED: {(r.stderr or r.stdout).strip()[:200]}")
         return None
+    _autocrop(png)
     print(f"  render_3d: {png}")
     return png
+
+
+def _autocrop(png: str, pad: int = 25) -> None:
+    """Trim the render's white surround. gmsh fits the model to the window,
+    so a long thin board leaves most of the frame empty."""
+    try:
+        import numpy as _np
+        from PIL import Image
+    except ImportError:
+        return
+    im = Image.open(png).convert("RGB")
+    a = _np.array(im.convert("L"))
+    ys, xs = _np.where(a < 250)
+    if not len(xs):
+        return
+    im.crop((max(int(xs.min()) - pad, 0), max(int(ys.min()) - pad, 0),
+             min(int(xs.max()) + pad, a.shape[1]),
+             min(int(ys.max()) + pad, a.shape[0]))).save(png)
 
 
 def render_drill_map(outdir: str) -> list[str]:

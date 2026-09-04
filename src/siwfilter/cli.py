@@ -754,8 +754,15 @@ def cmd_kicad(args) -> int:
     render_drill_map(outdir)
     if done.get("step") == "ok":
         from .config import out_img
-        render_3d(os.path.join(outdir, "board.step"),
-                  out_img(f"{stem}_3d.png"))
+        step_path = os.path.join(outdir, "board.step")
+        render_3d(step_path, out_img(f"{stem}_3d.png"))
+        render_3d(step_path, out_img(f"{stem}_3d_bottom.png"), rx=240, rz=20)
+        # The vias-only view exists because the assembled board hides them:
+        # from above a plated via reads as a hole in the copper, and the
+        # question "does this PCB actually have vias?" is a fair one to ask
+        # of a picture that shows 118 dots. It shows the barrels.
+        render_3d(step_path, out_img(f"{stem}_3d_vias.png"),
+                  rx=292, rz=340, only_vias=True)
     if args.zip:
         zip_for_fab(outdir, os.path.join(outdir, f"{stem}_jlcpcb.zip"))
 
