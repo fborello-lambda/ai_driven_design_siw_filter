@@ -757,6 +757,23 @@ def verify_cascade_drawing_matches_mesh(spec=None, params: dict | None = None) -
     print(f"  VERIFY {'ok' if hit else 'FAIL'}: feed tapers out to the microstrip "
           f"width {w_ms:.4f} mm (drawn max half-width {max(abs(drawn[:,1])):.4f})")
     ok &= hit
+
+    # 5. The board outline must END where the trace ends. The launch is an
+    #    edge-mount SMA: its body straddles the board edge and its pin lands
+    #    on the last millimetre of the trace. A board even 1mm longer than
+    #    the trace cannot take the connector -- and until 2026-09-04 this one
+    #    was 3mm longer at each end, because `build_geometry` added a margin
+    #    in x as well as y while the mesher added it only in y. The gerbers
+    #    were already written before anyone looked. Checked against the
+    #    MESHED trace, not the drawn one, so it also catches the reverse
+    #    error (a board shorter than what was simulated).
+    trace_mesh = _np.array(g["trace_poly_in"])
+    bx0 = geo.board[0] * MM
+    x_trace_end = float(trace_mesh[:, 0].min())
+    hit = abs(bx0 - x_trace_end) < 1e-6
+    print(f"  VERIFY {'ok' if hit else 'FAIL'}: board edge x={bx0:.4f} mm meets "
+          f"the meshed trace end x={x_trace_end:.4f} mm (edge-mount SMA)")
+    ok &= hit
     return ok
 
 def assert_sweep_complete(csv_path: str, expected: int | None = None) -> int:

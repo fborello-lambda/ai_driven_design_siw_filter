@@ -32,7 +32,13 @@ def _hist(header: str, body_lines: list[str]) -> str:
     return f'AddToHistory "{header}", "{body}"\n'
 
 
-def generate_bas(g: Geometry) -> str:
+def generate_bas(g: Geometry, launch: dict | None = None,
+                 sma_len_mm: float = 6.0) -> str:
+    """VBA macro for CST. `launch` is a TAOGLAS_CPWG-style dict; when given,
+    the feed is built as the REAL launch actually simulated -- coplanar
+    ground pours, stitching vias, the narrowed CPWG feed with its taper out
+    to the microstrip, and the Taoglas SMA coax stub with coaxial ports --
+    instead of a bare constant-width microstrip with waveguide ports."""
     spec, sub = g.spec, g.spec.substrate
     half = g.a_siw / 2.0
     L_inner = g.L_inner
@@ -186,6 +192,36 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                      (f"{Li}+L_taper", f"-({hp})"),
                      (f"{Li}+L_taper+L_feed", f"-({hp})")],
     }
+    if launch and launch.get("cpwg_gap_mm") is not None:
+        # Real CPWG launch: feed narrows to cpwg_w_feed_mm at the board edge
+        # and tapers out to the microstrip width where the pours end. The two
+        # 50-ohm widths differ (a CPWG's impedance is set by its gap), so a
+        # constant-width feed here would NOT be the simulated structure.
+        wp = launch["cpwg_w_feed_mm"]; hp2 = _f(wp / 2.0)
+        clen = launch.get("cpwg_len_mm", 5.0); ctap = launch.get("cpwg_taper_mm", 4.0)
+        traces = {
+            "feed_in": [(xmin_e, hp2),
+                        (f"{xmin_e}+{_f(clen)}", hp2),
+                        (f"{xmin_e}+{_f(clen + ctap)}", hp),
+                        ("-L_taper", hp), ("-L_taper", f"-({hp})"),
+                        (f"{xmin_e}+{_f(clen + ctap)}", f"-({hp})"),
+                        (f"{xmin_e}+{_f(clen)}", f"-({hp2})"),
+                        (xmin_e, f"-({hp2})")],
+            "feed_out": [(xmax_e, hp2),
+                         (f"{xmax_e}-{_f(clen)}", hp2),
+                         (f"{xmax_e}-{_f(clen + ctap)}", hp),
+                         (f"{Li}+L_taper", hp), (f"{Li}+L_taper", f"-({hp})"),
+                         (f"{xmax_e}-{_f(clen + ctap)}", f"-({hp})"),
+                         (f"{xmax_e}-{_f(clen)}", f"-({hp2})"),
+                         (xmax_e, f"-({hp2})")],
+        }
+        y_g, y_o = launch["cpwg_y_gnd_mm"], launch["cpwg_y_out_mm"]
+        for side, sgn in (("top", 1.0), ("bot", -1.0)):
+            for end, xa, xb in (("in", xmin_e, f"{xmin_e}+{_f(clen)}"),
+                                ("out", f"{xmax_e}-{_f(clen)}", xmax_e)):
+                traces[f"cpwg_gnd_{end}_{side}"] = [
+                    (xa, _f(sgn * y_g)), (xb, _f(sgn * y_g)),
+                    (xb, _f(sgn * y_o)), (xa, _f(sgn * y_o))]
     for name, pts in traces.items():
         body = ["With Extrude", ".Reset", f'.Name "{name}"',
                 '.Component "component1"', '.Material "PEC"',
@@ -198,6 +234,69 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
             body.append(f'.LineTo "{x}", "{y}"')
         body += [".Create", "End With"]
         s.append(_hist(f"define extrude: component1:{name}", body))
+
+    # ---- CPWG stitching vias + the real Taoglas SMA ---------------------
+    if launch and launch.get("cpwg_gap_mm") is not None:
+        from .palace_dualmode_driven import gnd_stitch_layout
+        # gnd_stitch_layout works in MILLIMETRES; Geometry stores METRES.
+        # Passing metres returns an EMPTY via list rather than raising -- the
+        # export silently lost all 16 stitching vias until this was caught by
+        # grepping the generated .bas for them. Convert explicitly.
+        _mm = 1e3
+        ym_l = ymax * _mm
+        _, gnd_vias = gnd_stitch_layout(
+            -(Lt + Lf) * _mm, (L_inner + Lt + Lf) * _mm, W * _mm, ym_l, -ym_l,
+            n_gnd_stitch=launch.get("n_gnd_stitch", 6),
+            gnd_stitch_offset_mm=launch.get("gnd_stitch_offset_mm", 2.62),
+            gnd_stitch_pitch_mm=launch.get("gnd_stitch_pitch_mm", 1.2),
+            gnd_via_d_mm=launch.get("gnd_via_d_mm", 0.6),
+            gnd_clearance_mm=launch.get("gnd_clearance_mm", 0.3),
+            cpwg_gap_mm=launch.get("cpwg_gap_mm"),
+            cpwg_y_gnd_mm=launch.get("cpwg_y_gnd_mm"),
+            cpwg_y_out_mm=launch.get("cpwg_y_out_mm"),
+            cpwg_len_mm=launch.get("cpwg_len_mm", 5.0),
+            cpwg_taper_mm=launch.get("cpwg_taper_mm", 4.0))
+        rg = launch.get("gnd_via_d_mm", 0.6) / 2.0
+        s.append("\n' ---- CPWG ground stitching vias ---------------------------------\n")
+        s.append(f"' {len(gnd_vias)} stitching vias (MEASURED from the shared\n"
+                 f"' gnd_stitch_layout, the same helper the EM mesh uses)\n")
+        for i, (vx, vy) in enumerate(gnd_vias):
+            s.append(_hist(f"define cylinder: component1:gndvia{i:03d}", [
+                "With Cylinder", ".Reset", f'.Name "gndvia{i:03d}"',
+                '.Component "component1"', '.Material "PEC"',
+                '.Axis "z"', f'.Outerradius "{_f(rg)}"', '.Innerradius "0"',
+                f'.Xcenter "{_f(vx)}"', f'.Ycenter "{_f(vy)}"',
+                '.Zrange "-t_cu", "h_sub+t_cu"', '.Segments "0"',
+                ".Create", "End With"]))
+
+        # Taoglas EMPCB.SMAFSTJ.B.HT edge launch: a PTFE-filled coax stub off
+        # each board edge, pin on the substrate mid-plane. Modelled at the
+        # datasheet pin radius; rout follows the 50-ohm PTFE relation.
+        rin, rout = launch["sma_rin_mm"], launch["sma_rout_mm"]
+        s.append("\n' ---- Taoglas SMA coax stubs (real connector) --------------------\n")
+        s.append(_hist("define material: PTFE_sma", [
+            "With Material", ".Reset", '.Name "PTFE_sma"', '.Folder ""',
+            '.Type "Normal"', f'.Epsilon "{launch["sma_eps_r"]}"', '.Mu "1"',
+            f'.TanD "{launch["sma_tand"]}"', '.TanDGiven "True"',
+            '.TanDModel "ConstTanD"', '.Colour "0.9", "0.9", "0.9"',
+            ".Create", "End With"]))
+        for tag, x_edge, sgn in (("in", xmin_e, -1.0), ("out", xmax_e, 1.0)):
+            far = f"{x_edge}{'-' if sgn < 0 else '+'}{_f(sma_len_mm)}"
+            s.append(_hist(f"define cylinder: component1:sma_{tag}_ptfe", [
+                "With Cylinder", ".Reset", f'.Name "sma_{tag}_ptfe"',
+                '.Component "component1"', '.Material "PTFE_sma"',
+                '.Axis "x"', f'.Outerradius "{_f(rout)}"',
+                f'.Innerradius "{_f(rin)}"',
+                f'.Xrange "{far}", "{x_edge}"',
+                '.Ycenter "0"', '.Zcenter "h_sub/2"', '.Segments "0"',
+                ".Create", "End With"]))
+            s.append(_hist(f"define cylinder: component1:sma_{tag}_pin", [
+                "With Cylinder", ".Reset", f'.Name "sma_{tag}_pin"',
+                '.Component "component1"', '.Material "PEC"',
+                '.Axis "x"', f'.Outerradius "{_f(rin)}"', '.Innerradius "0"',
+                f'.Xrange "{far}", "{x_edge}"',
+                '.Ycenter "0"', '.Zcenter "h_sub/2"', '.Segments "0"',
+                ".Create", "End With"]))
 
     # ---- boundaries, background, ports ----------------------------------
     s.append("\n' ---- background + boundaries --------------------------------------\n")
@@ -217,10 +316,34 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         "End With",
     ]))
 
+    if launch and launch.get("cpwg_gap_mm") is not None:
+        # COAXIAL ports on the outer face of each SMA stub. The EM model is
+        # driven this way (wave ports on the coax cross-section), so
+        # microstrip ports here would make the CST run a different problem
+        # from the one the design was optimised against.
+        rout = launch["sma_rout_mm"]
+        s.append("\n' ---- coaxial ports on the SMA stubs -----------------------------\n")
+        for n, (x_edge, sgn, orient) in enumerate(
+                [(xmin_e, -1.0, "xmin"), (xmax_e, 1.0, "xmax")], start=1):
+            face = f"{x_edge}{'-' if sgn < 0 else '+'}{_f(sma_len_mm)}"
+            s.append(_hist(f"define port{n} (coax)", [
+                "With Port", ".Reset", f'.PortNumber "{n}"',
+                '.NumberOfModes "1"', '.Coordinates "Free"',
+                f'.Orientation "{orient}"', '.PortOnBound "True"',
+                f'.Xrange "{face}", "{face}"',
+                f'.Yrange "{_f(-rout)}", "{_f(rout)}"',
+                f'.Zrange "h_sub/2-{_f(rout)}", "h_sub/2+{_f(rout)}"',
+                ".Create", "End With"]))
+        _emit_ports = False
+    else:
+        _emit_ports = True
+
     # Microstrip waveguide ports on the x faces (standard sizing: ~8W x ~6h).
     wp = min(8.0 * W, ymax - ymin)
-    s.append("\n' ---- waveguide ports ----------------------------------------------\n")
-    for n, (xface_e, orient) in enumerate([(xmin_e, "xmin"), (xmax_e, "xmax")], start=1):
+    if _emit_ports:
+        s.append("\n' ---- waveguide ports ------------------------------------------\n")
+    for n, (xface_e, orient) in enumerate(
+            ([(xmin_e, "xmin"), (xmax_e, "xmax")] if _emit_ports else []), start=1):
         s.append(_hist(f"define port{n}", [
             "With Port", ".Reset", f'.PortNumber "{n}"',
             '.NumberOfModes "1"', '.Coordinates "Free"',
@@ -265,16 +388,29 @@ End Sub
 
 
 def write_bas(path: str | None = None,
-              spec: FilterSpec = SPEC) -> Geometry:
+              spec: FilterSpec = SPEC,
+              geometry: Geometry | None = None,
+              launch: dict | None = None,
+              sma_len_mm: float = 6.0) -> Geometry:
+    """`geometry` overrides the analytical default so a LANDED design can be
+    exported (the defaults are not any optimised geometry). `launch` adds the
+    real CPWG + Taoglas SMA."""
     if path is None:
         path = out_bas("siw_filter.bas")
-    g = build_geometry(spec)
-    bas = generate_bas(g)
+    g = geometry if geometry is not None else build_geometry(spec)
+    bas = generate_bas(g, launch=launch, sma_len_mm=sma_len_mm)
     with open(path, "w", newline="\r\n") as fh:   # CST/VBA expects CRLF
         fh.write(bas)
     n_lines = bas.count("\n")
     src = "EM-calibrated" if g.iris_calibrated else "PLACEHOLDER"
-    print(f"Wrote {path} ({n_lines} lines, {len(g.vias)} vias, {src} irises)")
+    # Count the Cylinder blocks actually written, not len(g.vias): that is
+    # only the SIW fence and omits the external-iris rows, the launch
+    # stitching vias and the SMA stubs, so it read 86 on a macro that emits
+    # 122 -- exactly the kind of number that gets quoted as "the via count".
+    n_cyl = bas.count("With Cylinder")
+    print(f"Wrote {path} ({n_lines} lines, {n_cyl} cylinders "
+          f"[{len(g.vias)} fence + {len(g.ext_iris_vias)} external-iris + "
+          f"launch/SMA], {src} irises)")
     return g
 
 

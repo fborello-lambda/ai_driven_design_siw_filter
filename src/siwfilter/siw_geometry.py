@@ -494,10 +494,21 @@ def _build_primitives(g: Geometry) -> None:
     g.taper_polys = [in_taper, out_taper]
     g.feed_polys = [in_feed, out_feed]
 
-    # Board outline with margin
+    # Board outline. In x the board ENDS AT THE FEED, with no margin: the
+    # launch is an edge-mount SMA, whose body straddles the board edge and
+    # whose pin lands on the very end of the trace. This is also exactly what
+    # the mesher builds (`palace_driven.build_mesh`: substrate box from
+    # X0=-(Lt+Lf) to X1=L_inner+Lt+Lf) and what `cst_export` draws.
+    #
+    # It did NOT used to be. Until 2026-09-04 a 3mm margin was added on all
+    # four sides, so the KiCad board outline and the 2D layout drawing were
+    # 6mm longer than the substrate that was simulated, and the CPWG pads sat
+    # 3mm INSIDE the edge -- a board on which the connector cannot be
+    # mounted. Only the transverse margin is real (the mesher's
+    # `ym = half + 3.0`): it is the dielectric shoulder outside the via wall.
     margin = 3e-3
-    xmin = -Lt - Lf - margin
-    xmax = L_inner + Lt + Lf + margin
+    xmin = -Lt - Lf
+    xmax = L_inner + Lt + Lf
     ymin = -half - margin
     ymax = +half + margin
     g.board = (xmin, xmax, ymin, ymax)

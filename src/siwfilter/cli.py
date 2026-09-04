@@ -685,6 +685,83 @@ def cmd_scan(args) -> int:
     return 0
 
 
+
+def cmd_cst(args) -> int:
+    """Generate the CST VBA macro for a LANDED design, with the real launch."""
+    from .config import SPEC, FilterSpec, out_bas
+    from .topologies import REGISTRY
+    from .topologies.launch import LAUNCHES
+    from .cst_export import write_bas
+
+    topo = REGISTRY[args.topology]
+    spec = FilterSpec(f0=SPEC.f0, FBW=SPEC.FBW,
+                      N=args.N if args.N is not None else SPEC.N,
+                      ripple_db=SPEC.ripple_db, substrate_name=SPEC.substrate_name,
+                      d_via=SPEC.d_via, p_via=SPEC.p_via)
+    params = _parse_params(args.params) if args.params else None
+    if params is None:
+        print("--params is required: the analytical default is NOT any optimised "
+              "geometry, and exporting it would hand CST a design nobody chose.")
+        return 1
+    if not hasattr(topo, "_geometry"):
+        print(f"topology {topo.name!r} has no _geometry(); CST export supports "
+              f"cascade for now"); return 1
+    g = topo._geometry(spec, params)
+    launch = None if args.launch == "none" else LAUNCHES[args.launch]
+    path = args.out or out_bas(f"siw_{args.topology}_N{spec.N}.bas")
+    write_bas(path, spec=spec, geometry=g, launch=launch, sma_len_mm=args.sma_len)
+    if launch:
+        print(f"  launch: {args.launch} (real SMA coax stubs + coaxial ports)")
+    else:
+        print("  launch: NONE -- bare microstrip with waveguide ports. This is "
+              "NOT what was simulated; use --launch cpwg for the real thing.")
+    return 0
+
+def cmd_kicad(args) -> int:
+    """Write the .kicad_pcb for a LANDED design and drive kicad-cli for the
+    JLCPCB deliverables: gerbers (F.Cu/B.Cu/F.Mask/B.Mask/Edge.Cuts), the
+    Excellon drill files, a 3D STEP, an SVG for eyeballing, and the fab
+    notes a gerber cannot carry."""
+    from .config import SPEC, FilterSpec, OUTPUT_DIR
+    from .topologies import REGISTRY
+    from .topologies.launch import LAUNCHES
+    from .kicad_export import (write_kicad_pcb, run_kicad_cli, zip_for_fab,
+                               write_fab_notes)
+
+    topo = REGISTRY[args.topology]
+    spec = FilterSpec(f0=SPEC.f0, FBW=SPEC.FBW,
+                      N=args.N if args.N is not None else SPEC.N,
+                      ripple_db=SPEC.ripple_db, substrate_name=SPEC.substrate_name,
+                      d_via=SPEC.d_via, p_via=SPEC.p_via)
+    params = _parse_params(args.params)
+    if not hasattr(topo, "_geometry"):
+        print(f"topology {topo.name!r} has no _geometry(); KiCad export "
+              f"supports cascade for now")
+        return 1
+    g = topo._geometry(spec, params)
+    launch = None if args.launch == "none" else LAUNCHES[args.launch]
+
+    outdir = args.out or os.path.join(OUTPUT_DIR, "kicad")
+    os.makedirs(outdir, exist_ok=True)
+    stem = f"siw_{args.topology}_N{spec.N}"
+    pcb = os.path.join(outdir, f"{stem}.kicad_pcb")
+
+    mask = args.soldermask == "full"
+    write_kicad_pcb(g, pcb, launch=launch, spec=spec, soldermask=mask)
+    done = run_kicad_cli(pcb, outdir)
+    write_fab_notes(os.path.join(outdir, "FAB_NOTES.md"), g, spec=spec,
+                    soldermask=mask, launch=launch)
+    if args.zip:
+        zip_for_fab(outdir, os.path.join(outdir, f"{stem}_jlcpcb.zip"))
+
+    if not mask:
+        print("\nSoldermask: NONE. F.Mask/B.Mask are not empty -- each holds "
+              "one board-sized opening, which is how 'no mask' is expressed "
+              "in gerber. An EMPTY mask file would mean mask everywhere.")
+    bad = {k: v for k, v in done.items() if v != "ok"}
+    return 1 if bad else 0
+
+
 def cmd_layout(args) -> int:
     from .topologies import REGISTRY
     topo = REGISTRY[args.topology]
@@ -1126,6 +1203,47 @@ def main(argv: list[str] | None = None) -> int:
                        help=_DEVICE_HELP)
     p_swp.add_argument("--np", type=int, default=4)
     p_swp.set_defaults(func=cmd_sweep)
+
+    p_cst = sub.add_parser("cst",
+                           help="generate the CST Studio VBA macro (.bas) for a landed "
+                                "design -- real solids, StoreParameter knobs, the real "
+                                "Taoglas SMA + CPWG launch and coaxial ports")
+    p_cst.add_argument("--topology", default="cascade", choices=_TOPOLOGY_CHOICES)
+    p_cst.add_argument("--N", type=int, default=3, help="filter order")
+    p_cst.add_argument("--params", required=True, help="geometry, k=v,k=v,... (mm)")
+    p_cst.add_argument("--launch", default="cpwg", choices=["cpwg", "pad", "none"],
+                       help="cpwg (default) emits the real Taoglas SMA coax stubs, "
+                            "coplanar pours, stitching vias and COAXIAL ports -- the "
+                            "structure actually simulated. none gives a bare microstrip "
+                            "with waveguide ports, which is not.")
+    p_cst.add_argument("--sma-len", type=float, default=6.0,
+                       help="length of each SMA coax stub [mm]")
+    p_cst.add_argument("--out", default=None, help="output .bas path")
+    p_cst.set_defaults(func=cmd_cst)
+
+    p_kic = sub.add_parser("kicad",
+                           help="generate the KiCad board + the JLCPCB deliverables "
+                                "for a landed design: .kicad_pcb, gerbers "
+                                "(F.Cu/B.Cu/F.Mask/B.Mask/Edge.Cuts), Excellon "
+                                "drill files, STEP, SVG and the fab notes")
+    p_kic.add_argument("--topology", default="cascade", choices=_TOPOLOGY_CHOICES)
+    p_kic.add_argument("--N", type=int, default=3, help="filter order")
+    p_kic.add_argument("--params", required=True, help="geometry, k=v,k=v,... (mm)")
+    p_kic.add_argument("--launch", default="cpwg", choices=["cpwg", "pad", "none"],
+                       help="launch footprint; cpwg (default) is the structure "
+                            "that was actually simulated")
+    p_kic.add_argument("--soldermask", default="none", choices=["none", "full"],
+                       help="'none' (default, the fabrication decision taken for "
+                            "this board) opens the mask over the WHOLE board: "
+                            "F.Mask/B.Mask each carry one board-sized opening. "
+                            "An empty mask gerber would mean the opposite -- mask "
+                            "everywhere. 'full' keeps a normal masked board.")
+    p_kic.add_argument("--zip", action="store_true", default=True,
+                       help="also write a flat JLCPCB-ready zip (default on)")
+    p_kic.add_argument("--no-zip", dest="zip", action="store_false")
+    p_kic.add_argument("--out", default=None,
+                       help="output directory (default output/kicad)")
+    p_kic.set_defaults(func=cmd_kicad)
 
     p_scn = sub.add_parser("scan",
                            help="1-D parameter scan on the ASSEMBLED filter: measure "
