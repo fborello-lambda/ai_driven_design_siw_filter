@@ -766,12 +766,26 @@ def cmd_kicad(args) -> int:
     if args.zip:
         zip_for_fab(outdir, os.path.join(outdir, f"{stem}_jlcpcb.zip"))
 
+    n_fail = 0
+    if args.check:
+        from .fab_check import run_checks, write_checklist, load_golden
+        checks = run_checks(outdir, g, spec=spec, launch=launch,
+                            soldermask=mask, params=params, stem=stem,
+                            with_mesh=not args.no_mesh_check)
+        for c in checks:
+            if c.ok is False:
+                print(f"  CHECK FAIL: {c.name} -- {c.detail}")
+        n_fail = sum(1 for c in checks if c.ok is False)
+        write_checklist(os.path.join(outdir, "FAB_CHECKLIST.md"), checks, g,
+                        spec=spec, launch=launch, soldermask=mask,
+                        golden=load_golden(args.topology, spec.N))
+
     if not mask:
         print("\nSoldermask: NONE. F.Mask/B.Mask are not empty -- each holds "
               "one board-sized opening, which is how 'no mask' is expressed "
               "in gerber. An EMPTY mask file would mean mask everywhere.")
     bad = {k: v for k, v in done.items() if v != "ok"}
-    return 1 if bad else 0
+    return 1 if (bad or n_fail) else 0
 
 
 def cmd_layout(args) -> int:
@@ -1253,6 +1267,16 @@ def main(argv: list[str] | None = None) -> int:
     p_kic.add_argument("--zip", action="store_true", default=True,
                        help="also write a flat JLCPCB-ready zip (default on)")
     p_kic.add_argument("--no-zip", dest="zip", action="store_false")
+    p_kic.add_argument("--check", action="store_true", default=True,
+                       help="run the pre-fabrication checks against the "
+                            "GENERATED FILES and write FAB_CHECKLIST.md "
+                            "(default on). Exits non-zero on any failure.")
+    p_kic.add_argument("--no-check", dest="check", action="store_false")
+    p_kic.add_argument("--no-mesh-check", action="store_true",
+                       help="skip the drawing-vs-mesh comparison, which "
+                            "builds a coarse EM mesh (a few seconds). It is "
+                            "the check that catches a board disagreeing with "
+                            "what was simulated -- only skip it knowingly.")
     p_kic.add_argument("--out", default=None,
                        help="output directory (default output/kicad)")
     p_kic.set_defaults(func=cmd_kicad)
