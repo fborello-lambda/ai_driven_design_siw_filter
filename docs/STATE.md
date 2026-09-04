@@ -30,6 +30,22 @@ A Substrate Integrated Waveguide (SIW) bandpass filter:
 For what to do next, see `PLAN.md`. Superseded documents are in
 `docs/archive/`.
 
+> **2026-09-04 update — the board being fabricated is cascade N=3, not the
+> dual-mode N=2 below.** Everything from here to "Reproducing this" is the
+> dual-mode analysis exactly as measured on 2026-09-03 and is kept as real,
+> correct physics — the bandwidth/match trade-off it documents is a genuine
+> property of that topology and matters for the paper. But the fabrication
+> decision it led to was **revised later the same session**: cascade N=3 is
+> closer to spec on every axis (−13.37 dB / 189 MHz vs −10.76 dB / 316.6 MHz,
+> at ~1.5× the board length) and was chosen instead. All fabrication
+> outputs — CST macro, KiCad gerbers/drill/STEP, a 29-check
+> `FAB_CHECKLIST.md`, a real-copper measurement, a PEC regression re-run
+> that reproduced the golden to every digit, and the Taoglas datasheet
+> verification — were built for **cascade N=3**, in `golden/cascade_N3/`.
+> `siw kicad --topology cascade --N 3 --params ... --launch cpwg` reproduces
+> all of it. `siw kicad --topology dualmode ...` refuses (dualmode has no
+> `_geometry()` for CST/KiCad export) — that gap is real, not yet closed.
+
 \newpage
 
 # The design
@@ -169,9 +185,12 @@ scrutiny is "+0.37 dB from real copper", close to today's properly measured
   launch, confirmed by a 30-evaluation search rather than assumed.
 - It is **robust to PCB tolerances**: 0.1 mm rounding costs 0.5 dB.
 - **Real copper costs 0.32 dB** and does not disturb the response shape.
-- The drawn geometry **matches the meshed geometry** — `siw stackup --verify`
-  checks ground-stitch vias (16), fence vias (78), the 10-vertex feed outline
-  including the CPWG pad taper, and the coplanar gap, all passing.
+- The drawn geometry **matches the meshed geometry**. `siw stackup --verify`
+  is no longer a CLI command (removed 2026-09-03); the same comparison now
+  runs as one of the 29 checks in `siw kicad --check` (cascade) or directly
+  via `report.verify_drawing_matches_mesh()` (dualmode) — ground-stitch vias
+  (16), fence vias (78), the 10-vertex feed outline including the CPWG pad
+  taper, and the coplanar gap, all passing.
 
 ## Not true, and now understood
 
@@ -229,8 +248,9 @@ Guards now in the code:
 - the fabrication runner flags any variant whose loss beats the lossless
   reference, or is more than 6 dB worse, or shows near-total reflection, or
   reports zero reflection zeros;
-- `siw stackup --verify` compares the drawing against the meshed geometry
-  vertex by vertex.
+- the drawing-vs-mesh comparison (`report.verify_drawing_matches_mesh` /
+  `verify_cascade_drawing_matches_mesh`, folded into `siw kicad --check`)
+  compares the drawing against the meshed geometry vertex by vertex.
 
 \newpage
 
@@ -255,7 +275,12 @@ siw scan --topology dualmode --N 2 \
 # artifacts
 siw layout --topology dualmode --N 2 \
     --params a=57.158,w_iris=15.304,x_iris=28.685,y_wall=9.849,w_ext=16.352
-siw stackup --verify
+
+# fabrication outputs for the topology actually being sent to fab (see the
+# 2026-09-04 update above) -- cascade N=3, not this dual-mode design
+siw kicad --topology cascade --N 3 \
+    --params l_cav1=34.239,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 \
+    --launch cpwg
 ```
 
 **Resource limits, learned the hard way:** fabrication-stack solves need

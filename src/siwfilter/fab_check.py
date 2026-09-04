@@ -392,7 +392,7 @@ def load_golden(topology: str, N: int) -> dict | None:
 def write_checklist(path: str, checks: list[Check], g: Geometry,
                     spec: FilterSpec = SPEC, launch: dict | None = None,
                     soldermask: bool = False, golden: dict | None = None,
-                    fab: str = DEFAULT_FAB) -> str:
+                    fab: str = DEFAULT_FAB, topology: str = "cascade") -> str:
     bx = [v * MM for v in g.board]
     sub = spec.substrate
     mark = lambda c: {True: "[x]", False: "[ ] **FAIL**", None: "[ ]"}[c.ok]
@@ -402,7 +402,7 @@ def write_checklist(path: str, checks: list[Check], g: Geometry,
                 ("siw", "SIW design rules (Xu & Wu 2005, Cassivi 2002)"),
                 ("model", "The board matches what was simulated")]
 
-    L = [f"# Fabrication checklist — SIW bandpass filter, cascade N={spec.N}",
+    L = [f"# Fabrication checklist — SIW bandpass filter, {topology} N={spec.N}",
          "",
          "Every box below was checked by reading the **files that would be "
          "uploaded**, not the code that wrote them. Re-run with `siw kicad "

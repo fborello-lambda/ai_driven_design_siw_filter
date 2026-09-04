@@ -361,6 +361,9 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         _emit_ports = True
 
     # Microstrip waveguide ports on the x faces (standard sizing: ~8W x ~6h).
+    # wp is METRES here (W and ymax/ymin both come from Geometry) -- _f, not
+    # _fmm. Only reachable via --launch none, which is why the same 1000x
+    # trap already fixed in the launch block survived here uncaught.
     wp = min(8.0 * W, ymax - ymin)
     if _emit_ports:
         s.append("\n' ---- waveguide ports ------------------------------------------\n")
@@ -371,7 +374,7 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
             '.NumberOfModes "1"', '.Coordinates "Free"',
             f'.Orientation "{orient}"', '.PortOnBound "True"',
             f'.Xrange "{xface_e}", "{xface_e}"',
-            f'.Yrange "{_fmm(-wp/2)}", "{_fmm(wp/2)}"',
+            f'.Yrange "{_f(-wp/2)}", "{_f(wp/2)}"',
             '.Zrange "-t_cu", "h_sub*5"',
             ".Create", "End With",
         ]))

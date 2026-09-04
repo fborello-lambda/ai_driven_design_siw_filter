@@ -778,6 +778,7 @@ def cmd_kicad(args) -> int:
         n_fail = sum(1 for c in checks if c.ok is False)
         write_checklist(os.path.join(outdir, "FAB_CHECKLIST.md"), checks, g,
                         spec=spec, launch=launch, soldermask=mask,
+                        topology=args.topology,
                         golden=load_golden(args.topology, spec.N))
 
     if not mask:
@@ -1388,8 +1389,13 @@ def main(argv: list[str] | None = None) -> int:
         print("Heavy (opt-in via --stage / --only):")
         for n, m in HEAVY:
             print(f"  {n:<14} {m}")
-        print("AI-driven design subcommands: compare, compare-baselines, design, layout, "
-              "sweep (see `siw <subcommand> --help`)")
+        # Derived from the subparsers, not hand-maintained: a hardcoded list
+        # here already went stale once (missing synth-design, calibrate,
+        # scan, cst, kicad, compare-fab-variants, compare-designs).
+        names = sorted(sub.choices.keys() - {n for n, _ in LIGHT + HEAVY}
+                      - {"_render-worker"})   # internal, spawned by report.py
+        print(f"Other subcommands: {', '.join(names)} "
+              f"(see `siw <subcommand> --help`)")
         return 0
 
     if args.only is not None:

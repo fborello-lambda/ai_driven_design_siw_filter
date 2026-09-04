@@ -41,9 +41,48 @@ Three ways forward, in the order I would consider them:
 **This is a user decision, not a technical one.** Nothing further should be
 optimised until it is made.
 
+> **Decision revised, 2026-09-04: option 2, cascade N=3.** Closer to spec on
+> every axis (−13.37 dB / 189 MHz, fine-confirm −14.92 dB / 188 MHz, vs
+> dual-mode's −10.76 dB / 316.6 MHz), at ~1.5× the board length (166.4 vs
+> 119.0 mm). Steps 2 and 3 below are now DONE for this design — see the
+> status block that follows — not merely planned.
+
 ---
 
-## Step 1 — Optional: re-polish on real copper
+## Status, 2026-09-04 (cascade N=3, the board actually being ordered)
+
+- PEC regression (121-point sweep, after today's real-copper port rework
+  and a board-outline fix): reproduces the golden to every digit —
+  fc 2.879 GHz, IL −1.85 dB, BW 189 MHz, S11w −13.37 dB.
+- Real copper measured (exterior ground planes only, Palace's
+  `Boundaries.Conductivity` is exterior-only so via barrels and the trace
+  stay PEC): IL −1.85 → −2.44 dB, S11w −14.92 → −13.82 dB, shape and
+  bandwidth unmoved. Recorded in `golden/cascade_N3/...json`.
+- CST `.bas` (`siw cst`) and KiCad board + gerbers/drill/STEP/SVG
+  (`siw kicad`) both generate from the same `Geometry`/launch objects the
+  mesher uses, not a second description of the board.
+- `siw kicad --check` runs 29 file-level + connector-fit checks against the
+  actual generated gerbers/drill/`.bas` (not the code that wrote them) and
+  writes `FAB_CHECKLIST.md`. All 29 pass on the current geometry.
+- Taoglas EMPCB.SMAFSTJ.B.HT verified against its real datasheet
+  (`docs/sma_connector/`): pin and ground-leg-pitch numbers were already
+  exact; the finished board (0.795 mm) fits the connector's 0.8 mm/0.79 mm
+  limits with no margin, which is why 0.5 oz copper is a requirement, not a
+  preference.
+- **Still open**: the deviation from spec itself (table above) is accepted,
+  not fixed, and remains what it is — write it into the fab order. No mesh
+  convergence study exists for `fc` (see "Later" below — never done, would
+  put an error bar on every frequency quoted here, including the +0.31 %
+  currently recorded against spec).
+
+---
+
+## Step 1 — Optional: re-polish on real copper (dual-mode only; moot for cascade)
+
+This was scoped for the dual-mode design before the decision was revised.
+Cascade N=3's real-copper number is already measured (see the status block
+above) at zero extra search cost, so this step does not apply to the board
+actually being built. Left here in case dual-mode is ever revisited:
 
 ```bash
 siw design --topology dualmode --N 2 \
@@ -51,33 +90,41 @@ siw design --topology dualmode --N 2 \
     --span 2 --patience 14 --evals 12 --w-bw 0 --real-metal --device CPU --np 4
 ```
 
-**Probably not worth it.** Real copper shifts the design by 0.32 dB of
-insertion loss and 0.21 dB of return loss without changing its shape, which
-is close to the coarse-mesh noise floor; twelve evaluations cost about
-6.5 hours. The alternative is to accept the PEC-optimised geometry with the
-copper penalty applied — the numbers are already measured and in the golden
-entry.
-
-Do **not** pass `--enig`: it implies ENIG + soldermask + silkscreen, all of
-which are unresolvable at this mesh density and destroy the response.
+Real copper shifts that design by 0.32 dB of insertion loss and 0.21 dB of
+return loss without changing its shape, close to the coarse-mesh noise
+floor; twelve evaluations cost about 6.5 hours. Do **not** pass `--enig`: it
+implies ENIG + soldermask + silkscreen, all unresolvable at this mesh
+density and destroy the response.
 
 ---
 
-## Step 2 — Fabrication outputs
+## Step 2 — Fabrication outputs — DONE for cascade N=3
 
-- CST `.bas` export (`cst_export.py`) and a visual check in CST.
-- Gerbers, with the **soldermask opened over the feed** (judgement call, see
-  `STATE.md` — not a simulated result).
-- JLCPCB DRC re-check against `config.py`'s recorded capabilities.
-- ENIG finish, vias open/unfilled (tenting is not measurable and is
-  electrically irrelevant at this via size).
+```bash
+siw kicad --topology cascade --N 3 \
+    --params l_cav1=34.239,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 \
+    --launch cpwg
+```
+
+- [x] CST `.bas` export (`siw cst`) — StoreParameter'd, real Taoglas SMA
+  coax stubs + coaxial ports. Visual check in CST is still the human's to
+  do; the generator-side unit bugs found while checking it are fixed.
+- [x] Gerbers with the soldermask **fully open** (the decision made, not
+  opened only over the feed as this step used to say — see
+  `FAB_NOTES.md`'s explanation of how "no mask" is expressed in gerber).
+- [x] JLCPCB DRC re-check against `config.py`'s `FAB_RULES`, plus five
+  connector-fit checks against the real Taoglas datasheet — `siw kicad
+  --check`, 29/29 passing, `FAB_CHECKLIST.md`.
+- [x] ENIG finish, vias open/unfilled — stated in `FAB_NOTES.md`.
 
 ---
 
 ## Step 3 — Order the board
 
 Only once the decision above is written down. Do not ship a board that
-silently misses spec.
+silently misses spec. For cascade N=3 the deviation is on record in
+`FAB_CHECKLIST.md`'s "Known deviations from specification" table, sourced
+from `golden/cascade_N3/`.
 
 ---
 
