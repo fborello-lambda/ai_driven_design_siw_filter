@@ -31,23 +31,11 @@ from .dualmode import TAOGLAS_SMA
 
 # name -> (param_space, extra build kwargs)
 #
-# Boxes WIDENED after the first 18-eval round: the winners of both completed
-# geometries sat hard against a bound, which means the box was the binding
-# constraint and the reported optimum was an artefact of where it was drawn.
-# Every widened bound below is annotated with what pinned it.
-#
-# w_ext is the feed aperture; it must stay clear of the cavity wall
-# (corner_cut's end wall spans w_ext/2 -> a/2, so w_ext -> a removes the wall
-# entirely), so its ceiling stays well under a.
-#
-# Round-3 correction: the w_ext floors, not the ceilings, are what bind under
-# v17. v16 drove w_ext UP because its unclipped S11 term rewarded landing the
-# reflection nulls, which a broad over-coupled response does easily -- so the
-# round-2 widening (upward) was in the wrong direction. The first honest
-# untruncated measurement puts the warm start at 437 MHz, 3.0x the 143.5 MHz
-# target, and external coupling is what sets that. Scaling to target needs
-# w_ext ~ 11-13 (BW ~ w^3 gives 13.1, BW ~ w^2 gives 10.9), i.e. AT or BELOW
-# the old 13 floor. Floors dropped to 7-8 so the optimum is interior.
+# w_ext is the feed aperture; it must stay clear of the cavity wall (e.g.
+# corner_cut's end wall spans w_ext/2 -> a/2), so its ceiling stays well
+# under a. Bounds pinning a search result at their edge get widened -- an
+# optimum sitting on a bound means the bound was the binding constraint, not
+# the geometry.
 _SPACES: dict[str, dict[str, ParamRange]] = {
     # a scaled 3.00 -> 2.87 GHz; w_iris is the corner-cut depth = the coupling
     # knob. NO y_wall: corner_cut() ignores that argument entirely (verified --
@@ -140,77 +128,12 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "y_wall": (8.0, 3.0, 15.0),
         "w_ext":  (20.7, 14.0, 26.0),
     },
-    # 2026-08-26, user-prompted: 2 dual-mode cavities in series (N=4). Box
-    # ORIGINALLY centred on dual-mode's own landed values with x_iris2/w_iris2
-    # mirrored (not searched) -- see v4 revision below for why that box was
-    # replaced.
-    #
-    # v4 revision (2026-08-28): promoted to a genuinely ASYMMETRIC, 10D box,
-    # after two full sessions of evidence that the mirrored 6D box cannot
-    # reach a real N=4 passband:
-    #   - eigenmode ground truth (this repo's own cascade_eigenmode.py)
-    #     proved the mirror (x-swap) symmetry forces the 4-pole spectrum into
-    #     an even/odd pair split no amount of coupling-WIDTH tuning escapes --
-    #     x_iris2_mm/w_iris2_mm must be free, independent dimensions.
-    #   - the `band_edges()` bandwidth-bridging bug (fixed alongside this
-    #     box) hid that EVERY prior "narrower bandwidth" cascade result
-    #     (this session and the last) was actually the response splitting
-    #     into two disconnected resonance lobes, not a real merged, narrower
-    #     N=4 Chebyshev passband. Re-measured with the fix: the naive
-    #     symmetric baseline (w_inter=16.31, well-matched, s11w=-10.28dB) has
-    #     ONE genuine ~290MHz lobe; every asymmetric/narrowed attempt this
-    #     session (v1/v2/v3 of the eigenmode search) split into two ~20-55MHz
-    #     lobes instead. Classic coupled-resonator theory: two cavities merge
-    #     into one passband only while inter-cavity coupling stays comparable
-    #     to each cavity's own loaded-Q; narrowing `w_inter_mm` in isolation
-    #     (every previous session's strategy) while `w_ext`/Qe stays
-    #     chronically under-coupled (measured 4-5x the ideal 22.18 across
-    #     the ENTIRE `w_ext` range ever tried, up to 24mm) pushes the system
-    #     into the weak-coupling/split regime instead of narrowing smoothly.
-    #   - `w_ext` ceiling raised 24->36mm (still comfortably under `a`'s 50mm
-    #     floor, see the w_ext/a-clearance note above) specifically to let
-    #     the search test stronger external coupling than any prior round --
-    #     nobody has found where, or if, critical coupling (Qe~22) exists for
-    #     this port aperture; round 3 stopped short of finding out.
-    #   - `iris_defect_frac`/`iris2_defect_frac` (commit 1ea9d2a, 2026-08-28,
-    #     user-prompted "remove vias inside the cavity") added as genuinely
-    #     new coupling dims: drop one via pair from a cavity's own internal
-    #     fence at a chosen point, a localized coupling defect no continuous
-    #     width/position parameter can reach. `<0` (the floor) is the
-    #     no-defect sentinel, matching `dualmode_cascade()`'s own `None`
-    #     convention.
-    # This is a genuinely bigger, more expensive search than the box below
-    # replaces -- deliberately paired with `screen_at_f0()`'s cheap GPU
-    # pre-screen (already wired into `optimize()`'s coarse stage) to reject
-    # non-viable candidates fast, rather than spending a full sweep on each.
-    # v5 revision (2026-08-28): v4's WIDE box (above, kept in comments for the
-    # record) found ZERO survivors across all 40 evals -- a real result, not
-    # a search-budget problem: the GPU screen is a hard pass/fail with no
-    # graded signal, so a GP surrogate has nothing to climb within the failed
-    # region, and the viable pocket the eigenmode-ground-truth searches found
-    # is narrow enough that 40 wide-box draws never landed in it. v5 instead
-    # searches TIGHTLY around that known pocket (eval18's exact params,
-    # +-15-30%) rather than exploring wide bounds -- paired with two fixes:
-    # (1) `screen_at_f0()`'s failures now get a GRADED score (see
-    # `evaluate()`'s screen branch) instead of a flat 1e9 tie, so the
-    # surrogate has real gradient even while every candidate still fails;
-    # (2) `w_ext2_mm` (new, independent second-port aperture, commit-pending)
-    # added as a genuinely new dimension: analysis of the v4 fallback's raw
-    # S11 showed only ONE real return-loss null across the whole sweep (the
-    # other 3 poles ride along in S21 with no null of their own) -- consistent
-    # with cavity-1-vs-cavity-2 asymmetry making each driven mode couple
-    # differently to each end, which a single SYMMETRIC w_ext cannot fix.
-    # `iris_defect_frac`/`iris2_defect_frac` kept at their full natural range
-    # (already bounded, narrowing a discrete-ish selector doesn't help the
-    # way narrowing a continuous dimension does).
-    # 2026-08-29, v8 round 4 -- SURGICAL box, not a fresh wide search. Every
-    # dim the v1-v5 search already tuned is pinned (near-zero-width) at the
-    # exact v5-best point (score 25.551, the best pre-v8 design); only the
-    # NEW v8 slot dims plus the two external couplings (w_ext/w_ext2_mm,
-    # which interact most directly with the slot's own effect on pole 1) are
-    # actually searched. Wide boxes already failed once (v4, 40 evals, zero
-    # survivors); this is the opposite bet -- most of the space is known-
-    # good, only a handful of genuinely new/interacting dims are free.
+    # 2 dual-mode cavities in series (N=4) -- extensively searched and
+    # currently closed (five structurally different mechanisms plus a joint
+    # GP search all hit the same ceiling). Box narrowed to the best known
+    # point rather than left wide, since wide search already failed here
+    # (40 evals, zero survivors). Full history:
+    # docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md.
     "dualmode_cascade": {
         "a":      (61.123, 61.122, 61.124),
         "w_iris": (10.716, 10.715, 10.717),

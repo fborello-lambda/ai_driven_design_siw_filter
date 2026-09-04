@@ -308,20 +308,12 @@ def corner_cut(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
 
 
 # ---------------------------------------------------------------------------
-# 5. Structural variants (2026-08-25) -- genuinely NEW knobs, not re-tunes of
-# an existing parameter. Requested after the coupling-only sweeps found that
-# re-tuning w_iris/w_ext/y_wall within the existing via-placement logic
-# cannot close the gap to dual-mode for any of the three geometries. Each
-# function here is a small delta on an existing one and reduces to it EXACTLY
-# when the new kwarg is at its default -- so registering these does not
-# change the already-validated originals' behaviour.
-#
-# All four still end in _dedupe(vias, r) with the SAME uniform d_via_mm as
-# every other via in the layout, which is what makes _dedupe's existing
-# fab-rule spacing check sufficient on its own -- no separate DRC validator
-# needed for these, since a per-pair check with mixed diameters was the only
-# case _dedupe doesn't already cover, and none of these introduce a second
-# via size.
+# 5. Structural variants -- genuinely new knobs, not re-tunes of an existing
+# parameter. Each function is a small delta on an existing one and reduces
+# to it EXACTLY at the new kwarg's default, so registering these doesn't
+# change the already-validated originals. All still end in
+# _dedupe(vias, r) with the same uniform d_via_mm, so its existing spacing
+# check covers these too -- no separate DRC validator needed.
 # ---------------------------------------------------------------------------
 def circular_cross_nvia(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
                         y_wall_mm=3.0, n_perturb=1, **_):
@@ -678,14 +670,10 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     for xv in np.linspace(0.0, Li, max(1, round(Li / p)) + 1):
         vias.append((xv, -half)); vias.append((xv, half))
     # inter-cavity coupling wall at the shared boundary. inter_defect_frac
-    # (2026-08-29, v8 round 2): drop ONE via from the SOLID part of this
-    # wall, same pattern as iris_defect_frac/iris2_defect_frac, to open
-    # extra room for a v8 top-copper coupling slot beyond what fits between
-    # two intact vias at this wall's ~3mm pitch (measured ceiling: slot
-    # half-width capped at ~1.4mm there, and pole-3's revealed null
-    # plateaued at -6.6dB despite otherwise bigger slots -- see
-    # dualmode_cascade_v6_handoff_2026-08-28.md sec 9). Defaults to None,
-    # reproducing the exact original wall (regression-verified).
+    # drops ONE via from the solid part of this wall (same pattern as
+    # iris_defect_frac/iris2_defect_frac) to open room for a top-copper
+    # coupling slot beyond what fits between two intact vias. Defaults to
+    # None, reproducing the exact original wall.
     inter_ys = _wall_with_gap(w_inter / 2.0, y_inter_off_mm, half, p)
     if inter_defect_frac is not None and len(inter_ys) > 0:
         order = np.sort(inter_ys)
@@ -711,20 +699,12 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
             if i == drop2:
                 continue
             vias.append((x_iris2, o + off2)); vias.append((x_iris2, -o + off2))
-    # v9 (2026-08-29): a single DISCRETE, standalone via -- a "post", not
-    # part of any fence -- droppable anywhere, e.g. inside the open
-    # magnetic coupling window (y in [-w_inter/2, +w_inter/2] at x=a_mm,
-    # currently completely via-free). Genuinely different mechanism from
-    # every via-fence variant tried in v1-v7 (those all moved/widened a
-    # GAP in a continuous barrier) and from v8's top-copper slot (a cutout
-    # in the OPPOSITE conductor, needing new air-volume mesh work): this is
-    # simply one extra localized scatterer, the PCB-native analogue of the
-    # tuning screws/posts classical dual-mode waveguide filters use for
-    # asymmetric inter-mode coupling. post_y_mm is NOT mirrored -- a single
-    # off-axis post is the point (breaks y-mirror symmetry directly,
-    # unlike every existing element which is either exactly centred or
-    # mirrored about y=0). Defaults to None: no post added, exact prior
-    # via list (regression-verified)."""
+    # A single DISCRETE, standalone via ("post", not part of any fence),
+    # droppable anywhere -- e.g. inside the open magnetic coupling window at
+    # x=a_mm. The PCB-native analogue of tuning screws/posts in classical
+    # dual-mode waveguide filters. post_y_mm is NOT mirrored -- a single
+    # off-axis post is the point, breaking y-mirror symmetry directly.
+    # Defaults to None: no post added, exact prior via list."""
     if post_x_mm is not None:
         vias.append((post_x_mm, post_y_mm))
     return _dedupe(vias, r), {"x_iris": x_iris1, "x_iris2": x_iris2, "half": half}

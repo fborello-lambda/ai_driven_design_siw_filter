@@ -17,7 +17,7 @@ Two tiers of stages:
     palace-driven-> palace_driven.py  : Palace driven full-filter solve
     palace-opt   -> palace_opt.py     : autonomous coordinate-descent tuner
 
-Plus AI-driven design subcommands (see HANDOFF.md), all Palace/Topology-based:
+Plus AI-driven design subcommands, all Palace/Topology-based:
 
     compare                     : standing comparison of every landed design vs
                                    the ideal Chebyshev target; cached, so a new
@@ -75,14 +75,8 @@ STAGES = dict(LIGHT + HEAVY)
 # Landed baseline designs (see docs/dualmode_cavity/README.md,
 # docs/sma_connector/README.md) -- used by `siw compare-baselines`.
 BASELINES = {
-    # No cascade entry: neither N=3 nor N=4 has a design that both meets
-    # spec and was measured under the real CPWG launch cascade now defaults
-    # to (see CLAUDE.md sec 1b/10). The old N=3 entry here (l_cav1=32.81,
-    # l_cav2=33.86, w_iris=13.0, w_ext=16.5) predates the 2026-08-30 bugfixes
-    # and the CPWG launch -- documented at -15.98dB, re-measured at -4.3dB
-    # this session, and would just burn a driven solve on every
-    # compare-baselines run. Add a fresh entry once siw synth-design lands
-    # one worth keeping (golden/cascade_N3|N4/ per golden/README.md).
+    # No cascade entry: no N=3/N=4 cascade design here meets spec under the
+    # current CPWG launch (see golden/cascade_N3|N4/ instead).
     "N=2 dualmode (1.5/3.0mm)": {
         "topology": "dualmode",
         "N": 2,
@@ -172,7 +166,7 @@ def _render_worker(payload_path: str) -> int:
 
 def _artifacts(topology, spec, params: dict, prefix: str, r: dict | None = None):
     """The black-box pipeline's 3 standard artifacts: top view, 3D render,
-    S21/S11 comparison (see HANDOFF.md). Returns the 3 output paths."""
+    S21/S11 comparison. Returns the 3 output paths."""
     import subprocess
     import tempfile
     from .config import out_img
@@ -265,19 +259,11 @@ def cmd_design(args) -> int:
             else topo.calibrate(spec)
         print(f"calibrate(): {cal}" if cal is not None else "calibrate(): not implemented for this topology")
 
-    # --seed turns the GLOBAL search into a LOCAL polish around a known point.
-    # That distinction decided the cascade work: a global GP never beat -5 dB
-    # S11 in 60+ evals (its objective contains the passband width, which is
-    # discontinuous in w_ext), while the same optimizer works locally around a
-    # physics-derived seed -- the regime it already succeeds in for dualmode.
-    # Pair with `siw synth-design` to generate that seed.
     fab = {}
     if getattr(args, "real_metal", False) or getattr(args, "enig", False):
-        # --real-metal now works for CASCADE too (the exterior-face split was
-        # ported into palace_driven on 2026-09-03). --enig still does not:
         # ENIG/soldermask/silkscreen are meshed layers, unresolvable at this
-        # mesh density, and ENIG is in any case shielded behind ~14 skin
-        # depths of ground-plane copper. See docs/STATE.md.
+        # mesh density; ENIG is also shielded behind ~14 skin depths of
+        # ground-plane copper either way. See docs/STATE.md.
         if args.topology == "cascade" and getattr(args, "enig", False):
             print("--enig is not available for cascade (and is an RF no-op: the "
                   "plating sits on the shielded side of the ground plane). Use "
@@ -305,19 +291,14 @@ def cmd_design(args) -> int:
     if args.fine_sweep is not None:
         f0, f1, step_hz = args.fine_sweep
         fine_sweep = (f0 / 1e9, f1 / 1e9, step_hz / 1e9)
-    # Include N in every output name: log_name/best_json_name default to
-    # opt_{topology.name}_*, which has no N in it, so an N=4 run silently
-    # overwrote an N=3 run's saved best/log/artifacts (measured this
-    # session -- lost the N=3 search's raw result this way).
+    # N must be in the output name -- log_name/best_json_name default to
+    # opt_{topology.name}_*, so different orders of the same topology would
+    # otherwise silently overwrite each other's saved best/log/artifacts.
     prefix = f"{args.topology}_N{spec.N}"
-    # Objective reweighting. Measured 2026-09-03 on dualmode N=2: bandwidth
-    # and return loss are in DIRECT OPPOSITION across every geometry
-    # parameter (w_iris, w_ext at two irises, y_wall -- all scanned on the
-    # assembled filter), so the default w_bw=3.0 charges ~3.5 at the
-    # 310MHz/-10.35dB corner and steers the search away from the best match
-    # this structure can produce. --w-bw 0 chases return loss alone and
-    # accepts whatever bandwidth follows; that is a deliberate spec
-    # trade-off, so it is an explicit flag rather than a changed default.
+    # On dualmode N=2, bandwidth and return loss are in direct opposition
+    # across the whole geometry space, so the default w_bw weight steers the
+    # search away from the best achievable match. --w-bw 0 picks that
+    # trade-off explicitly rather than changing the default.
     score_kwargs = {}
     if args.w_bw is not None:
         score_kwargs["w_bw"] = args.w_bw
@@ -397,24 +378,15 @@ def cmd_calibrate(args) -> int:
         p = out_data(f"calibration_{topo.name}_N{spec.N}.json")
         _plot_calibration(_json.load(open(p)), topo.name, spec.N)
         return 0
-    # Both calibration testbeds must use the cavity actually being designed.
-    # They default to module constants (a=61.05mm, y_wall=6.0mm), so without
-    # this the calibration measures a DIFFERENT resonator than the design --
-    # which is exactly what happened on the first run.
+    # Both calibration testbeds must use the cavity actually being designed;
+    # they otherwise default to module constants and measure a different
+    # resonator than the one intended.
     cav = _json.loads(args.cavity) if args.cavity else {}
 
     def _cav_for(fn) -> dict:
-        """Keep only the cavity keys this testbed actually accepts.
-
-        The two testbeds are different structures, so they take different
-        cavity keys: the k testbed is a CLOSED two-mode cavity and needs
-        x_iris_mm, while the Qe testbed removes the internal iris entirely
-        (w_iris=None, x_iris=None) and has no such parameter. Passing the
-        same --cavity dict to both raised
-        `calibrate_qe() got an unexpected keyword argument 'x_iris_mm'`
-        AFTER the 9-minute k sweep had already completed, losing the whole
-        Qe sweep, the inversion and the confirm.
-        """
+        """Keep only the cavity keys this testbed accepts -- the k testbed
+        is a closed two-mode cavity (needs x_iris_mm), the Qe testbed
+        removes the internal iris and has no such parameter."""
         import inspect
         allowed = set(inspect.signature(fn).parameters)
         drop = sorted(set(cav) - allowed)
@@ -424,19 +396,9 @@ def cmd_calibrate(args) -> int:
         return {k: v for k, v in cav.items() if k in allowed}
 
     if args.what in ("k", "both"):
-        # Forward the device choice. This was NOT forwarded, so the k sweep
-        # always used calibrate()'s own default (GPU for dualmode) regardless
-        # of --device, and every one of its 6 eigenmode points died with
-        # CUDA_ERROR_OUT_OF_MEMORY -- silently, since calibrate() records a
-        # failed point as {"ok": False} rather than raising. The whole k
-        # curve came back empty and the k inversion produced nothing, which
-        # only surfaced later as --confirm failing with "mesh:'w_iris'".
         k_kw = _cav_for(topo.calibrate)
         if args.w_iris:
             k_kw["w_irises"] = [float(x) for x in args.w_iris.split(",")]
-        # No `except TypeError: calibrate(spec)` fallback here any more: it
-        # silently threw away --device and --cavity on any signature mismatch,
-        # which is how the k sweep ran on the wrong device in the first place.
         out["k"] = topo.calibrate(spec, device=args.device, **k_kw)
         _kpts = out["k"].get("points", {})
         _kok = sum(1 for r in _kpts.values() if isinstance(r, dict) and r.get("ok"))
@@ -467,9 +429,6 @@ def cmd_calibrate(args) -> int:
                 print(f"  w_ext={float(w):6.2f} -> Qe={r['Qe']:8.2f}  "
                       f"Q_L={r['Q_L']:7.2f}  bw={r['bw']:6.1f} MHz")
     # ---- invert: measured curves -> physical geometry for the spec ----
-    # Previously the CLI only MEASURED; inverting and confirming lived in
-    # synth_design.py, which is cascade-only, so every dual-mode run had to
-    # go through an ad-hoc script. This keeps the whole chain in the CLI.
     if args.invert:
         import numpy as _np
         from .synthesis import synthesize
@@ -487,14 +446,10 @@ def cmd_calibrate(args) -> int:
                 print(f"  WARNING: Qe target {qe_t:.2f} is OUTSIDE the measured "
                       f"range [{min(qes):.1f}, {max(qes):.1f}] -- this is an "
                       f"EXTRAPOLATION. Widen the w_ext sweep instead of trusting it.")
-            # BRACKET CHECK. The range test above only asks whether the
-            # target lies between the extreme measured Qe values; it cannot
-            # tell that some of those values are junk. Measured: two
-            # window-truncated points shared Qe=8.52, dragging the quadratic
-            # so it returned w_ext=15.51mm when the target was bracketed by
-            # 16mm and 19mm -- an answer outside its own bracket, reported
-            # without complaint. Verify the inverted value actually sits
-            # between the two points that straddle the target.
+            # The range check above only bounds the extreme measured Qe
+            # values; a bad point (e.g. window-truncated) can still drag the
+            # fit so the inverted value falls outside its own local bracket.
+            # Check that explicitly rather than trusting the polynomial.
             okp = sorted((float(w), d["Qe"])
                          for w, d in out["qe"]["points"].items() if d.get("ok"))
             lo = max((w for w, q in okp if q >= qe_t), default=None)
@@ -571,18 +526,13 @@ def cmd_scan(args) -> int:
     """Scan one geometry parameter on the ASSEMBLED filter and invert for a
     target bandwidth.
 
-    Why this exists. `siw calibrate` measures k and Qe on small PROXY
-    structures and inverts the textbook bandpass mapping. For the cascade
-    that transfers. For dual-mode it demonstrably does NOT: on 2026-09-03
-    both couplings were driven onto their synthesis targets (k=0.069,
-    Qe=16.86) and the assembled filter came back 334 MHz wide with ONE
-    reflection zero and -5.9 dB return loss -- worse than the un-calibrated
-    starting point. The reason is structural: the Qe testbed removes the
-    internal iris row to isolate "one resonator", but in a dual-mode cavity
-    the two resonators are two modes of the SAME cavity, so removing the
-    iris does not isolate one of them -- it produces a different, single-mode
-    resonator (measured 120 MHz higher in frequency). There is no proxy to
-    calibrate on, so measure the real structure instead.
+    Exists because `siw calibrate`'s proxy-structure approach (measure k/Qe
+    on a small testbed, invert the textbook mapping) does not transfer to
+    dual-mode: its Qe testbed removes the internal iris to isolate "one
+    resonator", but a dual-mode cavity's two resonators are two modes of the
+    SAME cavity, so removing the iris produces a different single-mode
+    resonator, not an isolated one. No proxy exists there, so this measures
+    the real assembled structure instead.
 
     Writes output/data/scan_<topology>_N<N>_<param>.json and a plot; both
     are incremental, so a scan that is still running is still readable.
@@ -626,15 +576,10 @@ def cmd_scan(args) -> int:
             _json.dump(out, open(path, "w"), indent=2, default=str)
             continue
         sh = pole_shape(_np.array(r["f"]), _np.array(r["s11_db"]), spec.N)
-        # Two guards, both recorded per point rather than averaged into the fit:
-        #   truncated -- a -3dB band running off the sweep window reads
-        #     NARROWER than it is (the failure that made the Qe calibration
-        #     report 61 where the truth was 22);
-        #   n_lobes>1 -- the response is SPLIT into disjoint passbands and the
-        #     `bw` number is one lobe, not the filter's band. Fitting through
-        #     those produced a smooth-looking 35/66/122/284 MHz curve whose
-        #     inversion pointed at the merge threshold, where no geometry
-        #     delivers the target bandwidth.
+        # Two guards, recorded per point rather than averaged into the fit:
+        # `truncated` -- a -3dB band running off the sweep window reads
+        # narrower than it is; `n_lobes>1` -- the response is split into
+        # disjoint passbands, so `bw` is one lobe, not the filter's band.
         rec = {"ok": True, "fc": r.get("fc_3db", r["fc"]), "bw": r["bw"],
                "il": r["il"], "s11w": r["s11w"], "poles": sh["n_zeros"],
                "truncated": bool(r.get("band_truncated")),
@@ -830,11 +775,9 @@ def cmd_sweep(args) -> int:
     else:
         params = _parse_params(args.params)
     if getattr(args, "enig", False) or getattr(args, "real_metal", False):
-        # --real-metal now works for CASCADE too (the exterior-face split was
-        # ported into palace_driven on 2026-09-03). --enig still does not:
         # ENIG/soldermask/silkscreen are meshed layers, unresolvable at this
-        # mesh density, and ENIG is in any case shielded behind ~14 skin
-        # depths of ground-plane copper. See docs/STATE.md.
+        # mesh density; ENIG is also shielded behind ~14 skin depths of
+        # ground-plane copper either way. See docs/STATE.md.
         if args.topology == "cascade" and getattr(args, "enig", False):
             print("--enig is not available for cascade (and is an RF no-op: the "
                   "plating sits on the shielded side of the ground plane). Use "
@@ -844,11 +787,9 @@ def cmd_sweep(args) -> int:
         from .topologies.dualmode import (JLCPCB_ENIG, JLCPCB_METAL,
                                           JLCPCB_SOLDERMASK, JLCPCB_SILKSCREEN,
                                           VIA_COVERED, VIA_OPEN)
-        # Any real-fabrication flag implies REAL COPPER, not PEC. PEC (the
-        # idealised lossless conductor) stays the default for a plain
-        # `siw sweep`, so every existing golden still reproduces exactly --
-        # but it makes no sense to model a soldermask/ENIG/via stack on top
-        # of a perfect conductor, so the fab flags switch the metal too.
+        # Any fab flag implies real copper, not PEC -- a soldermask/ENIG/via
+        # stack on a perfect conductor makes no sense. Plain `siw sweep`
+        # keeps PEC so every existing golden still reproduces exactly.
         preset = dict(JLCPCB_METAL)
         if getattr(args, "enig", False):
             preset.update(JLCPCB_ENIG)
@@ -860,9 +801,8 @@ def cmd_sweep(args) -> int:
         for k, v in preset.items():
             params.setdefault(k, v)   # --params can still override any of these
 
-    # Include N: two orders of the same topology (e.g. cascade N=3 vs N=4)
-    # share a mesh tag without this and silently overwrite each other's
-    # plot/JSON (measured this session -- lost an N=3 sweep result this way).
+    # N must be in the tag or two orders of the same topology share one mesh
+    # tag and silently overwrite each other's plot/JSON.
     prefix = f"sweep_{args.topology}_N{spec.N}"
     mmax, mmin, hair = _mesh_preset(topo.name, args.device)
     r = run_driven(topo, spec, params, prefix,
@@ -885,22 +825,15 @@ def cmd_sweep(args) -> int:
 
 
 def _fab_variant_specs():
-    # NOTE: deliberately NO VIA_COVERED / VIA_OPEN here. Those set
-    # via_conductivity_sm, which makes every SIW via a volumetric lossy
-    # conductor requiring the 1.21 um copper skin depth to be resolved
-    # against a 200 um finest cell -- 165x too coarse. The result is
-    # enormous spurious loss (measured IL = -28.96 dB where PEC gives
-    # -1.45 dB), and since the via fence IS the waveguide wall it destroys
-    # the cavity rather than perturbing it. See report.FAB_VARIANTS for the
-    # full reasoning, including why tented-vs-open is consequently not
-    # answerable at this mesh density.
-    # ONE-FACTOR-AT-A-TIME LADDER (2026-09-03). The combined stack returns
-    # IL=-29dB / S11w=-0.1dB / 0 zeros where PEC gives -1.45dB, and TWO
-    # successive guesses at the cause were both wrong: the via-cap exterior
-    # flag (fix changed nothing) and the volumetric via conductor (removing
-    # it changed nothing). Guessing a third time is not the method. Each
-    # cell below adds exactly ONE ingredient to the PEC baseline, so the
-    # culprit is identified by measurement instead of inference.
+    # No VIA_COVERED/VIA_OPEN here: that models every via as a volumetric
+    # lossy conductor needing the 1.21um copper skin depth resolved against
+    # a 200um finest cell -- unresolvable, and the via fence IS the
+    # waveguide wall, so the spurious loss destroys the cavity rather than
+    # perturbing it. See report.FAB_VARIANTS.
+    #
+    # Each cell below adds exactly ONE ingredient to the PEC baseline
+    # (one-factor-at-a-time), so a bad result points at its own cause
+    # instead of requiring inference across a combined stack.
     from .topologies.dualmode import (JLCPCB_METAL, JLCPCB_ENIG,
                                       JLCPCB_SOLDERMASK, JLCPCB_SILKSCREEN)
     return [
@@ -909,28 +842,11 @@ def _fab_variant_specs():
         ("only_enig",       {**JLCPCB_ENIG}),        # ENIG conductor domain -- UNRESOLVABLE
         ("only_mask",       {**JLCPCB_SOLDERMASK}),  # feed-region dielectric -- UNRESOLVABLE
         ("only_silk",       {**JLCPCB_SILKSCREEN}),  # silkscreen dielectric -- UNRESOLVABLE
-        # NO COPPER+ENIG CELL, and the reason is geometric rather than
-        # numerical (2026-09-03, user's observation).
-        #
-        # It is tempting to model the finish as one effective surface
-        # impedance for the two-layer stack: 4.5um Ni-P at 2.87GHz is 0.62
-        # skin depths, so a wave ARRIVING THROUGH THE PLATING sees
-        # Rs = 39.6 mohm/sq against copper's 13.8 -- 2.87x, equivalent to
-        # sigma = 7.225e6 S/m. That arithmetic is correct and irrelevant
-        # here: it describes the wrong side of the metal.
-        #
-        # The exterior ground planes are 17.5um of copper, ~14 skin depths.
-        # RF current flows on their INNER face, against the substrate. The
-        # ENIG is plated on the OUTER face, shielded behind all of that
-        # copper, carrying essentially no current. Charging it ENIG loss
-        # would attribute dissipation to a surface the field never reaches.
-        #
-        # ENIG can only matter where a plated surface FACES the field -- the
-        # microstrip feed trace and the CPWG ground pads. Those are internal
-        # two-sided sheets, where Palace's exterior-only Conductivity BC does
-        # not apply, and they are a small fraction of the wall current in any
-        # case. So the honest model is: ENIG is an RF no-op for this design.
-        # See docs/STATE.md, "what the fabrication stack costs".
+        # No combined copper+ENIG cell: ENIG plates the ground planes' OUTER
+        # face, shielded behind ~14 skin depths of copper from the RF
+        # current on the inner face, so it is an RF no-op here regardless of
+        # mesh resolution. See docs/STATE.md, "what the fabrication stack
+        # costs", for the full argument.
     ]
 
 
@@ -993,16 +909,12 @@ def cmd_compare_fab_variants(args) -> int:
             print(f"  {key}: fc={m.get('fc_3db', m['fc']):.3f}GHz  IL={m['il']:.2f}dB  "
                   f"BW={m['bw']:.0f}MHz  S11w={m['s11w']:.2f}dB  poles={sh['n_zeros']}"
                   f"  lobes={m.get('n_lobes', 1)}")
-            # PHYSICS GUARD against the PEC cell. A fabrication stack adds
-            # conductor and dielectric loss -- a fraction of a dB. It cannot
-            # add tens of dB, and it cannot IMPROVE the match to near-total
-            # reflection. Both directions have caught real modelling bugs
-            # here: an unassigned material domain once returned LESS loss
-            # than lossless metal, and an exterior-only surface-impedance BC
-            # applied to internal faces returned IL=-28.96dB with
-            # S11w=-0.07dB where PEC gives -1.45dB. Say so loudly rather
-            # than letting either land in a comparison table as if it were a
-            # fabrication penalty.
+            # A fabrication stack adds a fraction of a dB of conductor/
+            # dielectric loss -- it cannot add tens of dB, and it cannot
+            # improve the match to near-total reflection. Both directions
+            # have caught real modelling bugs (a bad Boundaries.Conductivity
+            # application, an unassigned material domain), so flag them
+            # loudly instead of letting either land in a table as a result.
             pec_m = (out.get("pec_optimized") or {}).get("metrics")
             if pec_m and key != "pec_optimized":
                 d_il = m["il"] - pec_m["il"]
@@ -1305,14 +1217,10 @@ def main(argv: list[str] | None = None) -> int:
     p_scn.add_argument("--np", type=int, default=8)
     p_scn.set_defaults(func=cmd_scan)
 
-    # `stackup` is deliberately NOT a CLI subcommand (2026-09-03, user's
-    # call: "make the stackup a feature not used in the cli"). The drawing
-    # helpers remain in report.py -- build_stackup_view, build_stackup_topview
-    # and verify_drawing_matches_mesh / verify_cascade_drawing_matches_mesh --
-    # and are called directly when a figure or a drawing-vs-mesh check is
-    # actually needed. Removing the subcommand keeps it out of the surface
-    # area to explore without losing the capability.
-
+    # `stackup` is deliberately not a CLI subcommand; its drawing helpers
+    # (report.build_stackup_view/build_stackup_topview/
+    # verify_drawing_matches_mesh/verify_cascade_drawing_matches_mesh) are
+    # called directly where needed, e.g. from `siw kicad --check`.
 
     p_fab = sub.add_parser("compare-fab-variants",
                            help="ONE overlay of every fabrication variant of a design "

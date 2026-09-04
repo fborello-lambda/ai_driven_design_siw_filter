@@ -1,28 +1,18 @@
 """Driven (2-port, real feed) model of the isolated dual-mode square cavity,
 IN-LINE port placement: both openings on opposite walls (x=0 input, x=a
-output), centered on the same y=0 axis, "one in front of the other" -- same
-axis convention as the rest of the filter chain (palace_driven.py's 3-cavity
-model also puts both ports at x=X0/x=X1 on one axis), so this cavity can
-slot into that same cascade later instead of needing a bent/L-shaped board.
+output), centered on the same y=0 axis -- same convention as palace_driven.py's
+3-cavity model, so this cavity can slot into that cascade without a bent board.
 
-Feed = Deslandes taper, same as the main filter (palace_driven.py): the
-microstrip trace stays at the true 50-ohm width W_ms near the SMA connector
-(so the connector match doesn't get broken), then flares out over length
-L_taper to the FULL cavity wall width at x=0/x=a. The via-fence wall
-OPENING (w_ext) is an independent parameter, narrower than the full flare --
-same as the main filter's own external iris: the copper overhangs the solid
-part of the via wall, only the w_ext gap actually couples fields into the
-cavity. (An earlier version pinned w_ext=W_ms directly, no flare -- a 25-eval
-Bayesian search over that topology never found a design with more than
--24dB peak S21 anywhere in a wide 5D box; decoupling the two, like the main
-filter already does successfully, is the fix.)
+Feed = Deslandes taper: the microstrip stays at the true 50-ohm width W_ms
+near the connector, then flares over L_taper to the full cavity wall width
+at x=0/x=a. The via-fence wall opening (w_ext) is an independent parameter,
+narrower than the flare -- pinning w_ext=W_ms directly (no flare) could never
+find a design better than -24dB peak S21 over a wide search; decoupling them
+fixes it, same as the main filter's external iris.
 
-INTERNAL iris: a single transverse via row perpendicular to the port axis,
-at x=x_iris (tunable distance from the x=0 wall, default a/2), floating
-between the two side walls (held off by y_wall on each end, not a full
-partition), with a centered gap of width w_iris. This is the secondary
-tuning control (mode-splitting/internal coupling), on top of the external
-w_ext/w_ms feed match.
+INTERNAL iris: a transverse via row at x=x_iris, floating between the side
+walls (held off by y_wall, not a full partition), with a centered gap of
+width w_iris -- the secondary tuning control on top of the external feed match.
 
 Run: uv run python -m siwfilter.palace_dualmode_driven --preview
 """
@@ -47,11 +37,9 @@ def _near(a: float, b: float, tol: float = 1e-3) -> bool:
 
 
 def _dims(a_mm, w_ms_mm, l_taper_mm, l_feed_mm):
-    # NOTE: deliberately NOT using siw_geometry.build_geometry(SPEC).W_ms --
-    # that returns the STALE pre-SMA-fix W_ms=2.26mm from config.py's
-    # OPTIMIZED_DESIGN cache (tuned against an idealized self-normalizing
-    # port, ~41 ohm, not real 50 ohm -- see docs/sma_connector/README.md).
-    # Recompute the true 50-ohm width directly instead.
+    # Recompute the true 50-ohm width directly rather than reading it off a
+    # cached Geometry -- see docs/sma_connector/README.md for why that cache
+    # can be stale (tuned against a self-normalizing port, not real 50 ohm).
     sub = SPEC.substrate
     W = w_ms_mm if w_ms_mm is not None else microstrip_width_50ohm(sub.eps_r, sub.h) * MM
     eps_eff_ms = microstrip_eps_eff(sub.eps_r, sub.h, W / MM)
@@ -78,15 +66,10 @@ def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall
     """Pure-geometry via-position computation, shared by build_mesh (gmsh)
     and plot_layout_2d (matplotlib) so the two never drift apart.
 
-    y_ext_off_mm / y_ext2_off_mm (2026-08-28, v6 Stage A calibration -- see
-    dualmode_cascade_v6_handoff_2026-08-28.md): shift the port-1 (x=0) /
-    port-2 (x=Li) coupling gap off y=0, independently, using the same
-    `_wall_with_gap` helper `geometries.dualmode_cascade()` uses for its own
-    port apertures. This reference single-cavity structure is the calibration
-    testbed for Qe(y_ext_off) -- cheaper and better-characterized than the
-    fragile cascade itself. Both default to 0.0, reproducing the exact prior
-    centred-gap via list (regression-verified: `_wall_with_gap` at off=0
-    emits the same point set `_segment_vias(w_ext/2,half,p)` +-o did)."""
+    y_ext_off_mm / y_ext2_off_mm shift the port-1 (x=0) / port-2 (x=Li)
+    coupling gap off y=0, independently, via the same `_wall_with_gap` helper
+    `geometries.dualmode_cascade()` uses for its own port apertures. Both
+    default to 0.0, reproducing the prior centred-gap via list exactly."""
     Li = a_mm
     half = a_mm / 2.0
     r = d_via_mm / 2.0
@@ -105,17 +88,15 @@ def _via_layout(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm, y_wall
     for xv in xs:
         vias.append((xv, -half))
         vias.append((xv, half))
-    # internal iris row: floats between the two side walls, held off by
-    # y_wall_mm at each end (not a full wall-to-wall partition), with a
-    # centered gap of width w_iris_mm -- see palace_dualmode.py for why.
-    # Segments span EXACTLY [w_iris/2, half-y_wall] (continuous in both).
+    # internal iris row: floats between the side walls, held off by y_wall_mm
+    # at each end (not a full partition); segments span EXACTLY
+    # [w_iris/2, half-y_wall] (continuous), see palace_dualmode.py.
     if w_iris_mm is not None:
         for o in _segment_vias(w_iris_mm / 2.0, half - y_wall_mm, p):
             vias.append((x_iris, o)); vias.append((x_iris, -o))
 
-    # Fab-rule spacing, not 0.9*d: the old threshold sat BELOW one via
-    # diameter and so permitted physically overlapping barrels. See
-    # geometries._dedupe for the measurement that turned this up.
+    # Fab-rule spacing, not 0.9*d: that threshold sat below one via diameter
+    # and permitted physically overlapping barrels.
     lim2 = min_via_centre_sep(2.0 * r) ** 2
     final: list[tuple[float, float]] = []
     for x, y in vias:
@@ -229,52 +210,23 @@ def gnd_stitch_layout(X0: float, X1: float, W: float, ym: float, ym_lo: float,
     polys: list[np.ndarray] = []
     centres: list[tuple[float, float]] = []
 
-    # ---- CPWG launch (2026-08-29) -------------------------------------
-    # When cpwg_gap_mm is given, the coplanar grounds are modelled as a real
-    # CPWG: a ground plane on the signal layer whose INNER edge sits exactly
-    # cpwg_gap_mm from the trace edge, held for cpwg_len_mm, then flared
-    # linearly away to the board edge over cpwg_taper_mm so the line becomes
-    # plain microstrip. Previously these were only small pads sized around
-    # the stitch vias with a placeholder 0.3mm clearance -- geometrically
-    # plausible but NOT impedance-matched, leaving a step right at the
-    # connector (the very thing the CPWG synthesis in siw_geometry.py
-    # exists to remove). cpwg_gap_mm=None reproduces the old pad-only
-    # behaviour exactly.
+    # ---- CPWG launch ----------------------------------------------------
+    # When cpwg_gap_mm is given, the coplanar grounds are a real CPWG: a
+    # rectangular ground pad per side per port, its INNER edge held at
+    # cpwg_y_gnd_mm for cpwg_len_mm. That edge is fixed, not tracking the
+    # trace, so it must not extend over the signal taper -- a widening trace
+    # under a fixed-gap ground pad closes the gap to nothing. The inner edge
+    # is the synthesised 50-ohm gap for the actual (constant-width) trace, so
+    # the launch is 50 ohm with no signal taper needed. Pinning it to the
+    # connector legs (2.62mm) instead would leave 51.3 ohm and put the stitch
+    # vias half in the gap, since they sit on that line.
+    # cpwg_gap_mm=None reproduces plain pad-only behaviour (small pads sized
+    # around the stitch vias, not impedance-matched).
     if cpwg_gap_mm is not None:
-        # Footprint-constrained CPWG (2026-08-29, corrected): the ground edge
-        # STARTS on the connector's own legs (cpwg_y_gnd_mm, +-2.62mm for the
-        # Taoglas part) and then TRACKS the widening trace inward so the gap
-        # ratio -- and hence 50 ohm -- is held all the way along the taper.
-        # This is the standard edge-launch practice: "the edge of the ground
-        # pads which opposes the tapering coplanar waveguide also tapers to
-        # track the slope, establishing a uniform distance to maintain
-        # characteristic impedance". The earlier version kept the trace at a
-        # constant width and let the grounds peel away, which is NOT the same
-        # structure and does not sit inside the connector footprint.
-        # Inner edge = the synthesised 50-ohm gap for the ACTUAL trace width,
-        # so the launch is 50 ohm with a constant-width signal trace (no
-        # signal taper needed: the microstrip width already is the CPWG width
-        # at this gap). Pinning the inner edge to the connector legs instead
-        # (2.62mm) would leave 51.3 ohm AND -- worse -- put the stitch vias
-        # half in the gap, since they sit exactly on that line. At 2.018mm
-        # the 0.6mm vias at +-2.62mm are fully inside the copper with 0.3mm
-        # clearance.
-        # RECTANGULAR ground pads on the top layer (2026-08-29, per design
-        # review): one plain rectangle per side per port. Its INNER edge sets
-        # the coplanar gap -- and it must sit close to the trace for this to
-        # be a real CPWG at all. With the grounds out at the connector legs
-        # (2.62mm) the line is already essentially microstrip, which is why
-        # the CPWG and microstrip 50-ohm widths differed by only 4% there.
-        # Bringing the inner edge in (cpwg_y_gnd_mm) makes the CPWG feed
-        # genuinely narrower than the microstrip, so the taper between them
-        # is a real transition rather than a cosmetic one.
         y_in = cpwg_y_gnd_mm if cpwg_y_gnd_mm is not None else (W / 2.0 + cpwg_gap_mm)
         y_out = (cpwg_y_out_mm if cpwg_y_out_mm is not None
                  else gnd_stitch_offset_mm + gnd_via_d_mm / 2.0 + 0.6)
         for x_edge, sign in ((X0, +1.0), (X1, -1.0)):
-            # Footprint-sized rectangle ONLY. It must not extend over the
-            # signal taper: the inner edge is fixed, so a widening trace under
-            # it would close the gap to nothing (measured 0.019mm -- touching).
             x_end = x_edge + sign * cpwg_len_mm
             xa, xb = sorted([x_edge, x_end])
             for sgn in (+1.0, -1.0):
@@ -402,20 +354,17 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                                          **geom_extra)
         x_iris = _info.get("x_iris", a_mm / 2.0)
         # Shrink the board onto the actual cavity instead of assuming a full
-        # a_mm square. Without this a half-mode cavity keeps a full-height
-        # board and its whole point -- a smaller, cheaper board -- disappears.
-        # The feed sits on y=0, so that line must stay inside the board even
-        # when the cavity is entirely on one side of it (half/quarter mode).
+        # a_mm square, so a half-mode cavity's smaller-board benefit isn't
+        # thrown away. The feed sits on y=0, which must stay inside the board
+        # even when the cavity is entirely on one side of it.
         vy = [p[1] for p in final]; vx = [p[0] for p in final]
         margin = 3.0
         if min(vy) >= 0.0:
-            # Cavity sits entirely above the feed axis => y=0 is an OPEN edge
-            # (half/quarter mode). A real HMSIW board is physically CUT there:
-            # the substrate ends and the dielectric-air step is what sustains
-            # the mode. Extending substrate past it into the Absorbing outer
-            # face instead turns the open edge into a SINK -- measured S11 only
-            # -3.7dB with no resonance anywhere, i.e. the cavity never formed.
-            # Leave just enough substrate to carry the feed trace.
+            # y=0 is an OPEN edge here (half/quarter mode): a real HMSIW
+            # board is physically cut there, and the dielectric-air step
+            # sustains the mode. Extending substrate past it into the
+            # Absorbing face turns the open edge into a sink instead (no
+            # resonance forms). Leave just enough substrate for the feed.
             ym_lo = -(W / 2.0 + 0.3)
         else:
             ym_lo = min(vy) - margin
@@ -425,25 +374,17 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         Xc0, Xc1 = X0 - sma_len_mm, X1 + sma_len_mm
         half = (ym - ym_lo) / 2.0             # taper flares to the board half-width
 
-    # Taper flare bounds. Symmetric geometries flare to +-half, but half- and
-    # quarter-mode cavities live entirely on one side of the feed axis, so a
-    # symmetric flare would put half the trace OUTSIDE the shrunken substrate
-    # -- which produces dangling faces and an MFEM STable3D abort, not a
-    # graceful error. Flare to the cavity's real extent instead.
-    #
-    # PER END FACE, not one global pair. The two faces need not have the same
-    # wall extent: corner_cut truncates the +x/+y corner, so its OUTPUT wall
-    # stops 8.6mm short of its input wall. Flaring both to the global max put
-    # 8.6mm of taper copper over open substrate where the via wall had been
-    # removed -- the flare is supposed to land ON the wall it feeds, and there
-    # was nothing under it. (Spotted from the 2D board view.)
-    # A flare only makes sense against a FLAT wall: the Deslandes taper
-    # transforms the 50-ohm microstrip into the waveguide's full transverse
-    # width, so it needs a wall of that width to land on. circular_cross and
-    # rhombic present a curve and a vertex at the feed axis -- there is no
-    # flat wall there, and flaring to the shape's global extent aims the
-    # copper at open substrate. Those feed through the aperture at the true
-    # 50-ohm width instead (TAPER_TO_WALL below).
+    # Taper flare bounds, PER END FACE, not one global pair. Symmetric
+    # geometries flare to +-half, but half/quarter-mode cavities live on one
+    # side of the feed axis (a symmetric flare would put half the trace
+    # outside the shrunken substrate -> dangling faces -> MFEM abort), and
+    # asymmetric shapes like corner_cut have different wall extents on each
+    # end (flaring both to the global max puts copper over open substrate on
+    # the shorter wall). A flare needs a FLAT wall to land on -- the
+    # Deslandes taper transforms the microstrip into the waveguide's full
+    # transverse width. circular_cross and rhombic present a curve/vertex at
+    # the feed axis instead, so those feed through at the true 50-ohm width
+    # (TAPER_TO_WALL below).
     def _face_ty(xf: float) -> tuple[float, float]:
         return face_ty(geometry, final, xf, W, half, ym, ym_lo)
 
@@ -453,12 +394,11 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     ty_lo = min(ty_in_lo, ty_out_lo)
     ty_hi = max(ty_in_hi, ty_out_hi)
 
-    # Top-metal window. For a normal cavity the ground plane spans the whole
-    # board, but a fractional-mode (half/quarter) cavity must NOT have metal
-    # past its open edge: substrate with PEC top AND bottom is a parallel-plate
-    # stub, and here it ran straight into the Absorbing outer face, so the
-    # cavity could never store energy (measured S11 only -7.7dB, S21 -84dB, no
-    # resonance). The open edge needs the top metal to stop with the cavity.
+    # Top-metal window: for a fractional-mode (half/quarter) cavity, metal
+    # must NOT extend past the open edge -- substrate with PEC top AND
+    # bottom running into the Absorbing face is a parallel-plate stub, and
+    # the cavity can never store energy. The top metal must stop with the
+    # cavity.
     if geometry is None:
         top_y_lo, top_y_hi = ym_lo, ym
     else:
@@ -468,14 +408,10 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     y_span = ym - ym_lo
 
-    # Clear a LEAKED gmsh session before starting. Every gmsh.finalize() in
-    # this function sits on a success path, so any exception in between --
-    # notably the empty-mesh failure the CPWG launch hits with thin
-    # fabrication layers -- leaves gmsh initialised. The next build in the
-    # same process then dies with "Gmsh has already been initialized" /
-    # "I'm busy!", so ONE real mesh failure silently became two, and the
-    # second looked like an unrelated bug. Recovering here fixes the whole
-    # class without reindenting 600 lines into a try/finally.
+    # Clear a leaked gmsh session: every gmsh.finalize() below sits on a
+    # success path, so an exception in between leaves gmsh initialised and
+    # the next build in this process dies with "I'm busy!" -- turning one
+    # real failure into two unrelated-looking ones.
     if gmsh.isInitialized():
         gmsh.finalize()
     gmsh.initialize()
@@ -484,47 +420,26 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     occ = gmsh.model.occ
 
     sub = (3, occ.addBox(X0, ym_lo, 0.0, X1 - X0, y_span, h))
-    # Soldermask (2026-09-01): a thin dielectric slab z in [h, h+t_mask] over
-    # the FEED region only, not the enclosed cavity top. The cavity top at
-    # z=h is modelled as a solid PEC sheet with no air above it at all (see
-    # the module docstring) -- there is no air volume there to subdivide,
-    # and CLAUDE.md's own physical argument is that mask over that fully-
-    # enclosed ground plane can't reach the cavity fields anyway. The feed's
-    # fringing fields ARE partly in air, so a mask there changes the
-    # microstrip's effective permittivity, shifting Z0 and electrical
-    # length -- that's the effect this parameter is for. mask_in/mask_out
-    # sit directly on the copper (bottom face at z=h, same plane trace_in/
-    # trace_out are built on); air_in/air_out shrink to start above the mask
-    # instead of at z=h. soldermask_um=None (default) reproduces the old
-    # geometry exactly -- byte-identical, regression-verified.
-    # ENIG (2026-09-02, v2 -- v1 was a real bug, see below): a real thin
-    # CONDUCTOR volume z in [h, h+t_enig], directly on the copper, not a
-    # boundary condition. Palace's Domains.Materials[].Conductivity is a
-    # genuine volumetric Ohmic-loss term with no internal/exterior-boundary
-    # restriction (unlike Boundaries.Conductivity, the exterior-only surface
-    # BC that blocked the via-fill study) -- a material domain's interfaces
-    # with its neighbors are handled by ordinary field continuity, needing
-    # no special boundary-condition code at all.
+    # Soldermask: a thin dielectric slab z in [h, h+t_mask] over the FEED
+    # region only, not the enclosed cavity top (that top has no air above it
+    # to subdivide, and mask over a fully-enclosed ground plane can't reach
+    # the cavity fields). The feed's fringing fields ARE partly in air, so a
+    # mask there shifts the microstrip's effective permittivity, Z0 and
+    # electrical length. soldermask_um=None reproduces the old geometry
+    # exactly.
     #
-    # v1 BUG (caught this session before it reached a golden result): shaped
-    # this like the soldermask box -- a FULL board-width slab. That's
-    # correct for soldermask (a dielectric that really does cover the whole
-    # board), but wrong for ENIG: a real conductor spanning the full width
-    # forms an unintended shorting plane across the ENTIRE feed cross
-    # section, not just over the actual copper trace (which is much
-    # narrower than the board for most of the taper's length). Measured
-    # result before the fix: S11w=-0.01dB, IL=-86dB, 0 filter poles detected
-    # -- the trace was electromagnetically shorted, not lightly loaded.
-    # Fixed by confining ENIG to feed_trace_poly's actual outline (the same
-    # polygon the "microstrip trace" PEC face classification already uses),
-    # extruded upward by t_enig; the leftover full-width-minus-trace region
-    # at that z-range is filled with plain air (same material as the air
-    # above it either way, so this costs nothing physically -- it only
-    # matters that no CONDUCTOR extends past the real copper).
-    # Only the SCALAR thickness is needed here (the air/soldermask boxes above
-    # are offset by it); the ENIG solids themselves are built further down,
-    # once gnd_polys (the CPWG ground pads) exist -- ENIG covers the ground
-    # pour too, not just the signal trace.
+    # ENIG: a real thin CONDUCTOR volume z in [h, h+t_enig], directly on the
+    # copper -- a volumetric Domains.Materials Conductivity domain (unlike
+    # Boundaries.Conductivity, which is exterior-only and cannot be used
+    # here). It must be confined to feed_trace_poly's actual outline, not a
+    # full board-width slab: a full-width conductor shorts the entire feed
+    # cross-section rather than lightly loading the trace (a full-width
+    # attempt measured S11w=-0.01dB, IL=-86dB, 0 poles -- an electromagnetic
+    # short, not a loss term). The leftover width outside the trace is
+    # filled with plain air, which costs nothing physically.
+    # Only the scalar thickness is needed here; the ENIG solids are built
+    # further down once gnd_polys (the CPWG ground pads) exist, since ENIG
+    # covers the ground pour too, not just the signal trace.
     enig_cond_objs_pre: list[tuple[int, int]] = []
     enig_gap_in: list[tuple[int, int]] = []
     enig_gap_out: list[tuple[int, int]] = []
@@ -546,33 +461,18 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     air_in = (3, occ.addBox(X0, ym_lo, z_stack, Xf, y_span, _hair))
     air_out = (3, occ.addBox(Li, ym_lo, z_stack, Xf, y_span, _hair))
 
-    # ---- v8 (2026-08-29): electric coupling slot in the TOP copper ----
-    # A cutout in the top ground plane, distinct from every via-fence
-    # mechanism tried in v1-v7 -- literature on cascaded dual-mode SIW/
-    # waveguide filters describes inter-cavity coupling via TWO separate
-    # elements: a magnetic coupling window (a via-fence gap, what this
-    # project already has) PLUS a separate electric coupling slot cut into
-    # the top plate at a different position, to reach the OTHER mode
-    # independently (see docs/geometry_exploration/
-    # dualmode_cascade_v6_handoff_2026-08-28.md sec 8/v8). v6/v7 exhausted
-    # every variant of moving/widening ONE via-fence aperture and found only
-    # monotonic coupling-strength change, never a second coupling path --
-    # consistent with a via-fence gap being a single (magnetic-only)
-    # mechanism that cannot also realize the electric-coupling role.
+    # Electric coupling slot: a cutout in the top ground plane, distinct
+    # from a via-fence gap (magnetic coupling only) -- cascaded dual-mode
+    # SIW filters need both a magnetic coupling window and a separate
+    # electric coupling slot to reach the other mode independently (see
+    # docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md
+    # sec 8/v8 for why widening a single via-fence aperture cannot do both).
+    # slot_x_mm=None (default) adds no geometry.
     #
-    # Until this parameter is set, NO new geometry is added and the model
-    # is byte-identical to before (regression-verified): slot_x_mm=None is
-    # the default for every existing caller.
-    #
-    # Physically this is a small, LOCAL air pocket sitting directly above a
-    # slot_l_mm x slot_w_mm hole in the top ground at (slot_x_mm, slot_y_mm),
-    # capped by Absorbing on its own outer faces (not PEC -- kept open/lossy
-    # rather than a closed reactive stub, the simpler and more conservative
-    # first model; a closed PEC cap is a natural v9 refinement if this
-    # shows real coupling but too much radiation loss). The slot must NOT
-    # overlap the existing air_in/air_out volumes (only meaningful for
-    # slot_x_mm well inside [0, Li], away from both port ends) or the cavity
-    # side walls (|slot_y_mm|+slot_w_mm/2 < top_y_hi).
+    # A small, local air pocket above a slot_l_mm x slot_w_mm hole in the
+    # top ground at (slot_x_mm, slot_y_mm), capped by Absorbing on its own
+    # outer faces (open/lossy, not a closed PEC stub -- the simpler first
+    # model). Must not overlap air_in/air_out or the cavity side walls.
     air_slot = None
     if slot_x_mm is not None:
         air_slot = (3, occ.addBox(slot_x_mm - slot_l_mm / 2.0, slot_y_mm - slot_w_mm / 2.0, h,
@@ -580,22 +480,15 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     cyls = [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, r)) for x, y in final]
 
-    # Filled vs unfilled (plated barrel) vias (2026-09-02, replaces the
-    # 2026-09-01 attempt): the main via fence's cylindrical hole (radius r,
-    # cut from `sub` below, unchanged) is now filled with a REAL conductor
-    # volume instead of just tagging its lateral surface PEC. Same fix as
-    # ENIG: a volumetric Domains.Materials Conductivity domain, not the
-    # exterior-only Boundaries.Conductivity surface BC -- the via wall's
-    # interface with the surrounding dielectric is an ordinary material
-    # interface (field continuity), needing no boundary-condition code at
-    # all, unlike the invalid 2026-09-01 attempt this replaces (confirmed
-    # invalid by Palace's own "internal and external boundary elements"
-    # MFEM warning on exactly this face).
-    # via_plating_um=None -> solid/filled (the whole radius-r cylinder is
-    # conductor); a given thickness -> hollow, plated to that depth, air
-    # inside. Scope: main via fence only (`final`), not the CPWG
-    # ground-stitch vias -- keeps this change's blast radius contained to
-    # the fence the task #43 study is actually about.
+    # Filled vs unfilled (plated barrel) vias: the main via fence's
+    # cylindrical hole is filled with a real conductor volume rather than
+    # tagging its lateral surface PEC -- a volumetric Domains.Materials
+    # Conductivity domain, same reasoning as ENIG (Boundaries.Conductivity
+    # is exterior-only and invalid on an internal via wall; Palace's own
+    # MFEM warning confirms this on that face).
+    # via_plating_um=None -> solid/filled; a given thickness -> hollow,
+    # plated to that depth, air inside. Scope: main via fence only (`final`),
+    # not the CPWG ground-stitch vias.
     via_plated = via_conductivity_sm is not None
     via_shell_objs: list[tuple[int, int]] = []
     via_core_objs: list[tuple[int, int]] = []
@@ -650,47 +543,28 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     _trace_poly_out = feed_trace_poly(X1, Li + Lt, Li, W, ty_out_lo, ty_out_hi,
                                       _wp, _xp_out, _xh_out).tolist()
 
-    # ---- connector ground: top-side pour + stitching vias ----
-    # The Taoglas EMPCB.SMAFSTJ.B.HT grounds through 4 discrete legs at the
-    # board edge (+-2.62mm either side of the centre signal pad), not the
-    # continuous ring the bare coax stub models. Without top-side copper in
-    # the feed span there is nothing for those legs to land on, and the
-    # return path has to detour to the bottom plane -- so this adds real
-    # coplanar ground beside the trace plus vias tying it down, which is what
-    # the fabricated board will actually have. Off by default: it changes the
-    # feed environment, so every design tuned against the old model stays
-    # reproducible until explicitly re-tuned with it.
+    # Connector ground: top-side pour + stitching vias. The Taoglas jack
+    # grounds through 4 discrete legs at the board edge; without top-side
+    # copper in the feed span there is nothing for those legs to land on and
+    # the return path detours to the bottom plane. Off by default, since it
+    # changes the feed environment for any design tuned without it.
     gnd_polys: list[np.ndarray] = []
     gnd_surfs: list[tuple[int, int]] = []
     gnd_via_centres: list[tuple[float, float]] = []
     if gnd_stitch:
-        # DISCRETE PADS, not a continuous pour. The datasheet footprint has two
-        # ground pads per face flanking the centre signal pad -- and modelling
-        # it as a full-length pour is not just less faithful, it is wrong: the
-        # stitch vias at +-2.62mm (r=0.75 -> inner edge 1.87mm) cap the usable
-        # clearance at ~1.04mm = 1.37*h, close enough to turn the 50-ohm
-        # microstrip into a grounded coplanar line and detune the very match
-        # this connector model exists to study. Localised pads keep the feed a
-        # true microstrip and confine the coplanar perturbation to the ~few mm
-        # right at the launch, which is what the real board does.
-        # Stitching vias get their OWN diameter: the SIW fence uses d_via_mm
-        # (1.5mm here, sized for the cavity wall), which is far larger than a
-        # real stitching via (~0.3mm drill / 0.6mm finished on JLCPCB). Reusing
-        # the fence size wasted pad area and capped the via count -- smaller
-        # barrels let several fit per pad, which is the point: more parallel
-        # vias = lower ground-return inductance at the launch.
-        # 2026-08-29: this used to duplicate gnd_stitch_layout()'s geometry
-        # inline; now it CALLS it, so the meshed model and every 2D drawing
-        # are guaranteed to agree (same reason feed_trace_poly/_via_layout are
-        # shared). That also makes the CPWG launch (cpwg_gap_mm) reach the
-        # actual simulation, not only the drawings.
-        #
-        # NOTE on the pour-vs-pads caveat above: with cpwg_gap_mm set, the
-        # grounds ARE a coplanar plane rather than isolated pads -- but that
-        # is now deliberate and impedance-matched (gap synthesised for 50 ohm
-        # by siw_geometry.cpwg_gap_50ohm), which is exactly what the real SMA
-        # footprint is. The old warning applies to an UNMATCHED pour, which
-        # is what a naive full-width pour at 0.3mm clearance would have been.
+        # Discrete pads, not a continuous pour, unless cpwg_gap_mm is set: a
+        # naive full-length pour at fixed clearance turns the 50-ohm
+        # microstrip into an unmatched grounded coplanar line. With
+        # cpwg_gap_mm the grounds ARE a coplanar plane, but a deliberately
+        # impedance-matched one (gap synthesised for 50 ohm), which is what
+        # the real footprint actually is.
+        # Stitching vias use their own diameter, not the SIW fence's d_via_mm
+        # (sized for the cavity wall and far larger than a real stitching
+        # via) -- smaller barrels let several fit per pad, lowering the
+        # ground-return inductance at the launch.
+        # Geometry comes from gnd_stitch_layout(), the same helper the 2D
+        # drawings use, so the meshed model and the drawings can't drift
+        # apart.
         rg = gnd_via_d_mm / 2.0
         gnd_polys, gnd_via_centres = gnd_stitch_layout(
             X0, X1, W, ym, ym_lo,
@@ -710,21 +584,16 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             gnd_surfs.append((2, occ.addPlaneSurface([occ.addCurveLoop(ln)])))
         cyls += [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, rg)) for x, y in gnd_via_centres]
 
-    # ---- ENIG solids (built here so gnd_polys exists) ----
-    # ENIG plates ALL exposed copper in reality. Electromagnetically it only
-    # MATTERS where fields actually touch it: the feed region's top copper,
-    # whose fringing fields are partly in air. On the cavity top ground and
-    # the bottom ground plane the ENIG sits on the OUTER face of a ground
-    # plane, shielded from the cavity fields by the copper (~35um = ~28 skin
-    # depths at 2.87GHz; a perfect shield in this model, where those planes
-    # are PEC sheets), so modelling it there would add geometry that provably
-    # cannot change the answer -- and would need the mesh domain extended
-    # above/below the board to hold it. Covered here, therefore: the signal
-    # trace AND the CPWG ground pour, the latter being the gap-adjacent
-    # copper where the coplanar launch concentrates its fields (a 0.2512mm
-    # gap in the landed design). Note Ni-P's skin depth at 2.87GHz is ~7.3um
-    # vs the 4.5um layer, so this is a partially field-penetrable lossy film,
-    # not a shield -- which is exactly why WHERE it sits matters.
+    # ENIG solids (built here so gnd_polys exists). ENIG plates all exposed
+    # copper in reality, but electromagnetically only matters where fields
+    # actually touch it -- the feed's top copper, whose fringing fields are
+    # partly in air. On the cavity top/bottom ground planes ENIG sits on the
+    # OUTER face, shielded from the cavity fields by ~28 skin depths of PEC
+    # copper, so modelling it there cannot change the answer. Covered here:
+    # the signal trace and the CPWG ground pour (the gap-adjacent copper
+    # where the launch concentrates its fields). Ni-P's skin depth at
+    # 2.87GHz (~7.3um) exceeds the 4.5um layer, so it is a partially
+    # field-penetrable lossy film where it does sit, not a shield.
     if enig_um:
         def _extrude_poly(poly, dz):
             pts = [occ.addPoint(px, py, h) for px, py in poly]
@@ -788,14 +657,11 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                     + enig_cond_objs)
     _, frag_map = occ.fragment(frag_objects, [trace_in, trace_out] + sma_caps + gnd_surfs)
     occ.synchronize()
-    # A full 360-degree annulus (the via plating shell) has its (x,y) centroid
-    # AT THE AXIS by rotational symmetry -- identical to the solid core's
-    # centroid -- so post-fragment geometric classification (centroid radial
-    # distance, the pattern used for every other volume in this function)
-    # CANNOT tell shell from core apart; both would silently land in
-    # via_core_vols. Track identity through fragment's own mapping instead:
-    # it's parallel to frag_objects, so the via_shell_objs/via_core_objs
-    # slices at the end tell us exactly which output tags each became.
+    # A full 360-degree annulus (the via plating shell) has its (x,y)
+    # centroid AT THE AXIS by rotational symmetry, identical to the solid
+    # core's -- geometric classification by centroid can't tell them apart.
+    # Track identity through fragment's own mapping instead, which is
+    # parallel to frag_objects.
     n_shell, n_core = len(via_shell_objs), len(via_core_objs)
     n_enig = len(enig_cond_objs)
     _base = len(frag_objects) - n_shell - n_core - n_enig
@@ -877,10 +743,9 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
         on_via = any((cx - vx) ** 2 + (cy - vy) ** 2 < (1.3 * r) ** 2
                      for vx, vy in via_centres) and cz <= h + 1e-6
         # Only the MAIN fence (`final`) gets real conductor volumes; the CPWG
-        # ground-stitch vias keep empty holes. The two must be distinguished
-        # here or the stitch-via walls are skipped from PEC while having no
-        # conductor behind them -- leaving unassigned exterior faces (found
-        # via the catch-all below: 94 faces at mid-substrate height).
+        # ground-stitch vias keep empty holes. Must be distinguished here or
+        # the stitch-via walls are skipped from PEC with no conductor behind
+        # them, leaving unassigned exterior faces (see the catch-all below).
         on_main_via = any((cx - vx) ** 2 + (cy - vy) ** 2 < (1.3 * r) ** 2
                           for vx, vy in final) and cz <= h + 1e-6
 
@@ -896,19 +761,12 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                 elif _near(yext, sma_rout_mm, 0.3):
                     on_sma_shell = True
             rad = math.hypot(cy, cz - h)
-            # The centroid-radius test alone is NOT sufficient: clipping the
-            # PTFE bottom (z>=0 ground contact) pulls the annulus end-face's
-            # centroid up toward the pin axis, to rad~0.396mm. Since the
-            # threshold scales with sma_rin_mm, it crosses that value at
-            # rin~0.3773mm and the coax DIELECTRIC cross-section gets tagged
-            # PEC -- shorting the coax, giving near-total reflection
-            # (S21~-80dB). That is the "razor-thin meshing instability"
-            # documented in docs/sma_connector/README.md (found there by
-            # bisection at 0.375/0.379 and only avoided, never explained);
-            # it is a classification bug, not a meshing tolerance, and it
-            # blocks the real Taoglas EMPCB.SMAFSTJ.B.HT pin (0.38mm).
-            # Disambiguate by EXTENT, which is unambiguous: the real cap disk
-            # spans ~rin, the PTFE annulus spans ~rout.
+            # Centroid-radius alone is not sufficient: clipping the PTFE
+            # bottom pulls the annulus end-face's centroid toward the pin
+            # axis, misclassifying it as the pin cap (and tagging the coax
+            # dielectric PEC, shorting the launch) once sma_rin_mm exceeds
+            # ~0.3773mm -- see docs/sma_connector/README.md. Disambiguate by
+            # EXTENT instead: the real cap disk spans ~rin, the annulus ~rout.
             if ((_near(cx, X0) or _near(cx, X1)) and rad < sma_rin_mm * 1.05
                     and yext <= sma_rin_mm * 1.5):
                 on_sma_cap = True
@@ -927,31 +785,19 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             if via_inner_r is not None and span < 2 * via_inner_r + 0.2 * r:
                 absorbing.append(tag)          # open hole: radiates to free space
             else:
-                # EXTERIOR-ness is a mesh-topology fact, never an assumption.
-                # This branch used to hardcode True ("a via CAP face, i.e.
-                # exterior"), which is right for a bare board but WRONG once
-                # the fabrication stack is on: with ENIG / soldermask /
-                # silkscreen meshed above, a cap at z=h has a volume on both
-                # sides and is an INTERNAL two-sided sheet. Flagging it
-                # exterior handed it to Palace's Boundaries.Conductivity
-                # surface-impedance BC, which is exterior-only -- the exact
-                # invalid-BC trap CLAUDE.md sec 10c says not to re-enter.
-                # Measured with the hardcoded True: the filled+capped variant
-                # returned IL=-28.96dB and S11w=-0.07dB on a geometry that
-                # gives -1.45dB under PEC, i.e. a short, not a loss. Use the
-                # same is_boundary test every other branch already uses.
+                # EXTERIOR-ness is a mesh-topology fact, never an assumption
+                # (a hardcoded True here is right for a bare board but wrong
+                # once ENIG/soldermask/silkscreen are meshed above, turning
+                # this cap into an internal two-sided sheet -- which would
+                # then wrongly get Palace's exterior-only Conductivity BC).
                 pec.append(tag); pec_ext_flag[tag] = is_boundary   # metal cap / ring
         elif on_main_via and via_plated:
-            # Filled vs unfilled via study (2026-09-02, replaces the invalid
-            # 2026-09-01 Boundaries.Conductivity attempt): the via wall's
-            # lateral surface is now a real conductor-dielectric material
-            # interface (see the via_shell_objs/via_core_objs construction
-            # above), not a boundary condition -- leave it unclassified so
-            # it falls through to the default (not is_boundary, since it has
-            # two neighboring 3D volumes) and gets no explicit BC at all,
-            # exactly like the ENIG-to-air/soldermask interface. The
-            # electrode's real Ohmic loss is carried by the via_conductor
-            # material domain's volumetric Conductivity, not by this face.
+            # The via wall's lateral surface is a real conductor-dielectric
+            # material interface (via_shell_objs/via_core_objs above), not a
+            # boundary condition -- leave it unclassified so it falls
+            # through with no explicit BC, like the ENIG-to-air interface.
+            # Its Ohmic loss is carried by the via_conductor material
+            # domain's volumetric Conductivity, not by this face.
             pass
         elif on_via or on_sma_pin or on_sma_shell or on_sma_cap:
             pec.append(tag); pec_ext_flag[tag] = is_boundary
@@ -986,16 +832,13 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     # CATCH-ALL: every exterior face MUST carry a boundary condition. The
     # classification above is an if/elif chain, so a face that enters a
-    # branch (e.g. the z==h branch) but matches none of its sub-cases falls
-    # out entirely and never reaches the `elif is_boundary` default. With
-    # PEC-only geometry those faces happened to be interior, so nothing was
-    # lost -- but the stacked fabrication layers (ENIG / soldermask /
-    # silkscreen) introduced exterior faces that hit exactly that hole, and
-    # Palace then warned "N mesh faces with no associated boundary element"
-    # and produced invalid physics rather than failing. Sweep up anything
-    # left over: the outer faces of a dielectric stack at the board edge
-    # radiate into free space, so Absorbing is the physically correct
-    # default for them. Reported, never silent.
+    # branch but matches none of its sub-cases falls out entirely without
+    # reaching the `elif is_boundary` default -- harmless with PEC-only
+    # geometry (those faces were interior), but the stacked fabrication
+    # layers introduce exterior faces that hit exactly that hole, and Palace
+    # then warns "no associated boundary element" and produces invalid
+    # physics rather than failing. Absorbing is the physically correct
+    # default for a dielectric stack's outer faces. Reported, never silent.
     _assigned = set(pec) | set(wave_in) | set(wave_out) | set(absorbing)
     _leftover = sorted(t for t in _all_boundary_faces if t not in _assigned)
     if _leftover:
@@ -1005,20 +848,14 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
                   f"-> Absorbing (z {min(_zs):.4f}..{max(_zs):.4f})")
         absorbing = sorted(set(absorbing) | set(_leftover))
 
-    # Real (lossy) metal, 2026-09-02. Every metal face was PEC -- a PERFECT,
-    # lossless conductor -- so the goldens modelled dielectric loss only and
-    # report an optimistically low insertion loss. Palace's
-    # Boundaries.Conductivity (surface impedance) is EXTERIOR-ONLY, which is
-    # why it failed on via barrels (internal, two-sided sheets), but the
-    # ground planes ARE exterior mesh boundaries -- nothing is meshed below
-    # z=0 or above the cavity top -- and they carry most of the wall current.
-    # So split the single PEC group: exterior metal gets real copper surface
-    # impedance, internal metal (trace with air above, via barrels) stays
-    # PEC. The field-facing side of an exterior ground face is its INNER
-    # surface (copper against the substrate), so copper's conductivity is the
-    # right value here -- any ENIG sits on the far, shielded side.
-    # metal_conductivity_sm=None (default) keeps everything PEC, reproducing
-    # every existing golden exactly.
+    # Real (lossy) metal. Palace's Boundaries.Conductivity (surface
+    # impedance) is EXTERIOR-ONLY -- invalid on via barrels and the trace
+    # (internal two-sided sheets), valid on the ground planes (true exterior
+    # mesh boundaries, and the biggest share of wall current). Split the PEC
+    # group on that basis. The field-facing side of an exterior ground face
+    # is its INNER surface (copper against the substrate), so copper's
+    # conductivity is right here -- any ENIG sits on the far, shielded side.
+    # metal_conductivity_sm=None (default) keeps everything PEC.
     pec_real = []
     if metal_conductivity_sm:
         pec_real = sorted(t for t in pec if pec_ext_flag.get(t))
@@ -1078,15 +915,12 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     ntet = len(gmsh.model.mesh.getElementsByType(4)[0])
     nnode = len(gmsh.model.mesh.getNodes()[0])
-    # An EMPTY mesh is a hard failure, not a small mesh. gmsh reports
+    # An EMPTY mesh is a hard failure, not a small mesh: gmsh reports
     # boundary-recovery trouble as warnings and still writes a valid-looking
-    # .msh with nothing in it; Palace then "solves" it and the run reads as a
-    # solver problem rather than a meshing one. Measured with the CPWG launch
-    # plus the thin fabrication layers, where the 4.5um ENIG and 12um
-    # silkscreen prisms spanning the 0.2512mm coplanar gap are
-    # extreme-aspect-ratio slivers -- the same stack meshes fine (77-80k
-    # nodes) under the pad-only launch. Fail here, where the cause is still
-    # visible.
+    # .msh with nothing in it, so Palace then "solves" it and the run reads
+    # as a solver problem rather than a meshing one. Typically caused by an
+    # extreme-aspect-ratio sliver -- thin fabrication layers over a narrow
+    # CPWG gap, for instance. Fail here, where the cause is still visible.
     if ntet == 0 or nnode == 0:
         gmsh.finalize()
         raise RuntimeError(

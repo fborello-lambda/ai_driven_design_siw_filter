@@ -77,45 +77,28 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     """
     with_sma=True replaces the bare microstrip WavePort at each feed end with a
     coax launch (pin r=sma_rin_mm, PTFE r=sma_rout_mm, eps_r=2.08 -> ~50 ohm by
-    construction) soldered to the existing trace end.
+    construction) soldered to the existing trace end. A wave port dropped
+    straight on the microstrip self-normalizes to the local trace impedance
+    and can't reveal a true 50-ohm mismatch, which is why this exists.
 
-    Default rin/rout (0.35/1.164mm): close to a real, in-stock, mainstream
-    part -- Cinch/Johnson Components 142-0701-881 (DigiKey #210495), "SMA
-    Jack, Board Edge, End Launch Solder," spec'd for 0.031in (0.79mm) PCB
-    thickness (essentially this board, 0.76mm) with a 0.030in (0.381mm
-    radius) round contact -- but backed off slightly from that exact 0.381mm
-    to 0.35mm. Bisection found a razor-thin (~4 micron!) meshing/tolerance
-    edge case in this geometry construction between rin=0.375mm (clean) and
-    rin=0.379mm (extra spurious PEC faces appear, near-total reflection) --
-    0.381mm sits right on that unstable edge. 0.35mm is safely clear of it,
-    verified working (-13 to -46dB), and still realistic/smaller than the
-    trace. rout is back-solved from the 50-ohm PTFE coax formula at that pin
-    size (any SMA-family part is 50 ohm by definition, which fixes the
-    ln(rout/rin) ratio). This replaces an earlier attempt that used full
-    SMA/RG-401 body
-    size (0.82/2.73mm) -- a pin that size is literally taller than this board
-    (0.76mm) and gave near-total reflection (-0.2dB) even with a verified-
-    correct port/connectivity setup; real connectors for thin boards use a
-    proportionally thinner launch pin for exactly this reason, confirmed by
-    this actual datasheet. The board edge (x=X0/X1) stays exactly where it
-    was; the coax stub is new geometry bolted on beyond it, so the SIW/taper/feed pipeline
-    is unchanged. The PTFE cylinder is clipped to z>=0 near the board edge
-    only (not the whole stub -- clipping the whole thing severs the coax
-    ring, killing the TEM mode) so its shell meets the bottom ground plane
-    (the connector's ground flange/legs -- see calibration-status memory for
-    why grounding matters: a wave port dropped straight on the microstrip
-    self-normalizes to whatever the local trace impedance is, so it can't
-    reveal a true 50-ohm mismatch).
+    Default rin/rout (0.35/1.164mm) track a real board-edge SMA jack rated
+    for this board thickness, backed off slightly from its 0.381mm datasheet
+    radius to clear an unstable meshing edge between rin=0.375-0.379mm found
+    by bisection (extra spurious PEC faces, near-total reflection). rout is
+    back-solved from the 50-ohm PTFE coax formula at that pin size. The pin
+    must stay well under the board thickness -- a full RG-401-size pin
+    (0.82mm) is literally taller than this board and shorts the mode.
 
-    gnd_stitch=True adds the connector's coplanar ground pads + stitching vias
-    (Taoglas EMPCB.SMAFSTJ.B.HT footprint), same construction as
-    palace_dualmode_driven.build_mesh -- see gnd_stitch_layout for the
-    geometry. cpwg_gap_mm (+ cpwg_y_gnd_mm/cpwg_y_out_mm/cpwg_w_feed_mm) turns
-    the pads into a real impedance-matched CPWG launch instead of a pad-only
-    approximation; the solved 50-ohm values are in
-    docs/TUNING_PLAN_2026-08-29.md sec 2 (gap 0.2512mm, ground inner edge
-    0.8512mm, feed 1.2mm). Both default off/None: with them unset the model
-    is byte-identical to before.
+    The PTFE cylinder is clipped to z>=0 only near the board edge (clipping
+    the whole stub severs the coax ring and kills the TEM mode), so its
+    shell meets the bottom ground plane.
+
+    gnd_stitch=True adds the connector's coplanar ground pads + stitching
+    vias (Taoglas EMPCB.SMAFSTJ.B.HT footprint) via gnd_stitch_layout, same
+    construction palace_dualmode_driven.build_mesh uses. cpwg_gap_mm (+
+    cpwg_y_gnd_mm/cpwg_y_out_mm/cpwg_w_feed_mm) turns the pads into a real
+    impedance-matched CPWG launch instead of a pad-only approximation. Both
+    default off/None, in which case the model is unchanged.
     """
     spec = spec or SPEC
     g = build_geometry(spec)
@@ -226,22 +209,12 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
             gnd_surfs.append((2, occ.addPlaneSurface([occ.addCurveLoop(ln)])))
         cyls += [(3, occ.addCylinder(x, y, 0.0, 0, 0, h, rg)) for x, y in gnd_via_centres]
 
-    # ---- SMA coax launch stubs (standard RG-401/SMA size: pin r=sma_rin_mm,
-    # PTFE r=sma_rout_mm, eps_r~2.08 -> ~50 ohm by construction). Bolted onto
-    # the existing trace end at x=X0/X1; board/taper/feed geometry above is
-    # untouched.
-    #
-    # Grounding the shell to z=0 needs care: clipping the WHOLE stub to z>=0
-    # (as a first attempt did) severs the ring, because sma_rin_mm > h means
-    # the clip plane cuts through the FULL annulus width at the bottom angle
-    # (both the rin and rout points there sit below z=0) -- the shell becomes
-    # a simply-connected "C" cross-section, not a ring around the pin hole.
-    # A simply-connected port cross-section has no TEM solution (only
-    # evanescent higher modes), confirmed against Palace's own coaxial
-    # example (which finds clean TEM, Z_PV=50.0 ohm, on an unclipped ring).
-    # Fix: only clip a short ground-contact segment right at the board edge;
-    # the port face (at Xc0/Xc1) and most of the stub stay a full, proper
-    # coax ring so the eigensolver finds the real TEM mode. ----
+    # SMA coax launch stubs, bolted onto the existing trace end at x=X0/X1.
+    # Only a short ground-contact segment at the board edge is clipped to
+    # z>=0, not the whole stub: since sma_rin_mm > h, clipping the whole
+    # thing cuts through the full annulus width at the bottom, turning the
+    # ring into a simply-connected "C" cross-section with no TEM solution.
+    # The port face (Xc0/Xc1) and most of the stub stay a full ring.
     ptfe_vols: list[tuple[int, int]] = []
     sma_caps: list[tuple[int, int]] = []
     sma_ground_mm = min(1.5, 0.4 * sma_len_mm)   # ground-contact segment length
@@ -264,11 +237,9 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
 
             cap = (2, occ.addDisk(x_edge, 0, h, sma_rin_mm, sma_rin_mm))
             occ.rotate([cap], x_edge, 0, h, 0, 1, 0, math.pi / 2)
-            # clip to z>=0 too: sma_rin_mm > h means the disk otherwise pokes
-            # a sliver below the board with no volume to embed into there ->
-            # dangling face -> MFEM STable3D abort (same failure mode as an
-            # unclipped via cut, see the note below). The cap sits exactly at
-            # x_edge, inside the ground-clip segment, so this is consistent.
+            # Clip to z>=0: sma_rin_mm > h means the disk otherwise pokes a
+            # sliver below the board with no volume to embed into -> dangling
+            # face -> MFEM abort.
             cap_clip = (3, occ.addBox(x_edge - 0.5, -(sma_rin_mm + 1.0), zlo,
                                       1.0, 2 * (sma_rin_mm + 1.0), -zlo))
             cap_cut, _ = occ.cut([cap], [cap_clip], removeObject=True, removeTool=True)
@@ -356,11 +327,9 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
                 elif _near(yext, sma_rout_mm, 0.3):
                     on_sma_shell = True
             rad = math.hypot(cy, cz - h)
-            # See palace_dualmode_driven.py for the full root-cause note: the
-            # centroid-radius test alone misclassifies the clipped PTFE
-            # annulus end-face as the pin cap once sma_rin_mm > ~0.3773mm,
-            # tagging the coax dielectric PEC and shorting the launch. Gate it
-            # on EXTENT too (cap spans ~rin, annulus spans ~rout).
+            # Centroid-radius alone misclassifies the clipped PTFE annulus
+            # end-face as the pin cap once sma_rin_mm > ~0.3773mm, shorting
+            # the launch. Gate on EXTENT too (cap spans ~rin, annulus ~rout).
             if ((_near(cx, X0) or _near(cx, X1)) and rad < sma_rin_mm * 1.05
                     and yext <= sma_rin_mm * 1.5):
                 on_sma_cap = True
@@ -389,18 +358,14 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     pec = sorted(set(pec))
     absorbing = sorted(set(absorbing) - set(pec) - set(wave_in) - set(wave_out))
 
-    # Real (lossy) metal, ported from palace_dualmode_driven 2026-09-03 so the
-    # CASCADE can carry the same conductor-loss model the dual-mode design
-    # already had. Palace's Boundaries.Conductivity (surface impedance) is
-    # EXTERIOR-ONLY -- valid on the ground planes, which are true one-sided
-    # mesh boundaries, and invalid on via barrels and the trace, which are
-    # internal two-sided sheets. So split the single PEC group: exterior
-    # metal gets real copper, internal metal stays PEC.
-    # EXTERIOR-ness comes from mesh topology (is_boundary), never from an
-    # assumption about z -- a face's exterior status changes the moment
-    # anything is meshed above it.
-    # metal_conductivity_sm=None (the default) keeps everything PEC and
-    # reproduces every existing cascade golden exactly.
+    # Real (lossy) metal. Palace's Boundaries.Conductivity (surface impedance)
+    # is EXTERIOR-ONLY -- valid on the ground planes (true one-sided mesh
+    # boundaries), invalid on via barrels and the trace (internal two-sided
+    # sheets). Split the PEC group on that basis: exterior gets real copper,
+    # internal stays PEC. Exterior-ness comes from mesh topology
+    # (is_boundary), never an assumption about z, since that status changes
+    # the moment anything is meshed above a face.
+    # metal_conductivity_sm=None (default) keeps everything PEC.
     pec_real = []
     if metal_conductivity_sm:
         pec_real = sorted(t for t in pec if pec_ext_flag.get(t))
@@ -499,12 +464,9 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     gmsh.finalize()
     return {"mesh": out, "tets": ntet, "nodes": nnode, "legend": legend,
             "metal_real": metal_info,
-            # Report the launch geometry the mesher ACTUALLY built, so a
-            # drawing can be checked against it rather than trusted. The
-            # cascade layout drifted from the mesh unnoticed until
-            # 2026-09-03 (constant-width feed drawn where the mesher
-            # narrows and tapers it -- coplanar gap shown as 0.019mm
-            # instead of 0.2512mm) precisely because this did not exist.
+            # The launch geometry actually built, so a drawing can be
+            # checked against it rather than trusted -- the cascade layout
+            # once drifted from the mesh unnoticed for lack of this.
             "launch_geom": {
                 "gnd_via_centres": [list(map(float, c)) for c in gnd_via_centres],
                 "via_centres_mm": [[float(x * MM), float(y * MM)] for x, y in via_xy],

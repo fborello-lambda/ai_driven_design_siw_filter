@@ -23,75 +23,55 @@ from .base import MeshResult, ParamRange
 # THE launch -- one definition for the whole project (see launch.py).
 from .launch import TAOGLAS_CPWG as TAOGLAS_SMA
 
-# Winning 1.5/3.0mm design region (docs/dualmode_cavity/README.md) -- centers
-# the default search box on what's already validated rather than blind-
-# searching the original wide box.
+# Default search box, centred on the validated design region
+# (docs/dualmode_cavity/README.md) rather than a blind wide box. Lower
+# bounds on w_iris/w_ext extend below the landed design: bandwidth scales
+# with both couplings, and narrowing the band requires weaker coupling
+# (smaller w_iris -> k12, smaller w_ext -> Qe) than the landed point sits at.
 _PARAMS: dict[str, ParamRange] = {
     "a":      (57.21, 55.3, 58.7),
-    # 2026-08-29 (v18): lower bounds on the two COUPLING widths extended well
-    # below the landed design. The old box was centred on the wide-bandwidth
-    # optimum (landed w_iris=15.26 sat just under its own 15.9 ceiling), so a
-    # search for a NARROWER passband could not physically reach the region it
-    # needed: bandwidth scales with both couplings, and narrowing it requires
-    # WEAKER coupling, i.e. smaller w_iris (internal, sets k12) and smaller
-    # w_ext (external, sets Qe). Target for N=2/0.1dB/5%: k12~0.069, Qe~16.9,
-    # versus the landed design's measured 318MHz (11.1% FBW) -- roughly 2.2x
-    # too wide, so real room below is required, not a token margin.
     "w_iris": (15.26, 6.0, 15.9),
     "x_iris": (28.68, 27.0, 30.4),
     "y_wall": (8.62,  7.5, 13.0),
     "w_ext":  (16.31, 8.0, 17.6),
 }
 
-# Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA jack -- the real, sourceable part
-# this design now targets. Pin radius is the datasheet 0.76mm diameter / 2,
-# modelled at its TRUE size: the historical 0.35mm backoff existed only to
-# dodge the PEC-misclassification bug since fixed in
-# palace_dualmode_driven.build_mesh (see docs/sma_connector/README.md). rout
-# follows the same Z0=50ohm PTFE coax relation as before (rout/rin = 3.326).
-# gnd_stitch models the connector's 4 discrete ground legs at +-2.62mm and the
-# top-side pour they solder to, rather than the idealised continuous ring.
-# JLCPCB's actual finish stack (2026-09-02, per the user): Rogers substrate
-# -> copper -> ENIG -> soldermask -- "overall" ENIG (plated before masking),
-# not the cheaper "selective" default (mask first, ENIG only at exposed
-# pads). Real IPC-4552 numbers, the standard JLCPCB follows: nickel
-# 3.0-6.0um (4.5um midpoint used here), gold flash 0.05-0.1um (too thin to
-# matter separately, not modelled). Conductivity/permeability from
-# electroless Ni-P plating data (Advanced Plating Technologies / Nickel
-# Institute): medium-phosphorus (5-9% P, the standard solderable
-# formulation) gives ~50-70 uOhm-cm resistivity (1.67e6 S/m used here) and
-# is essentially non-magnetic at RF (mu_r~1.0 for P>=5%, vs >1 for low-P --
-# low-P is specifically avoided in RF-sensitive applications per
-# intermodulation-distortion literature). Modelled as a real volumetric
-# conductor (Domains.Materials Conductivity), NOT the exterior-only
-# Boundaries.Conductivity surface BC -- see palace_dualmode_driven.py's
-# enig_um docstring for why that distinction matters.
+# Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA jack. Pin radius is the
+# datasheet 0.76mm diameter / 2, modelled at true size. rout follows the
+# Z0=50ohm PTFE coax relation (rout/rin=3.326). gnd_stitch models the
+# connector's 4 discrete ground legs at +-2.62mm and the pour they solder
+# to, not an idealised continuous ring.
+#
+# JLCPCB's "overall" ENIG stack (plated before masking, not the cheaper
+# selective/mask-first process): IPC-4552 nickel 3.0-6.0um (4.5um midpoint),
+# gold flash too thin to matter separately. Conductivity/permeability from
+# electroless Ni-P plating data: medium-phosphorus (5-9% P, the standard
+# solderable formulation) gives ~50-70 uOhm-cm (1.67e6 S/m) and is
+# essentially non-magnetic at RF (mu_r~1.0). Modelled as a real volumetric
+# conductor (Domains.Materials), not the exterior-only Boundaries.Conductivity
+# surface BC -- see palace_dualmode_driven.py's enig_um docstring for why
+# that distinction matters.
 JLCPCB_ENIG: dict[str, float] = {
     "enig_um": 4.5,
     "enig_conductivity_sm": 1.67e6,
     "enig_mu_r": 1.0,
 }
 
-# Real (lossy) copper instead of PEC. 5.96e7 S/m is annealed copper. The
-# THICKNESS is not hardcoded: it comes from the substrate's own copper
-# cladding weight (config.SUBSTRATES' cu_oz -> Substrate.cu_thickness()).
-# For the default RO4350B_0.76mm that is cu_oz=0.5, i.e. 17.5um -- NOT the
-# 1oz/35um a generic FR4 assumption would give. At 2.87GHz copper's skin
-# depth is 1.22um, so even 17.5um is ~14 skin depths: electrically thick,
-# so the surface-impedance model applies and anything plated on the far
-# side (ENIG) stays shielded from the cavity fields.
-# NOTE: this is the BASE cladding. A plated-through-hole process adds
-# roughly 20-25um more on the outer layers, so finished outer copper is
-# thicker still; the base value is the conservative choice.
+# Real (lossy) copper instead of PEC, 5.96e7 S/m annealed copper. Thickness
+# comes from the substrate's own cladding weight (Substrate.cu_thickness()),
+# not a hardcoded 1oz/35um -- RO4350B_0.76mm's 0.5oz gives 17.5um, still
+# ~14 skin depths at 2.87GHz (1.22um), so electrically thick: the
+# surface-impedance model applies and anything plated on the far side
+# (ENIG) stays shielded from the cavity fields. This is the base cladding;
+# plated-through-hole processing adds outer copper, so it's conservative.
 JLCPCB_METAL: dict[str, float] = {
     "metal_conductivity_sm": 5.96e7,
 }
 
-# Soldermask + silkscreen, JLCPCB standard LPI process. Soldermask Dk 3.8 /
-# Df 0.02 are JLCPCB's own published-ish values (jitxlib.jlcpcb.materials;
-# their Df is flagged "a guess" there, and they publish no better one).
-# 20um is mid-range of their 15-30um cured LPI thickness. Silkscreen is a
-# thinner epoxy ink layer applied ON TOP of soldermask.
+# Soldermask + silkscreen, JLCPCB standard LPI process. Dk/Df are JLCPCB's
+# own published values (Df flagged "a guess" there, nothing better exists).
+# 20um is mid-range of their 15-30um cured thickness; silkscreen is a
+# thinner epoxy ink layer on top of the mask.
 JLCPCB_SOLDERMASK: dict[str, float] = {
     "soldermask_um": 20.0, "soldermask_eps_r": 3.8, "soldermask_tand": 0.02,
 }
@@ -99,14 +79,11 @@ JLCPCB_SILKSCREEN: dict[str, float] = {
     "silkscreen_um": 12.0, "silkscreen_eps_r": 3.2, "silkscreen_tand": 0.02,
 }
 
-# Via cover/fill. cover=True models the premium resin-filled + copper-capped
-# via (a solid conductor plug, no hole through the board); cover=False models
-# the standard open plated barrel (hollow copper shell, air core). Plating is
-# 50um rather than the realistic 20-25um purely because of a MESHING floor
-# measured on this geometry: 40um meshes, 35um and below fail with a
-# TetGen/OCC PLC error (not a mesh-density knob -- mesh_min=0.01mm also
-# fails). Physically harmless for the comparison: both 25um and 50um are
-# tens of copper skin depths at 2.87GHz, so both are "electrically thick".
+# Via cover/fill: COVERED = resin-filled + copper-capped (solid plug, no
+# hole); OPEN = standard open plated barrel. Plating is 50um rather than a
+# realistic 20-25um because of a MESHING floor on this geometry (35um and
+# below fail with a TetGen/OCC PLC error) -- harmless for the comparison,
+# both are tens of skin depths at 2.87GHz, i.e. electrically thick either way.
 VIA_COVERED: dict[str, float] = {"via_conductivity_sm": 5.96e7}
 VIA_OPEN: dict[str, float] = {"via_conductivity_sm": 5.96e7, "via_plating_um": 50.0}
 
@@ -209,14 +186,9 @@ class DualModeTopology:
         for we in w_exts:
             # w_iris=None -> no internal iris row -> single-mode resonator
             p = dict(a=a_mm, w_iris=None, x_iris=None, y_wall=y_wall_mm, w_ext=we)
-            # Window sized to the MEASUREMENT, not to f0. The original
-            # +-0.6GHz at 5MHz spent ~92% of its 241 points far from the
-            # resonance: the -3dB band being measured is only ~100MHz wide.
-            # fc also slides down with aperture width (-13.9 MHz/mm measured:
-            # 2.896GHz at 8mm -> 2.785 at 16mm), extrapolating to ~2.62GHz at
-            # 28mm, so the window is offset low rather than centred on f0.
-            # 65 points instead of 241 -- 3.7x fewer solves per point, with
-            # 10MHz still giving ~10 points across a 100MHz band.
+            # Window sized to the ~100MHz -3dB band being measured, not f0.
+            # fc slides down with aperture width (~-13.9 MHz/mm), so the
+            # window is offset low rather than centred on f0.
             r = run_driven(self, spec, p, f"dmqe_we{we:.1f}",
                            fmin_ghz, fmax_ghz, step_ghz, mmax, mmin, hair,
                            device=device, np_ranks=np_ranks)
@@ -231,12 +203,9 @@ class DualModeTopology:
                 points[we] = {"ok": False, "err": "no -3dB band"}
                 print(f"  w_ext={we:.1f}: no -3dB band", flush=True)
                 continue
-            # TRUNCATION GUARD. band_edges() returns the sweep window itself
-            # when the -3dB band runs past its edge, which is indistinguishable
-            # from a genuine measurement of exactly that width. Measured: 25mm
-            # and 28mm both returned bw=650.0MHz, exactly fmax-fmin, and the
-            # identical Qe=8.52 at two different apertures then dragged the
-            # inversion fit outside its own bracket. Reject instead.
+            # TRUNCATION GUARD: band_edges() returns the sweep window itself
+            # when the -3dB band runs past its edge, indistinguishable from a
+            # genuine measurement of exactly that width. Reject instead.
             span_mhz = (fmax_ghz - fmin_ghz) * 1000.0
             if bw >= 0.98 * span_mhz:
                 points[we] = {"ok": False,
@@ -341,19 +310,10 @@ class DualModeTopology:
                 results[w] = {"ok": False, "freqs": freqs.tolist()}
                 continue
             # Select the split pair by PROXIMITY TO f0, not by smallest gap.
-            # Palace returns N converged eigenvalues near the target without
-            # hard-clipping them to [Target, TargetUpper], so the list also
-            # carries higher-order modes -- and those cluster far more tightly
-            # than the degenerate pair we want. Measured here at w_iris=16mm:
-            #   2.9016  3.1386 | 3.9440 3.9701 | 4.7652 5.0353 5.3152
-            #   gaps:   0.237    0.805  0.026    0.795  0.270  0.280
-            # The old argmin(gaps) rule picked the 0.026 GHz pair at ~3.96 GHz
-            # (a higher-order family), giving k~0.005 against a target of
-            # 0.069 and barely varying with w_iris -- a meaningless curve that
-            # looked plausible. This is the SAME bug already found and fixed
-            # in cascade.calibrate (CLAUDE.md sec 0: "eigenmode pair =
-            # smallest gap ... k=0.0028 instead of 0.0583, 21x error",
-            # commit a5877cd); the fix was never ported here.
+            # Palace's eigenvalue list also carries higher-order modes, which
+            # cluster more tightly than the degenerate pair wanted here --
+            # argmin(gaps) picks one of those instead (same class of bug as
+            # cascade.calibrate's, commit a5877cd).
             f0_ghz = spec.f0 / 1e9
             in_win = freqs[np.abs(freqs - f0_ghz) <= window]
             if len(in_win) < 2:

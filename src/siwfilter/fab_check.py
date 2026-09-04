@@ -236,9 +236,8 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
             section="rules")
 
     # ---- 6b. the connector physically fits ----------------------------
-    # From the datasheet in docs/sma_connector/ (Taoglas SPE-12-8-134/C/WY),
-    # checked 2026-09-04. These are the numbers that decide whether the part
-    # can be soldered on at all, which no gerber check can see.
+    # From the datasheet (docs/sma_connector/, Taoglas SPE-12-8-134/C/WY) --
+    # whether the part can be soldered on at all, which no gerber check sees.
     if launch.get("cpwg_gap_mm") is not None:
         from .topologies.launch import (TAOGLAS_MAX_BOARD_MM,
                                         TAOGLAS_MAX_BOARD_FOOTPRINT_NOTE_MM)
@@ -301,12 +300,9 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
         f"straddles this edge", section="rules")
 
     # ---- 9. the CST macro places the same solids -----------------------
-    # cst_export has now produced TWO silent unit errors: `gnd_stitch_layout`
-    # fed metres where it wanted mm (0 stitching vias emitted), then the fix
-    # over-applied and the whole CPWG launch came out at 1000x -- SMA pin at
-    # radius 380mm, stitching vias 30 metres off the board -- on a macro
-    # whose cavity section was perfectly correct. Neither raised. So the .bas
-    # is now checked the same way the gerbers are: by reading it.
+    # cst_export's metres/mm unit mixups have twice been silent (wrong
+    # scale, no error), so the .bas is checked the same way the gerbers
+    # are: by reading it, not by trusting the generator.
     from .config import out_bas
     bas = out_bas(f"{stem}.bas")
     if os.path.exists(bas):

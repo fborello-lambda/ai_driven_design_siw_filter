@@ -83,10 +83,9 @@ def _draw_launch_footprint(ax, g: Geometry, launch: dict) -> None:
         for x_edge in (X0, X1):
             ax.add_patch(Circle((x_edge, 0.0), rin, fc="none", ec="#c00",
                                 lw=1.2, zorder=6))
-    # Return what was actually DRAWN. Labels must report measured geometry,
-    # never the requested parameter: n_gnd_stitch=6 yields 8 vias per side
-    # here, and printing the request instead of the result is a mismatch this
-    # project has already shipped once.
+    # Return what was actually DRAWN, not the requested n_gnd_stitch -- the
+    # layout helper fits as many vias as clear, which need not equal the
+    # request.
     n_in = sum(1 for x, _y in via_centres if x < 0.5 * (X0 + X1))
     return {"n_stitch_per_side": n_in, "n_stitch_total": len(via_centres),
             "gap_mm": (launch.get("cpwg_y_gnd_mm", 0.0)
@@ -117,21 +116,11 @@ def plot_layout(g: Geometry, path: str = "layout.png", launch: dict | None = Non
     ax.add_patch(Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
                            fill=False, ec="0.4", lw=1.0, ls="--"))
 
-    # Copper feed + tapers (drawn as filled polygons).
-    #
-    # With a CPWG launch the feed is NOT a constant-width microstrip: the
-    # mesher (palace_driven / palace_dualmode_driven, "_wp = cpwg_w_feed_mm")
-    # builds it at the CPWG 50-ohm width through the coplanar section, then
-    # tapers it out to the microstrip 50-ohm width where the ground pours
-    # end -- the two widths are different because a CPWG's impedance is set
-    # by its gap, not by the microstrip formula.
-    #
-    # Drawing a constant-width trace here understated the coplanar gap as
-    # 0.019mm instead of 0.2512mm (the trace nearly touching the pour) and
-    # hid the taper entirely, i.e. the picture showed a launch that is not
-    # the one simulated. That is the same drawing-vs-mesh drift class this
-    # project has hit before; the fix is to derive the drawn outline from
-    # the same launch parameters the mesh uses.
+    # Copper feed + tapers. With a CPWG launch the feed is NOT constant-width:
+    # it's the CPWG 50-ohm width through the coplanar section (set by the
+    # gap, not the microstrip formula), tapering to the microstrip width
+    # where the ground pours end. Must derive from the same launch params
+    # the mesher uses, or the drawing shows a different launch than simulated.
     feed_polys = list(g.feed_polys)
     if launch and launch.get("cpwg_gap_mm") is not None:
         feed_polys = _cpwg_feed_polys(g, launch)

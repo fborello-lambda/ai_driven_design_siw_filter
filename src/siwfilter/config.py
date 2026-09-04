@@ -10,12 +10,8 @@ import math
 import os
 from dataclasses import dataclass, field
 
-# ---------------------------------------------------------------------------
-# Output layout (single source of truth for where every script writes/reads).
-# Centralising this here keeps inter-script dependencies consistent: e.g.
-# compare.py reads the .s2p that synthesis.py / openems_sim.py wrote, and
-# siw_geometry.py reads the calibration cache that calibrate.py wrote.
-# ---------------------------------------------------------------------------
+# Output layout: single source of truth for where every module writes/reads,
+# so e.g. siw_geometry's calibration cache path can't drift from whoever wrote it.
 def _find_project_root() -> str:
     """Walk up from this module until the directory holding ``pyproject.toml``.
 
@@ -73,15 +69,8 @@ def out_data(name: str) -> str:
 
 
 def find_palace() -> str:
-    """Locate the Palace binary once, instead of every Palace-driving module
-    hardcoding its own copy of the path (a real problem this project hit --
-    see HANDOFF.md's environment-setup section: every palace_opt*.py file
-    and scripts/*.py had its own hardcoded ``PALACE = "/home/fd/opt/palace/
-    bin/palace"``, breaking on every new machine).
-
-    Resolution order: $PALACE_BIN env var -> `palace` on $PATH -> the
-    conventional `~/opt/palace/bin/palace` install location.
-    """
+    """Locate the Palace binary: $PALACE_BIN env var -> `palace` on $PATH ->
+    the conventional `~/opt/palace/bin/palace` install location."""
     env = os.environ.get("PALACE_BIN")
     if env and os.path.isfile(env):
         return env
@@ -98,12 +87,8 @@ def find_palace() -> str:
 
 
 def has_gpu() -> bool:
-    """True if an NVIDIA GPU is actually usable on this machine.
-
-    Not every user has one (and Palace itself may be built without CUDA), so
-    every GPU-preferring default resolves through here rather than assuming --
-    otherwise a "default GPU" flag is a hard crash on a CPU-only box.
-    """
+    """True if an NVIDIA GPU is actually usable (checked, not assumed, so a
+    "default GPU" flag degrades gracefully on a CPU-only box)."""
     import shutil
     import subprocess
     if not shutil.which("nvidia-smi"):
@@ -141,21 +126,12 @@ MU0 = 4e-7 * math.pi       # vacuum permeability [H/m]
 #   h     : substrate thickness [m]
 #   cu_oz : copper cladding weight [oz] (1 oz ~= 35 um)
 SUBSTRATES = {
-    # Rogers RO4350B — DESIGN Dk 3.66, tand 0.0037 @10GHz.
-    #
-    # DO NOT "CORRECT" THIS TO 3.48. RO4350B's datasheet carries two Dk
-    # numbers and they are not alternatives:
-    #   3.48 +-0.05  the SPEC value, IPC-TM-650 2.5.5.5 clamped stripline
-    #                @10GHz. Board houses quote it -- JLCPCB's material
-    #                picker literally reads "RO4350B(Dk=3.48, Df=0.0037)".
-    #   3.66         the DESIGN value Rogers tells you to use for microstrip
-    #                and stripline modelling. The clamped-stripline fixture
-    #                has an air gap that reads Dk low, and 3.66 also folds in
-    #                copper-roughness effects the test coupon does not see.
-    # Same laminate, two test conditions. Every dimension in this project was
-    # synthesised at 3.66; switching to 3.48 would scale every resonance by
-    # sqrt(3.66/3.48) = 1.0255, i.e. fc 2.879 -> 2.953 GHz, a 74 MHz error --
-    # eight times the deviation currently recorded against spec.
+    # Rogers RO4350B -- DESIGN Dk 3.66, tand 0.0037 @10GHz. Do NOT "correct"
+    # this to 3.48: that's the process-spec Dk (IPC-TM-650 2.5.5.5 clamped
+    # stripline), what fabs quote and JLCPCB's picker displays, measured with
+    # an air gap that reads low. 3.66 is what Rogers says to design with, and
+    # every dimension here was synthesised at it -- switching would scale
+    # every resonance by sqrt(3.66/3.48).
     "RO4350B_1.52mm": dict(eps_r=3.66, tan_d=0.0037, h=1.52e-3,  cu_oz=1.0),
     "RO4350B_0.76mm": dict(eps_r=3.66, tan_d=0.0037, h=0.76e-3,  cu_oz=0.5),
     "RO4350B_0.25mm": dict(eps_r=3.66, tan_d=0.0037, h=0.25e-3,  cu_oz=1.0),
@@ -197,18 +173,9 @@ def get_substrate(name: str | None = None) -> Substrate:
     return Substrate(name=key, **SUBSTRATES[key])
 
 
-# ---------------------------------------------------------------------------
-# Fabrication capabilities + the via sizes chosen against them.
-#
-# Same role as SUBSTRATES: the board house's limits are a real constraint on
-# every geometry decision, so they live here instead of being re-derived (or
-# forgotten) at each call site.
-#
-# NOTE: transcribed from JLCPCB's published standard capabilities, checked
-# 2026-08-22. Board houses revise these -- re-verify against their current
-# capabilities page before committing a design to fab. Values are the
-# STANDARD process (no advanced/extra-cost options).
-# ---------------------------------------------------------------------------
+# JLCPCB's published standard-process capabilities (no advanced/extra-cost
+# options). Re-verify against their current page before committing to fab --
+# board houses revise these.
 FAB_RULES = {
     "JLCPCB_2layer": dict(
         min_via_drill=0.30,        # mm, finished hole
@@ -223,16 +190,11 @@ FAB_RULES = {
 }
 DEFAULT_FAB = "JLCPCB_2layer"
 
-# Via sizes this project actually uses, kept next to the rules they satisfy.
-#   siw_fence  : the cavity wall. 1.5/3.0mm is NOT arbitrary -- 1.0/2.0mm was
-#                searched three separate times under three scoring methods and
-#                never matched it (docs/dualmode_cavity/README.md). Do not
-#                shrink it for fab reasons alone; it would invalidate the
-#                landed design and force a full re-optimisation.
-#   gnd_stitch : connector ground legs. Deliberately much smaller than the
-#                fence -- a stitching via wants to be a cheap standard drill so
-#                several fit per pad (more parallel vias = lower ground-return
-#                inductance at the launch).
+# siw_fence 1.5/3.0mm is not arbitrary: smaller sizes were searched three
+# times under three scoring methods and never matched it (docs/dualmode_cavity/
+# README.md) -- don't shrink it for fab reasons alone. gnd_stitch is
+# deliberately much smaller so several fit per pad (lower ground-return
+# inductance at the launch).
 VIA_PRESETS = {
     "siw_fence":  dict(d_mm=1.5, p_mm=3.0),
     "gnd_stitch": dict(d_mm=0.6, p_mm=1.2),  # ~literature: 0.4mm dia / 1.27mm pitch fence
@@ -283,13 +245,9 @@ class FilterSpec:
     substrate_name: str = DEFAULT_SUBSTRATE
 
     # --- SIW physical parameters ---
-    # 2026-08-30: was 0.8mm/1.5mm, a stale leftover from before the via size
-    # was locked in (see CLAUDE.md sec.1's "CURRENT CONFIRMED CONFIGURATION").
-    # Every actual mesh (cascade, dualmode) already builds with
-    # VIA_PRESETS["siw_fence"] = 1.5mm/3.0mm; these defaults now match, so
-    # synthesize()/build_geometry()'s a_eff/cavity-length/iris-width
-    # estimates are computed for the SAME via fence that gets simulated,
-    # not a smaller one.
+    # Must match VIA_PRESETS["siw_fence"] -- every mesh builds with that
+    # fence, so a mismatch here would desync the analytical estimates from
+    # what's actually simulated.
     d_via: float = 1.5e-3       # via diameter [m]
     p_via: float = 3.0e-3       # via pitch (center-to-center) [m]
     fc_ratio: float = 0.7       # f_c10 / f0 target (operate near 1.4*f_c)
@@ -324,15 +282,9 @@ class FilterSpec:
 SPEC = FilterSpec()
 
 
-# ---------------------------------------------------------------------------
-# FINAL design — Palace-optimized values (2026-06-20).
-# The analytical first pass in siw_geometry gets these dimensions wrong because
-# the microstrip tapers + external irises load the cavities. These numbers come
-# from the per-cavity Palace optimizer (palace_opt.py): S11 < -16 dB in band,
-# IL ~1.5 dB, centred ~2.87 GHz. When USE_OPTIMIZED is True, build_geometry
-# overrides the computed L_cav / iris / w_ext / feed with these (dimensions mm).
-# (Optimizer found L_end=34.4, L_mid=34.3 -> ~equal, so uniform 34.4 is used.)
-# ---------------------------------------------------------------------------
+# Palace-optimized values: siw_geometry's analytical first pass gets these
+# wrong because tapers + external irises load the cavities. When
+# USE_OPTIMIZED, build_geometry overrides the computed dimensions with these.
 USE_OPTIMIZED = True
 OPTIMIZED_DESIGN = {
     "L_cav_mm":   34.4,

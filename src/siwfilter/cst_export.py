@@ -22,21 +22,14 @@ MM = 1e3  # metres -> mm (CST units set to mm)
 
 
 def _f(x: float) -> str:
-    """Format a length given in METRES as mm for VBA.
-
-    `Geometry` stores metres, so this is the right formatter for anything
-    read off `g`. It is the WRONG one for the launch dict, whose fields are
-    already millimetres (`cpwg_w_feed_mm`, `sma_rin_mm`, ...) and for
-    `gnd_stitch_layout`, which works in mm -- use `_fmm` there. Mixing them
-    scales by 1000 without any error: the whole CPWG launch was emitted at
-    1000x, with the SMA pin at radius 380mm and the stitching vias 30
-    metres off the board, on a macro whose cavity section was correct.
-    """
+    """Format a length in METRES (anything read off `Geometry`) as mm."""
     return f"{x * MM:.4f}"
 
 
 def _fmm(x: float) -> str:
-    """Format a length ALREADY in millimetres for VBA. See `_f`."""
+    """Format a length ALREADY in mm (launch dict fields, gnd_stitch_layout
+    output). Do not mix these two -- feeding metres here or mm to `_f`
+    silently scales by 1000 with no error."""
     return f"{x:.4f}"
 
 
@@ -106,12 +99,8 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         ("Wsub",   _f(ymax - ymin),     "board width [mm]"),
         ("h_air",  _f(h_air),           "air above board [mm]"),
     ]
-    # One L_cav per cavity. A single "L_cav" used to be emitted from
-    # `g.L_cav`, the SYNTHESIS nominal (34.400mm) -- which on this design is
-    # neither of the two cavity lengths actually built (34.239 / 35.503). The
-    # solids are placed from baked via coordinates, so the geometry was
-    # right and only the GUI label lied; a label that lies about the one
-    # dimension a person would tune is still a defect.
+    # One L_cav per cavity -- they generally differ, and a single "L_cav"
+    # StoreParameter would mislabel every cavity but one.
     for i, Lc in enumerate(g.L_cavs, start=1):
         params.append((f"L_cav{i}", _f(Lc), f"cavity {i} length [mm] "
                                             f"(read-only: vias are baked)"))
@@ -261,9 +250,7 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     if launch and launch.get("cpwg_gap_mm") is not None:
         from .palace_dualmode_driven import gnd_stitch_layout
         # gnd_stitch_layout works in MILLIMETRES; Geometry stores METRES.
-        # Passing metres returns an EMPTY via list rather than raising -- the
-        # export silently lost all 16 stitching vias until this was caught by
-        # grepping the generated .bas for them. Convert explicitly.
+        # Passing metres silently returns an empty via list, not an error.
         _mm = 1e3
         ym_l = ymax * _mm
         _, gnd_vias = gnd_stitch_layout(
@@ -361,9 +348,7 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         _emit_ports = True
 
     # Microstrip waveguide ports on the x faces (standard sizing: ~8W x ~6h).
-    # wp is METRES here (W and ymax/ymin both come from Geometry) -- _f, not
-    # _fmm. Only reachable via --launch none, which is why the same 1000x
-    # trap already fixed in the launch block survived here uncaught.
+    # wp is METRES (W, ymax/ymin from Geometry) -- use _f, not _fmm.
     wp = min(8.0 * W, ymax - ymin)
     if _emit_ports:
         s.append("\n' ---- waveguide ports ------------------------------------------\n")

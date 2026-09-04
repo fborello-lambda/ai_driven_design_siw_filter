@@ -88,14 +88,10 @@ def write_kicad_pcb(g: Geometry, path: str, launch: dict | None = None,
 
     s = ['(kicad_pcb (version 20241229) (generator "siwfilter") '
          '(generator_version "9.0")\n',
-         # An explicit STACKUP, not just a total thickness. Without one KiCad
-         # assumes its own defaults and carves them out of
-         # (general (thickness)): 0.76 there produced a 0.670mm dielectric in
-         # the STEP, and padding the number by hand only moved the error
-         # (0.740). The dielectric thickness is the one dimension the
-         # filter's physics depends on, so it is stated outright -- along
-         # with eps_r, tan_d and the finish, which also travel into the
-         # gerber job file for the fab.
+         # An explicit STACKUP, not just a total thickness -- without one
+         # KiCad substitutes its own copper/mask defaults when carving
+         # (general (thickness)) into layers for the STEP export, silently
+         # changing the dielectric thickness the filter's physics depends on.
          '  (general (thickness %.4f) (legacy_teardrops no))\n'
          % (sub.h * MM + 2 * cu + 2 * (mask_t if soldermask else 0.0)),
          '  (paper "A3")\n',
@@ -129,13 +125,10 @@ def write_kicad_pcb(g: Geometry, path: str, launch: dict | None = None,
     s.append(_edge(b))
 
     # ---- ground planes: bottom solid, top over the cavity section only --
-    #
-    # Emitted as FILLED POLYGONS, not KiCad zones. Zones only become copper
-    # after an interactive "fill all", which kicad-cli cannot do -- exporting
-    # gerbers from unfilled zones yields plotted outlines and NO copper
-    # (verified: 0 G36/G37 fill blocks in B.Cu, 3.3kB file). A board made
-    # from those would have no ground planes and therefore no SIW cavity at
-    # all. gr_poly is plotted unconditionally.
+    # Emitted as FILLED POLYGONS, not KiCad zones: zones only become copper
+    # after an interactive "fill all", which kicad-cli cannot do -- unfilled
+    # zones export as outlines with no copper. gr_poly is plotted
+    # unconditionally.
     s.append(_poly(b, "B.Cu"))
     top = [_xy(0.0, ymin), _xy(g.L_inner, ymin),
            _xy(g.L_inner, ymax), _xy(0.0, ymax)]

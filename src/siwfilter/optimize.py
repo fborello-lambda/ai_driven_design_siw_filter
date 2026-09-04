@@ -1,49 +1,30 @@
-"""Generic Palace-driven optimizer: one implementation for every Topology,
-replacing palace_opt.py / palace_opt_sma.py / palace_opt_dualmode.py (each a
-~200-500 line copy of the same GP-surrogate search / CSV logging / plotting
-boilerplate, one per topology -- see HANDOFF.md's "Architecture" section for
-the full rationale).
+"""Generic Palace-driven optimizer: one implementation shared by every
+Topology, replacing three ~200-500 line per-topology copies of the same
+GP-surrogate search / CSV logging / plotting boilerplate.
 
-Methodology (v17; v16 was validated in palace_opt_dualmode.py this session):
-  1. Ideal (lossless) target response for ANY N via synthesis.chebyshev_g /
-     coupling_matrix / sparams_from_matrix -- these were already fully
-     general, not N=2-specific; this retires palace_opt_dualmode.py's
-     hand-rolled ideal_response_db().
+Methodology:
+  1. Ideal (lossless) target response for any N via synthesis.chebyshev_g /
+     coupling_matrix / sparams_from_matrix.
   2. GP-surrogate (skopt) coarse search: score = curve-fit RMSE of the
      simulated |S11|,|S21| against the ideal response (S21 peak-normalized
-     before fitting, so real substrate-loss-limited insertion loss never
-     enters the shape error) + a mild direct-IL term + a board-length term
-     (biases every search toward the cheaper/smaller design among
-     electrically-similar fits) + centre-frequency and bandwidth terms.
-     See score() for what each term is for; v17 changed three things:
-       - |S11| is CLIPPED at S11_FLOOR_DB before the RMSE. Unclipped, the
-         term was dominated by how exactly a design lands the ideal's
-         reflection nulls (which go to -inf in dB) rather than by whether it
-         is well matched.
-       - an EXPLICIT centre-frequency term (with a deadband for mesh
-         uncertainty); previously frequency error was only implicit.
-       - the bandwidth term is two-sided; it used to be a one-sided hinge
-         that said nothing about a too-narrow passband.
-     Band edges are interpolated (band_edges()), not snapped to sweep points.
+     before fitting, so real dielectric loss never enters the shape error)
+     plus direct-IL, board-length, centre-frequency and bandwidth terms --
+     see score(). |S11| is clipped at S11_FLOOR_DB before the RMSE (unclipped,
+     the term is dominated by how exactly a design lands the ideal's -inf-dB
+     nulls rather than by whether it is well matched). Band edges come from
+     band_edges()'s interpolated crossings, not the nearest sweep point.
   3. Fine-mesh, wide-frequency confirm of the coarse winner.
   4. Fab-tolerance check: round the winner to 0.1mm, re-confirm.
 
-Mesh-quality defaults (mesh_max/mesh_min/h_air_factor) were re-derived on
-this session's machine (15GB RAM, no swap) by profiling the FULL 13-point
-coarse sweep (not just one point -- the old 7.4GB-box compromises were hit
-by memory *accumulating across frequency samples within one run*, not just
-per-point peak): mesh_max=1.2/mesh_min=0.2/h_air_factor=6.0 measured
-~2.1GB peak per MPI rank at -np 4 (~8.4GB worst-case total), safely under
-this machine's 15GB with no swap -- see the CLI-consolidation session notes.
-This is NOT re-derived per machine automatically; re-profile before trusting
-these on a smaller box (search for "mesh_max" in this file).
+Mesh-quality defaults (mesh_max/mesh_min/h_air_factor) are sized to this
+project's 15GB-RAM boxes with no swap; profile the full coarse sweep (memory
+accumulates across frequency samples within one run, not just per-point
+peak) before trusting them on a smaller machine -- search "mesh_max" here.
 
-Device split (per user request this session): the driven+SMA solves here
-default to CPU with multi-rank domain decomposition -- a 6GB GPU card OOMs
-past -np 1 (each MPI rank opens its own CUDA context), and this mesh is too
-big for single-rank GPU to help. Topology.calibrate() (cheap eigenmode,
-small mesh) is the piece that actually benefits from GPU/np=1 -- see
-DualModeTopology.calibrate().
+Driven+SMA solves default to CPU with multi-rank domain decomposition: a 6GB
+GPU card OOMs past -np 1 (one CUDA context per MPI rank) and this mesh is too
+big for single-rank GPU to help. Topology.calibrate() (cheap eigenmode, small
+mesh) is the piece that benefits from GPU/np=1.
 """
 from __future__ import annotations
 
@@ -61,27 +42,18 @@ from .synthesis import chebyshev_g, coupling_matrix, sparams_from_matrix
 from .topologies.base import Topology
 
 # ---------------------------------------------------------------------------
-# Mesh-quality / device defaults -- see module docstring for how these were
-# derived on this machine.
+# Mesh-quality / device defaults.
 #
-# "Fine" deliberately reuses the SAME mesh settings as "coarse" -- only the
-# frequency step/range tightens. This mesh density was already validated as
-# ACCURATE (see palace_opt_dualmode.py's docstring history: "fine=(0.6,0.15)
-# OOM-crashed... 1.0mm was already validated as ACCURATE... there's no
-# correctness reason to go finer") -- fine-mesh refinement buys no accuracy
-# the project has ever needed, only OOM risk.
+# "Fine" reuses the SAME mesh as "coarse" -- only the frequency step/range
+# tightens. This density is already validated as accurate; going finer buys
+# no accuracy this project has needed, only OOM risk.
 #
-# PER-TOPOLOGY, not a single global preset: cascade (N=3, 196 vias) and
-# dualmode (1 cavity, 78 vias) sit at very different DOF counts for the same
-# mesh_min (which resolves via/trace features and is NOT safe to coarsen --
-# that's the actual accuracy-critical knob per the history above). Reusing
-# dualmode's tightly-tuned (1.2, 0.2, 6.0) for cascade OOM-killed (signal 9)
-# the fine confirm at ~1M tets / ~14GB on this 15GB machine -- discovered the
-# hard way this session. Cascade's preset instead matches what
-# palace_opt.py/palace_opt_sma.py already used successfully (mesh_max=3.5,
-# mesh_min=0.6, h_air_factor=6.0) -- don't re-tighten this without re-running
-# the same full-sweep RSS profiling done for dualmode's preset (see the
-# CLI-consolidation session notes).
+# PER-TOPOLOGY, not one global preset: cascade (N=3, 196 vias) and dualmode
+# (1 cavity, 78 vias) sit at very different DOF counts for the same mesh_min
+# (the accuracy-critical knob, since it resolves via/trace features and is
+# not safe to coarsen). Reusing dualmode's tighter preset for cascade
+# OOM-kills the fine confirm (~1M tets on a 15GB machine); don't re-tighten
+# cascade's preset without re-profiling the full coarse sweep's peak RSS.
 # ---------------------------------------------------------------------------
 MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "cascade": (3.5, 0.6, 6.0),
@@ -91,126 +63,69 @@ DEFAULT_MESH_PRESET = MESH_PRESETS["dualmode"]
 CPU_NP = 4
 
 # --- GPU path -------------------------------------------------------------
-# GPU driven solves work, but only in a specific configuration found by
-# bisection this session (everything here is load-bearing; changing any one
-# of them reintroduces CUDA_ERROR_OUT_OF_MEMORY on a 6GB card):
-#
-#   1. MFEM_MEMORY=cuda -- disables MFEM's default Umpire *pooled* device
-#      allocator. The pool requests a fixed ~4GiB block (observed failing at
-#      exactly 2^32+16 bytes, byte-identical across three different mesh
-#      sizes), which alone exhausts a 6GB card regardless of problem size.
-#      Plain cudaMalloc allocates what's actually needed instead.
+# GPU driven solves need this exact configuration -- changing any one of
+# these reintroduces CUDA_ERROR_OUT_OF_MEMORY on a 6GB card:
+#   1. MFEM_MEMORY=cuda -- disables MFEM's pooled (Umpire) device allocator,
+#      which requests a fixed ~4GiB block that alone exhausts a 6GB card
+#      regardless of problem size. Plain cudaMalloc allocates only what's
+#      needed.
 #   2. -np 1 -- one MPI rank per GPU (each rank opens its own CUDA context;
 #      see run_driven's clamp).
-#   3. A slightly coarser mesh than the CPU dualmode preset. Note this is NOT
-#      an accuracy compromise: (1.5, 0.25, 3.0) is exactly the setting
-#      palace_opt_dualmode.py used for every validated dual-mode result in
-#      docs/dualmode_cavity/README.md.
+#   3. (1.5, 0.25, 3.0), a validated dual-mode mesh, not an accuracy
+#      compromise for GPU.
 #
-# Whether GPU is actually FASTER is hardware-dependent -- Palace solves in
-# double precision, and consumer NVIDIA cards run FP64 at 1/32 rate, so a
-# many-core CPU can win despite the GPU's much higher memory bandwidth.
-# Benchmark before assuming; --device is exposed on every CLI subcommand.
+# GPU is not necessarily faster: Palace solves in FP64, and consumer NVIDIA
+# cards run FP64 at 1/32 rate, so a many-core CPU can win on some hardware
+# despite the GPU's memory-bandwidth edge. Benchmark before assuming.
 GPU_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "dualmode": (1.5, 0.25, 3.0),
-    # The alternative cavity shapes go through the SAME builder as dualmode
-    # (only the via layout differs), but they are NOT the same size -- their
-    # cavities are wider and their boards longer, and dualmode's GPU preset
-    # puts them at 176k/187k/222k tets, i.e. at or over GPU_MAX_TETS. Adding
-    # them with dualmode's preset therefore bought nothing: every eval hit
-    # the "> GPU_MAX_TETS -> CPU directly" path and ran at CPU speed anyway
-    # (verified in a live run before this was measured).
-    #
-    # Measured at each box's UPPER bounds -- the largest board each search can
-    # ask for, which is what has to fit:
-    #
-    #   mesh_max/min/h_air     corner_cut  circular_cross  rhombic
-    #   1.5 / 0.25 / 3.0          176k         187k         222k   over
-    #   2.0 / 0.30 / 2.5          146k         159k         182k   rhombic over
-    #   2.5 / 0.35 / 2.0          132k         147k         168k   all fit
-    #
-    # mesh_min 0.35 still puts ~4 cells across a 1.5mm via barrel. This is a
-    # genuine coarsening of the SEARCH mesh, accepted deliberately: the fine
-    # confirm re-runs the winner on the dense (1.2/0.2/6.0) mesh, so the
-    # coarse mesh only has to RANK designs, not measure them. Treat coarse fc
-    # as indicative -- it is already only good to ~25 MHz (task #17).
+    # The alternative cavity shapes share dualmode's mesh builder (only the
+    # via layout differs) but are physically larger, so dualmode's preset
+    # puts them at or over GPU_MAX_TETS. Each entry below is measured at its
+    # search box's upper bound (the biggest board it can ask for) and, where
+    # noted, coarsened further to fit. mesh_min=0.35 still resolves a 1.5mm
+    # via barrel with ~4 cells; the fine confirm re-runs the winner on the
+    # dense mesh, so the coarse mesh only has to rank designs, not measure
+    # them (coarse fc is indicative only, good to ~25 MHz -- task #17).
     "corner_cut": (2.5, 0.35, 2.0),
     "circular_cross": (2.5, 0.35, 2.0),
     "rhombic": (2.5, 0.35, 2.0),
-    # Structural variants (2026-08-25) -- looked up by exact topology.name, so
-    # a variant name NOT in this dict silently fell through to CPU (found live:
-    # corner_cut_2corner took 600s+ on CPU instead of the expected ~150-170s on
-    # GPU). Measured at each variant's box UPPER bounds with its structural
-    # knob at ITS OWN max value (the biggest board a candidate run can ask
-    # for): circular_cross_nvia 157k, circular_cross_ring2 164k, corner_cut_
-    # 2corner 139k, rhombic_2diag 138k tets on this exact preset -- all safely
-    # under GPU_MAX_TETS, so the parent's preset applies unchanged.
     "circular_cross_nvia": (2.5, 0.35, 2.0),
     "circular_cross_ring2": (2.5, 0.35, 2.0),
     "corner_cut_2corner": (2.5, 0.35, 2.0),
     "rhombic_2diag": (2.5, 0.35, 2.0),
-    # circular_cross_taper (2026-08-25 round 2): 172140 tets at box upper
-    # bound (a=71,w_iris=24,y_wall=32,w_ext=26,wf_mm=10) -- still under
-    # GPU_MAX_TETS but closer to it than the other variants (the facet +
-    # connector vias add mesh detail), so the parent's preset still applies.
     "circular_cross_taper": (2.5, 0.35, 2.0),
-    # circular_cross_iris (2026-08-26): 158537 tets at box upper bound
-    # (a=71,w_iris=28,y_wall=3,w_ext=26,wf_mm=10) -- under GPU_MAX_TETS.
     "circular_cross_iris": (2.5, 0.35, 2.0),
-    # dualmode_2wall (2026-08-26): 156967 tets at box upper bound
-    # (a=61,w_iris=20,x_iris=35,y_wall=3,w_ext=22,w_iris2=20,iris_sep=20).
     "dualmode_2wall": (2.5, 0.35, 2.0),
-    # dualmode_cascade (2026-08-26): TWO cavities in series means ~2x the
-    # volume/tets of every other geometry here -- the standard (2.5,0.35,2.0)
-    # preset hits 295908 tets at this box's upper bound, well over
-    # GPU_MAX_TETS. Needed a dedicated coarser preset: 147461 tets measured
-    # at the same upper bound (a=64,w_iris=22,x_iris=37,y_wall=3,w_ext=24,
-    # w_inter=26) with (5.5,0.8,4.0). Same value used for the screen preset
-    # below too -- the usual coarse-vs-fine gap barely helps here (140677
-    # tets even at (7.0,1.0,5.0)), so one preset for both isn't a real
-    # accuracy sacrifice.
+    # Two cavities in series roughly doubles tet count over the other
+    # geometries here; the standard preset exceeds GPU_MAX_TETS, so these use
+    # a dedicated coarser one (also used for the screen preset below -- the
+    # usual coarse-vs-fine gap barely helps at this scale).
     "dualmode_cascade": (5.5, 0.8, 4.0),
-    # dualmode_cascade_floatinter (2026-08-27): same 2-cavity scale as
-    # dualmode_cascade, floating inter-row doesn't change via count
-    # materially -- reuse the same coarser preset.
     "dualmode_cascade_floatinter": (5.5, 0.8, 4.0),
-    # cascade's GPU-viable mesh is NOT yet established -- its CPU preset is
-    # already much coarser and its DOF count far higher (196 vias vs 78). Fall
-    # back to the CPU preset and let it fail loudly rather than silently
-    # shipping an unvalidated mesh.
+    # cascade has no GPU-validated preset yet -- its CPU preset is already
+    # coarser and its DOF count far higher (196 vias vs 78). Falls back to
+    # the CPU preset and fails loudly rather than shipping an unvalidated one.
 }
 GPU_ENV = {"MFEM_MEMORY": "cuda"}
 
-# Largest mesh this GPU actually completes a driven solve on. Measured on the
-# 6GB card: 164.5k / 166.4k / 174.6k tets finish the full sweep; 178.4k and
-# 180.0k OOM at the error estimator. The boundary is therefore 174.6k..178.4k,
-# and 176k sits inside that gap.
-#
-# This is a PREDICTION so we skip GPU rather than discover the failure: a
-# doomed attempt still costs 40-140s of meshing+assembly before it dies, and
-# the ceiling falls inside this project's search boxes, so a naive GPU-first
-# policy pays that toll on a large fraction of evals.
-#
-# Set it from MEASUREMENTS ON BOTH SIDES. A first cut of 168k was derived from
-# the OOM points alone and silently excluded the 174.6k case that demonstrably
-# runs -- which sent the nominal design to CPU for no reason, the exact waste
-# this constant exists to prevent. The runtime fallback below still catches
-# anything that slips through.
+# Largest mesh the 6GB GPU completes a driven solve on: 174.6k tets finish,
+# 178.4k OOMs at the error estimator; 176k sits between the two. Checked
+# before solving (not just caught on failure) because a doomed GPU attempt
+# still costs 40-140s of meshing/assembly, and this ceiling falls inside the
+# project's search boxes often enough that skipping it wastes real time. The
+# runtime fallback in run_driven still catches anything that slips through.
 GPU_MAX_TETS = 176_000
 
 
 def resolve_device(device: str, topology_name: str) -> str:
     """Turn a requested device ("auto"/"GPU"/"CPU") into an actual one.
 
-    "auto" picks GPU only when all three hold: a GPU exists, and this topology
-    has a GPU-validated mesh preset. Anything else falls back to CPU, so the
-    same command works unchanged on a machine with no GPU at all.
-
-    Measured on this session's GTX 1660 SUPER (6GB), dualmode 161k tets,
-    13-point sweep: GPU -np 1 = 133.5s vs CPU -np 4 = 165.2s (~1.24x), with
-    S-params agreeing to <1e-9 dB -- so GPU is preferred where validated, but
-    the margin is hardware-specific (Palace is FP64; consumer cards run FP64
-    at 1/32 rate and win here on memory bandwidth, not FLOPs).
+    "auto" picks GPU only when a GPU exists AND this topology has a
+    GPU-validated mesh preset; anything else falls back to CPU, so the same
+    command works unchanged on a machine with no GPU. The margin when GPU
+    wins is hardware-specific (Palace is FP64; consumer cards run FP64 at
+    1/32 rate), so benchmark rather than assume it's always faster.
     """
     if device != "auto":
         return device
@@ -292,16 +207,10 @@ def band_edges(f: np.ndarray, s21_db: np.ndarray) -> dict:
     recovers sub-step resolution from the same data.
 
     Edges are the crossings bounding the CONTIGUOUS run around the peak, not
-    the first/last crossing over the whole window. A well-formed multi-pole
-    response's inter-pole ripple stays above -3dB by construction (that's
-    what "ripple" means) -- for a real single passband this still recovers
-    the full width, same as bridging first-to-last would. But when the
-    response is genuinely two separated resonances (a notch actually drops
-    below -3dB between them), bridging across that notch silently reports
-    both disconnected lobes as one wide passband. Caught 2026-08-28: every
-    `dualmode_cascade` "wide bandwidth" result across two sessions was this
-    artifact, not a real merged passband -- the fix is the contiguous run
-    containing the peak, never a bridge across a genuine sub-threshold gap.
+    the first/last crossing over the whole window: when the response is
+    genuinely two separated resonances (a notch drops below -3dB between
+    them), bridging first-to-last would silently report both disconnected
+    lobes as one wide passband instead of the real split.
 
     `fc_3db` (band centre) is what the score uses, not the argmax peak: on a
     double-humped response argmax picks whichever pole happens to be taller,
@@ -314,15 +223,10 @@ def band_edges(f: np.ndarray, s21_db: np.ndarray) -> dict:
                 "f_lo": 0.0, "f_hi": 0.0, "band_truncated": True,
                 "n_lobes": 0, "lobe_split_mhz": 0.0}
 
-    # COUNT the lobes as well as measuring the one around the peak. Returning
-    # only the peak's contiguous run is right (see above), but saying nothing
-    # about the others makes a SPLIT response numerically indistinguishable
-    # from a narrow one: on 2026-09-03 a w_ext scan reported a smooth
-    # 35/66/122/284 MHz "bandwidth curve" that was actually the width of one
-    # of TWO disjoint passbands at three of its four points, and inverting it
-    # for the 143.5 MHz target seeded a search at the merge threshold, where
-    # no geometry produces that bandwidth at all. n_lobes>1 means the number
-    # reported in `bw` is one lobe, not the filter's passband.
+    # Count the lobes too, not just measure the peak's: a split response
+    # (n_lobes>1) is otherwise numerically indistinguishable from a narrow
+    # one, and inverting a "bandwidth curve" built from split points seeds a
+    # search at the merge threshold, where no geometry produces that width.
     _splits = np.flatnonzero(np.diff(idx) > 1)
     n_lobes = int(_splits.size) + 1
     lobe_split = 0.0
@@ -386,29 +290,15 @@ def pole_shape(f: np.ndarray, s11_db: np.ndarray, n_expected: int,
             "n_expected": n_expected}
 
 
-#: Krylov solve tolerance for the COARSE search. Palace/MFEM is compiled in
-#: FP64 (single precision would need a rebuild), so the runtime knob for
-#: "cheaper but less exact" is the linear-solver tolerance, not the float
-#: width. Looser tol = fewer GMRES iterations = less time per frequency point.
-#:
-#: It does NOT buy memory: GPU footprint is set by DOF count, so a looser
-#: tolerance cannot make a finer mesh fit under GPU_MAX_TETS. Time only.
-#:
-#: Measured on corner_cut, same mesh throughout, GPU, 31-point sweep -- the
-#: deviation columns are against the 1e-8 solve:
-#:
-#:   tol     time     max|dS11|   max|dS21|   score
-#:   1e-8   266.9s      ref         ref      13.141
-#:   1e-6   241.4s    5.0e-4 dB   4.5e-5 dB  13.141
-#:   1e-5   226.1s    3.7e-3 dB   1.8e-3 dB  13.141
-#:   1e-4   216.3s    3.6e-2 dB   1.1e-2 dB  13.143
-#:
-#: So tolerance is nearly free accuracy-wise (1e-4 moves the score by 0.002,
-#: two orders below the 0.03-0.8 spacing between competing designs) but also
-#: buys little: only 1.23x even at 1e-4, because the cost is dominated by
-#: meshing/assembly and the 31 frequency points, not by Krylov iterations.
-#: 1e-5 takes nearly all the available gain (1.18x) and keeps an order of
-#: magnitude more margin than 1e-4.
+#: Krylov solve tolerance for the COARSE search. Palace/MFEM is FP64-only, so
+#: the "cheaper but less exact" knob is solver tolerance (fewer GMRES
+#: iterations), not float width -- and it doesn't buy memory, since GPU
+#: footprint is set by DOF count, not tolerance. Measured against a 1e-8
+#: reference: 1e-5 moves the score by <0.004 (two orders below the spacing
+#: between competing designs) while most of the time cost is meshing/
+#: assembly, not Krylov iterations, so looser tolerances buy little speed --
+#: 1e-5 takes nearly all the available gain with an order of magnitude more
+#: margin than 1e-4.
 COARSE_TOL = 1e-5
 FINE_TOL = 1e-8
 
@@ -445,25 +335,20 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
                           "Permittivity": silk["eps_r"], "LossTan": silk["tand"]})
     enig = res.get("enig")
     if enig:
-        # Real volumetric conductor (Ohmic loss), NOT the exterior-only
-        # Boundaries.Conductivity surface BC that blocks the via-fill study
-        # (task #43/#46) -- a material domain's interfaces with its
-        # neighbors (copper below, idealized PEC; soldermask/air above) are
-        # handled by ordinary field continuity, so this has no
-        # internal/exterior-boundary restriction at all.
+        # Real volumetric conductor (Ohmic loss), not the exterior-only
+        # Boundaries.Conductivity surface BC (that one only applies to true
+        # one-sided exterior faces; a material domain has no such
+        # restriction, since its interfaces are handled by field continuity).
         materials.append({"Attributes": [5], "Permeability": enig["mu_r"],
                           "Permittivity": 1.0, "Conductivity": enig["conductivity_sm"]})
     metal_real = res.get("metal_real")
     via_cond = res.get("via_conductivity")
     if via_cond:
-        # Real volumetric conductor (2026-09-02, replaces the invalid
-        # 2026-09-01 Boundaries.Conductivity attempt -- Palace's own MFEM
-        # warning confirmed that surface BC is exterior-only and the via
-        # wall is an internal two-sided sheet). Filled/solid vs
-        # unfilled/hollow-plated is now a genuine GEOMETRY difference (a
-        # solid conductor cylinder vs a thin conductor shell around an air
-        # core, built in palace_dualmode_driven.py), not a Thickness
-        # parameter on a boundary condition.
+        # Real volumetric conductor: a via wall is an internal two-sided
+        # sheet, where Boundaries.Conductivity (exterior-only) does not
+        # apply. Filled/solid vs unfilled/hollow-plated is therefore a real
+        # GEOMETRY difference (built in palace_dualmode_driven.py), not a
+        # Thickness parameter on a boundary condition.
         materials.append({"Attributes": [6], "Permeability": via_cond["mu_r"],
                           "Permittivity": 1.0, "Conductivity": via_cond["conductivity_sm"]})
     boundaries = {"PEC": {"Attributes": [10]},
@@ -477,13 +362,10 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
         if metal_real.get("thickness_um"):
             mb["Thickness"] = metal_real["thickness_um"] * 1e-3   # um -> mm (L0=1mm)
         boundaries.setdefault("Conductivity", []).append(mb)
-    # GUARD: every DOMAIN physical group in the mesh must have a material
-    # here. Hit twice this session -- a new layer was added to the mesh
-    # builder but not wired into this config, leaving an undefined domain
-    # whose faces get no boundary condition at all (Palace: "N mesh faces
-    # with no associated boundary element"), which silently produced
-    # physically impossible results (insertion loss BETTER than a lossless
-    # PEC structure) rather than an error. Fail loudly instead.
+    # Every DOMAIN physical group in the mesh must have a material here, or
+    # its faces get no boundary condition and Palace silently produces
+    # impossible results (e.g. insertion loss better than lossless PEC)
+    # instead of an error. Fail loudly instead.
     legend = res.get("legend") or {}
     DOMAIN_TAGS = {"dielectric": 1, "air": 2, "sma_ptfe": 3, "soldermask": 4,
                    "enig": 5, "via_conductor": 6, "silkscreen": 7}
@@ -538,13 +420,11 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
     s21_db, fc, il, bw, s11w, il_band, tag} (dB arrays over the swept band)."""
     device = resolve_device(device, topology.name)
     if device == "GPU" and np_ranks != 1:
-        # Each MPI rank opens its own CUDA context on the SAME physical GPU --
-        # verified this session that -np 4 OOMs even on the smallest eigenmode
-        # mesh this project uses. There is exactly one GPU here, so >1 rank
-        # can never help and reliably crashes; clamp rather than let every
-        # caller remember this.
+        # Each MPI rank opens its own CUDA context on the same physical GPU;
+        # with only one GPU here, >1 rank reliably OOMs. Clamp centrally
+        # rather than rely on every caller to remember this.
         print(f"[{tag}] GPU requested with np_ranks={np_ranks} -> forcing np_ranks=1 "
-              f"(multi-rank GPU OOMs on a single card, verified this session)")
+              f"(multi-rank GPU OOMs on a single card)")
         np_ranks = 1
     mesh = tag + ".msh"
     try:
@@ -567,12 +447,10 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
               flush=True)
         device, np_ranks = "CPU", CPU_NP
 
-    # Palace emits samples from fmin while <= fmax, i.e. FLOOR of the span in
-    # steps, plus one. round() here over-counted by one whenever the span was
-    # not an exact multiple of the step (fine sweep: 64.575 steps -> round 65
-    # -> expected 66 vs the 65 actually produced), which flagged a complete
-    # sweep as truncated and sent it for a pointless re-solve. The 1e-9 guards
-    # a span that IS an exact multiple landing just under it in floating point.
+    # Palace emits samples from fmin while <= fmax: floor(span/step)+1, not
+    # round(), or a span that isn't an exact multiple of step over-counts by
+    # one and flags a complete sweep as truncated. 1e-9 guards an exact
+    # multiple landing just under it in floating point.
     n_expected = int(np.floor((fmax - fmin) / step + 1e-9)) + 1
     palace = find_palace()
 
@@ -589,14 +467,9 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
         logp = out_data(f"{tag}.log")
         # Stale results from a previous attempt would look like a success.
         shutil.rmtree(out_data(f"postpro/{tag}"), ignore_errors=True)
-        # ATOMIC lock, not the pgrep poll: needed once a second, independent
-        # process (e.g. an ad-hoc wideband sanity sweep run alongside the main
-        # optimizer) can also call run_driven -- two pollers can both see
-        # "nothing running" in the same 10s gap and launch together, briefly
-        # sharing the one 6GB GPU. flock blocks in the open syscall with no
-        # such gap. Only guards the invocation itself; meshing/config-writing
-        # above still overlaps freely across processes, which is fine (gmsh
-        # is cheap and single-threaded per call).
+        # Guards only the Palace invocation itself (see _palace_lock); meshing
+        # and config-writing above still overlap freely across processes,
+        # which is fine since gmsh is cheap and single-threaded per call.
         if serialize:
             with _palace_lock():
                 subprocess.run([palace, "-np", str(ranks), os.path.basename(cfgp)],
@@ -612,22 +485,20 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
         dd = np.genfromtxt(csvp, delimiter=",", names=True, deletechars="", replace_space="")
         nmm = dd.dtype.names
         ff = np.atleast_1d(dd[nmm[0]])
-        # Palace writes port-S.csv incrementally, one row per frequency point,
-        # so a run that dies partway (GPU OOM at the error estimator is how
-        # this actually happens) leaves a VALID-LOOKING but truncated file.
-        # Without this the design would be silently scored on part of its band.
+        # Palace writes port-S.csv incrementally, so a run that dies partway
+        # (e.g. GPU OOM at the error estimator) leaves a valid-looking but
+        # truncated file, which would otherwise be silently scored as complete.
         if len(ff) < n_expected:
             return None, f"incomplete sweep: {len(ff)}/{n_expected} points (see {logp})"
         return (ff, np.atleast_1d(dd[nmm[1]]), np.atleast_1d(dd[nmm[3]])), None
 
     got, err = _solve(device, np_ranks)
     if got is None and device == "GPU":
-        # The GPU memory ceiling falls INSIDE this project's search boxes: the
-        # same sweep succeeds for a small cavity and OOMs for a large one, so a
-        # GPU-only run silently loses whichever design points happen to be big
-        # (observed live -- most evals of a dualmode+stitching retune died this
-        # way while two small-cavity ones survived). Falling back per-eval keeps
-        # GPU's speed where it fits without dropping points where it doesn't.
+        # The GPU memory ceiling falls inside this project's search boxes --
+        # the same sweep can succeed for a small cavity and OOM for a large
+        # one -- so a GPU-only run would silently lose whichever points
+        # happen to be big. Falling back per-eval keeps GPU's speed where it
+        # fits without dropping points where it doesn't.
         print(f"[{tag}] GPU attempt failed ({err}) -> retrying on CPU", flush=True)
         got, err = _solve("CPU", CPU_NP)
         device = "CPU"
@@ -663,25 +534,22 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
 S11_FLOOR_DB = -25.0
 
 
-#: No fc penalty inside this deadband. fc is NOT mesh-converged in this
-#: project -- the same design shifts 20-27 MHz between mesh densities (open
-#: task #17). Penalizing linearly from zero would spend GP budget chasing
-#: mesh noise; a deadband charges only for error the mesh study cannot
-#: explain away. Shrink this once #17 pins the convergence down.
+#: No fc penalty inside this deadband: fc is not mesh-converged in this
+#: project (the same design shifts 20-27 MHz between mesh densities, task
+#: #17), so a deadband charges only for error the mesh study can't explain
+#: away. Shrink once #17 pins the convergence down.
 FC_DEADBAND_MHZ = 15.0
 
 
-#: v18 acceptance spec (2026-08-29, user-specified): worst-case in-band return
-#: loss target. "approx -16 dB" -- treated as a hinge, not a hard gate, so the
-#: optimizer is still guided by how far short it falls rather than being told
+#: Worst-case in-band return loss target. Treated as a hinge, not a hard
+#: gate, so the optimizer is guided by how far short it falls rather than
 #: only pass/fail.
 S11_SPEC_DB = -16.0
 
-#: How much insertion loss above the pure-dielectric floor is acceptable.
-#: dielectric_il_db() is an OPTIMISTIC lower bound (it ignores conductor, via
-#: leakage and radiation loss -- measured 2.65-3.84x higher on real designs
-#: this project has built), so this allowance is what turns that floor into a
-#: usable target: "the dielectric loss and a little bit more".
+#: Allowed insertion loss above the pure-dielectric floor. dielectric_il_db()
+#: is an optimistic lower bound (ignores conductor/via/radiation loss, which
+#: measured 2.65-3.84x higher on real designs), so this turns that floor into
+#: a usable target: "the dielectric loss and a little bit more".
 IL_ALLOWANCE_DB = 1.0
 
 #: Weights for the three spec terms. Chosen so a design missing S11 by ~5 dB,
@@ -731,12 +599,11 @@ def score(spec: FilterSpec, r: dict, board_length_mm: float,
     s21_ideal_shape = s21_ideal - s21_ideal.max()
     s21_rmse = float(np.sqrt(np.mean((s21_shape - s21_ideal_shape) ** 2)))
     f0_mhz = spec.f0 / 1e6
-    # A passband wider than the sweep has no measurable edges: band_edges then
-    # returns the WINDOW's centre and width, not the design's. The coarse
-    # window is centred on f0, so a truncated design reports fc_3db ~ f0 and
-    # would collect ZERO frequency penalty however far off it actually sits
-    # (observed: true peak 2.918 GHz reported as fc_3db 2.868). Fall back to
-    # the peak, which is still a real measurement, whenever that happens.
+    # A passband wider than the sweep has no measurable edges: band_edges
+    # then returns the window's own centre and width, not the design's, so a
+    # truncated design would report fc_3db ~ f0 and collect zero frequency
+    # penalty however far off it actually sits. Fall back to the peak, still
+    # a real measurement, whenever that happens.
     fc_mhz = (r["fc"] if r.get("band_truncated") else
               r.get("fc_3db", r["fc"])) * 1000.0
     fc_err = max(0.0, abs(fc_mhz - f0_mhz) - fc_deadband_mhz)
@@ -744,37 +611,25 @@ def score(spec: FilterSpec, r: dict, board_length_mm: float,
     bw_target = spec.FBW * f0_mhz
     bw_err = abs(r["bw"] - bw_target) / bw_target if bw_target > 0 else 0.0
 
-    # --- v18 spec terms (2026-08-29, user-specified acceptance criteria) ---
-    # The terms above are FIT terms (RMSE against an ideal curve). They do not
-    # directly enforce the three things the design is actually judged on, so a
-    # design could win on average curve shape while failing every one of them:
-    #
-    #   1. worst-case in-band S11 <= -16 dB (a hard-ish spec, not an average)
-    #   2. IL no worse than the dielectric floor + a modest allowance
-    #   3. a SYMMETRIC response -- passband centred, skirts balanced
-    #
-    # All three are one-sided hinges: zero cost once met, growing cost beyond.
-    # Scaled to be comparable to the RMSE terms (which run ~1-20) so they steer
-    # without swamping the shape fit.
+    # --- spec terms, separate from the FIT terms above -----------------
+    # An RMSE-against-ideal-curve fit does not directly enforce what the
+    # design is actually judged on, so a design could win on average shape
+    # while failing every one of: (1) worst-case in-band S11 <= -16 dB,
+    # (2) IL no worse than the dielectric floor plus a modest allowance,
+    # (3) a symmetric response. All three are one-sided hinges (zero cost
+    # once met), scaled to be comparable to the ~1-20 range of the RMSE terms.
     s11_spec = max(0.0, r["s11w"] - S11_SPEC_DB)          # s11w is the in-band WORST
     il_floor = dielectric_il_db(spec)
     il_spec = max(0.0, abs(r["il"]) - (il_floor + IL_ALLOWANCE_DB))
 
-    # Symmetry: compare how far the -3dB edges sit from the peak on each side.
-    # A lopsided response (one skirt far out, one tight) scores badly even if
-    # its centre and width happen to land right.
-    #
-    # fc_pk MUST be an estimate of the true passband centre that is
-    # INDEPENDENT of f_lo/f_hi -- fc_3db is their arithmetic midpoint by
-    # construction, so using it here would make lo_arm==hi_arm ALWAYS and
-    # this term identically zero, not a fix. The previous choice, argmax(S21),
-    # is independent but unstable on a multi-pole response: it hops between
-    # whichever ripple peak happens to be numerically taller depending on
-    # where the sweep grid lands, which measured as a 5-point score swing on
-    # the exact same ideal filter at different grid offsets (adversarial
-    # review, 2026-08-31). The mean of the S11 reflection zeros is also
-    # independent of f_lo/f_hi and, being an average over N points instead of
-    # a single sampled maximum, is far less sensitive to grid placement.
+    # Symmetry: compare how far the -3dB edges sit from the peak on each
+    # side. fc_pk must estimate the true passband centre INDEPENDENTLY of
+    # f_lo/f_hi -- fc_3db is their midpoint by construction, so using it here
+    # would make this term identically zero, not a fix. argmax(S21) is
+    # independent but unstable on a multi-pole response (it hops between
+    # whichever ripple peak the sweep grid happens to sample as tallest); the
+    # mean of the S11 reflection zeros is independent of f_lo/f_hi and, being
+    # an average over N points, is far less sensitive to grid placement.
     f_lo, f_hi = r.get("f_lo"), r.get("f_hi")
     zeros_ghz = pole_shape(r["f"], r["s11_db"], spec.N)["zeros_ghz"]
     fc_pk = (sum(zeros_ghz) / len(zeros_ghz)) if zeros_ghz else r.get("fc")
@@ -796,82 +651,51 @@ def _to_dict(order: list[str], x: list[float]) -> dict:
 
 
 #: Ultra-coarse mesh for the f0-only screen -- deliberately coarser than the
-#: coarse SEARCH mesh, not the same one. Meshing/assembly, not per-frequency
-#: solves, dominates an eval's cost here (measured: loosening solver tolerance
-#: 10,000x bought only 1.23x -- see COARSE_TOL's comment). A single-frequency
-#: solve on the coarse search mesh would therefore roughly DOUBLE the time for
-#: every design that passes screening, since meshing gets paid twice. Screening
-#: only pays for itself if it is cheap even when a design passes, which means
-#: its own, cheaper mesh.
-#: h_air_factor=3.0, NOT the original 1.5. Found by diagnosis, not guessed:
-#: the original preset measured the LANDED dual-mode design's own peak S21 at
-#: -2.79dB against a real (dense-mesh) -1.41dB -- a 1.38dB systematic error
-#: that would have rejected the best design this project has, on a meshing
-#: artefact. Isolated to h_air (too-thin air box interacting badly with the
-#: absorbing boundary, not mesh_max/mesh_min): raising it alone to 3.0 closed
-#: most of the gap (-2.01dB, only 0.60dB off). For reference, the coarse
-#: SEARCH mesh (2.5/0.35/2.0, h_air=2.0, already trusted all session on
-#: rho=1.00 rank correlation) measures -2.32dB on the SAME design -- i.e.
-#: this cheaper screen mesh is now MORE accurate than the mesh already being
-#: trusted to rank the real search, while costing ~126s vs ~185-230s.
+#: coarse SEARCH mesh: meshing/assembly, not per-frequency solves, dominates
+#: an eval's cost, so a single-frequency solve on the search mesh would
+#: roughly double the time for every design that passes. Screening only pays
+#: for itself if it is cheap even when a design passes.
+#: h_air_factor=3.0, not 1.5: too-thin an air box interacts badly with the
+#: absorbing boundary and introduces a systematic ~1.4dB error in peak S21,
+#: enough to reject a good design on a meshing artefact.
 SCREEN_MESH_PRESETS: dict[str, tuple[float, float, float]] = {
     "dualmode": (3.5, 0.5, 3.0),
     "corner_cut": (3.5, 0.5, 3.0),
     "circular_cross": (3.5, 0.5, 3.0),
     "rhombic": (3.5, 0.5, 3.0),
-    # Structural variants (2026-08-25) -- see the matching note in
-    # GPU_MESH_PRESETS: a variant name absent from this dict also falls
-    # through silently (to _mesh_preset()'s own "no GPU-validated preset"
-    # path, which is the CPU preset). Measured under 176k tets for all four
-    # at their box upper bounds -- see GPU_MESH_PRESETS's note for numbers.
     "circular_cross_nvia": (3.5, 0.5, 3.0),
     "circular_cross_ring2": (3.5, 0.5, 3.0),
     "corner_cut_2corner": (3.5, 0.5, 3.0),
     "rhombic_2diag": (3.5, 0.5, 3.0),
-    "circular_cross_taper": (3.5, 0.5, 3.0),  # 159327 tets at box upper bound
-    "circular_cross_iris": (3.5, 0.5, 3.0),   # 138712 tets at default params
-    "dualmode_2wall": (3.5, 0.5, 3.0),        # 133784 tets at default params
-    "dualmode_cascade": (5.5, 0.8, 4.0),      # see GPU_MESH_PRESETS note -- same preset both ways
+    "circular_cross_taper": (3.5, 0.5, 3.0),
+    "circular_cross_iris": (3.5, 0.5, 3.0),
+    "dualmode_2wall": (3.5, 0.5, 3.0),
+    "dualmode_cascade": (5.5, 0.8, 4.0),
     "dualmode_cascade_floatinter": (5.5, 0.8, 4.0),
 }
-SCREEN_TOL = 1e-4          # pass/fail only -- see COARSE_TOL's accuracy table
-S11_SCREEN_DB = -10.0      # user-specified: reject anything worse than this
-#: S21 floor, in THIS SCREEN MESH'S OWN units -- not the dense-mesh dielectric
-#: floor scaled by a multiplier. That approach was tried first and abandoned:
-#: it assumes the screen mesh measures true IL, which it does not (see
-#: SCREEN_MESH_PRESETS). Calibrated instead against what the screen mesh
-#: itself reports for known designs: the landed dual-mode design (real IL
-#: -1.41dB) reads -2.01dB here; a deliberately broken design (via fence with
-#: no real coupling) reads -57 to -65dB. -6.0dB sits with several dB of
-#: margin above every real design measured this session and far below any
-#: catastrophic one -- loose enough that a genuinely working but imperfectly
-#: tuned design (this session's worst confirmed geometry, rhombic, real IL
-#: -5.04dB) is NOT rejected outright, since the point of tomorrow's
-#: structural search is to let the real optimizer refine imperfect starts,
-#: not to pre-judge them on one point.
+SCREEN_TOL = 1e-4          # pass/fail only -- see COARSE_TOL's accuracy note
+S11_SCREEN_DB = -10.0      # reject anything worse than this
+#: S21 floor in THIS SCREEN MESH'S OWN units, not the dense-mesh dielectric
+#: floor scaled by a multiplier (the screen mesh does not measure true IL, so
+#: that scaling is the wrong space to threshold in). Calibrated instead
+#: against what the screen mesh itself reports for known designs, with
+#: several dB of margin above real working designs and far below a
+#: deliberately broken one -- loose enough that an imperfectly tuned but
+#: real design is not rejected outright; refining imperfect starts is the
+#: search's job, not the screen's.
 S21_SCREEN_FLOOR_DB = -6.0
-#: Screen over a short WINDOW around f0, not a single point at it. A single
-#: point failed on the very first test: the landed dual-mode design (S11
-#: -16dB, real peak IL -1.41dB) measured S21(f0)=-2.99dB and was WRONGLY
-#: rejected, because its two-pole response has a genuine dip near f0 between
-#: the TE102/TE201 poles, and f0 landed almost exactly in that dip. A design
-#: mid-search is also routinely 20-50MHz off-centre (that IS what the search
-#: is looking for), so a single point conflates "not centred yet" with "bad".
-#: Using the BEST point across a handful of samples in the fit window answers
-#: the question a screen should ask -- "is there a usable resonance anywhere
-#: near where we want one" -- without the false-reject risk. The window and
-#: point count come from the mesh being shared: solve cost is dominated by
-#: meshing/assembly (COARSE_TOL's finding), so 5 points cost barely more than 1.
+#: Screen over a short WINDOW around f0, not a single point at it: a
+#: multi-pole response can have a genuine dip near f0 between its poles, and
+#: a design mid-search is routinely tens of MHz off-centre by intent, so a
+#: single point conflates "not centred yet" with "bad". The best point across
+#: a few samples answers "is there a usable resonance near where we want
+#: one" without that false-reject risk, and costs little extra since solve
+#: cost is dominated by meshing/assembly, shared across all the points.
 SCREEN_WINDOW_FBW_MULT = 1.5   # same half-width as _fit_window_ghz
-#: Frequency STEP, not a fixed point count. A first version used 5 points
-#: spread across the window (~80 MHz apart) and STILL failed the landed
-#: dual-mode design (best S21 in-window -2.79dB) -- a two-pole response can
-#: have both poles narrower than that spacing, so 5 points can straddle the
-#: whole passband without ever landing near a peak. 20 MHz matches the coarse
-#: search's own resolution; it is affordable because the screen mesh is far
-#: coarser than the search mesh, so solve cost stays small even with ~16-20
-#: points (see IL_HEADROOM's docstring for the "meshing dominates" finding
-#: that makes MORE points nearly free once you're already paying for one).
+#: Frequency STEP, not a fixed point count: too few points can straddle a
+#: narrow two-pole passband without ever landing near a peak. 20 MHz matches
+#: the coarse search's own resolution and is affordable because the screen
+#: mesh is coarser than the search mesh.
 SCREEN_STEP_GHZ = 0.02
 
 
@@ -896,14 +720,12 @@ def dielectric_il_db(spec: FilterSpec) -> float:
 def screen_at_f0(topology: Topology, spec: FilterSpec, params: dict, tag: str,
                  device: str = "auto", np_ranks: int = CPU_NP) -> dict:
     """Cheap, ultra-coarse-mesh pass/fail check over a short window around f0,
-    BEFORE spending a full coarse sweep on a design that cannot possibly work.
+    before spending a full coarse sweep on a design that cannot possibly work.
 
-    Reject if the BEST S11 anywhere in the window is worse than S11_SCREEN_DB,
-    OR the BEST S21 anywhere in the window is worse than the calibrated
-    dielectric-loss floor (IL_HEADROOM). "Best anywhere in a wide window"
-    deliberately gives a mistuned or double-humped design every chance to
-    show a usable point -- see SCREEN_POINTS for why a single point at
-    exactly f0 is the wrong check.
+    Rejects if the best S11 anywhere in the window is worse than
+    S11_SCREEN_DB, or the best S21 is worse than S21_SCREEN_FLOOR_DB. "Best
+    anywhere in a window" (see SCREEN_WINDOW_FBW_MULT) gives a mistuned or
+    double-humped design every chance to show a usable point.
     """
     mmax, mmin, hair = SCREEN_MESH_PRESETS.get(
         topology.name, _mesh_preset(topology.name, "GPU"))
@@ -929,14 +751,10 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
             screen: bool = True, score_kwargs: dict | None = None) -> dict:
     device = resolve_device(device, topology.name)
     fw0, fw1 = _fit_window_ghz(spec)
-    # Coarse search runs the GPU mesh (fast, and validated for every dual-mode
-    # derived topology); the fine CONFIRM always uses the denser CPU-grade
-    # mesh, whichever device it lands on. Confirming the winner on the same
-    # coarse mesh that selected it would just re-report the search's own
-    # numbers -- the confirm exists to check the design survives a better
-    # discretization. run_driven still tries GPU for it and falls back to CPU
-    # on OOM or a tet count over GPU_MAX_TETS, so the denser mesh costs
-    # correctness nothing.
+    # The fine CONFIRM always uses the denser CPU-grade mesh regardless of
+    # device: confirming the winner on the same coarse mesh that selected it
+    # would just re-report the search's own numbers, when the point of the
+    # confirm is to check the design survives a better discretization.
     mmax, mmin, hair = (_cpu_mesh_preset(topology.name) if fine
                         else _mesh_preset(topology.name, device))
     tol = FINE_TOL if fine else COARSE_TOL
@@ -946,18 +764,13 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
         else:
             fmin, fmax, step = fw0 - 1.0 * (fw1 - fw0), fw1 + 1.0 * (fw1 - fw0), 0.01
     else:
-        # +-0.9 of the fit window, NOT the old +-0.3. At +-0.3 the coarse sweep
-        # spanned only 344 MHz -- and every design in this project is roughly
-        # 310-340 MHz wide, so the -3dB band filled the window and its edges
-        # were never actually captured. Bandwidth then read as the window width
-        # and centre frequency as the window's own midpoint (which sits exactly
-        # on f0), making both new score terms measure the sweep rather than the
-        # filter. 0.9 gives ~650 MHz, comfortably past a 2x-over-coupled design.
-        # Costs ~1.6x the frequency points per eval; the alternative is
-        # optimizing against an artefact.
-        # SIW_COARSE_STEP lets the speed-vs-fidelity study hand its verdict to
-        # the run that follows. 0.03 measured 2.84x vs the dense mesh at
-        # rho=1.00 rank agreement -- the coarse sweep only has to rank.
+        # +-0.9 of the fit window, not a narrower one: designs in this
+        # project run 310-340 MHz wide, and a window too close to that would
+        # fill entirely, so the -3dB edges never get captured -- bandwidth
+        # then reads as the window width and centre frequency as the
+        # window's own midpoint, measuring the sweep instead of the filter.
+        # SIW_COARSE_STEP lets an external speed-vs-fidelity study hand its
+        # verdict to the run that follows without editing source.
         try:
             cstep = float(os.environ.get("SIW_COARSE_STEP", "") or 0.02)
         except ValueError:
@@ -972,16 +785,11 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
     tag = (f"{tag_prefix}F_" if fine else f"{tag_prefix}_") + "_".join(
         f"{k}{v:.2f}" for k, v in sorted(params.items())
         if isinstance(v, (int, float)) and not isinstance(v, bool))
-    # Filesystem safety: this tag becomes a filename directly (mesh/.json/
-    # postpro dir), and gains a "scr_" prefix + ".msh"/".json" suffix
-    # downstream -- a wide param dict (e.g. v8's 16D box, slot_* dims added
-    # on top of the 11D dualmode_cascade box) pushed the raw descriptive tag
-    # past ext4's 255-byte filename limit, which silently failed every
-    # single eval as a bare "mesh:Unable to open file" screen-out (found
-    # live during the v8 round-4 search -- every eval scored the OLD flat
-    # 1e9 fallback, not a real screen result). Collapse to a short stable
-    # hash once the descriptive tag would risk that ceiling; 120 leaves
-    # comfortable headroom for every prefix/suffix this tag ever gets.
+    # This tag becomes a filename directly and gains prefixes/suffixes
+    # downstream, so a wide param dict can push it past ext4's 255-byte
+    # filename limit -- which fails silently as a bare "mesh:Unable to open
+    # file" screen-out, indistinguishable from a real rejection. Collapse to
+    # a short stable hash before that ceiling; 120 leaves headroom.
     if len(tag) > 120:
         import hashlib
         digest = hashlib.sha1(tag.encode()).hexdigest()[:12]
@@ -1000,14 +808,10 @@ def evaluate(topology: Topology, spec: FilterSpec, params: dict, fine: bool = Fa
             if s11b is None or s21b is None:
                 fail_score = 1e9   # no real measurement (mesh/solver failure) -- no gradient
             else:
-                # Graded rejection: still always worse than any real (passing)
-                # score, but with real spread so a GP surrogate has a gradient
-                # to climb instead of every failure looking identical.
-                # Motivated 2026-08-28: dualmode_cascade's v4 40-eval GPU-screen
-                # search found zero survivors, and the GP-guided phase never
-                # improved on the random-seed phase -- every screened candidate
-                # tied at exactly 1e9, so the surrogate had nothing to learn
-                # from within the failed region.
+                # Graded rejection: still always worse than any passing score,
+                # but with real spread so a GP surrogate has a gradient to
+                # climb inside the failed region instead of every screened-out
+                # candidate tying at exactly the same value.
                 margin_s11 = max(0.0, s11b - S11_SCREEN_DB)
                 margin_s21 = max(0.0, S21_SCREEN_FLOOR_DB - s21b)
                 fail_score = 1e6 + margin_s11 * 100.0 + margin_s21 * 100.0
@@ -1032,12 +836,10 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
     confirm of the winner, fab-tolerance (0.1mm rounding) check. Returns the
     fine-confirmed best {params, metrics}.
 
-    patience (2026-08-29): stop the coarse search early once this many
-    consecutive evals pass with no improvement over the running best --
-    added after dualmode_N2's v18 search found zero improvement over its
-    warm-start baseline in 29/40 evals (docs/TUNING_PLAN_2026-08-29.md);
-    no point spending the remaining budget confirming a plateau. None (the
-    default) preserves the old always-run-the-full-budget behavior."""
+    patience: stop the coarse search early once this many consecutive evals
+    pass with no improvement over the running best, rather than spending the
+    remaining budget confirming a plateau. None (default) runs the full
+    budget."""
     from skopt import Optimizer
     from skopt.space import Real
 
@@ -1049,11 +851,10 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
     free = {k: v for k, v in space_dict.items() if v[1] < v[2]}
     order = list(free.keys())
     space = [Real(lo, hi, name=k) for k, (_init, lo, hi) in free.items()]
-    # Random-sampling phase before the GP starts exploiting. A FIXED default
-    # (this was 10) silently turns a small budget into near-pure random
-    # search: at budget=12 only 2 evals were GP-guided, and the "best" design
-    # of such a run is just the luckiest random draw. Scale it with the budget
-    # instead, keeping enough seeds to fit a surrogate over this dimensionality.
+    # Random-sampling phase before the GP starts exploiting. A fixed default
+    # would silently turn a small budget into near-pure random search, so
+    # this scales with the budget while keeping enough seeds to fit a
+    # surrogate over this dimensionality.
     if n_initial is None:
         n_initial = max(len(order) + 1, min(10, budget // 2))
     print(f"search: {budget} evals over {len(order)}D "
@@ -1145,14 +946,13 @@ def optimize(topology: Topology, spec: FilterSpec, budget: int = 18,
 
 def plot_comparison(designs: dict[str, dict], spec: FilterSpec, out_path: str,
                     ideal_orders: tuple[int, ...] = (2, 3)) -> str:
-    """S21-top/S11-bottom comparison of N designs -- the black-box pipeline's
-    3rd standard artifact (docs/dualmode_cavity/results_all_variants.png's
-    layout, generalized from 4 hardcoded designs to any dict of them).
+    """S21-top/S11-bottom comparison of N designs -- one of the black-box
+    pipeline's standard artifacts, for any dict of named results.
 
     ``ideal_orders`` overlays the lossless Chebyshev target for those filter
-    orders (dashed black/grey). That is the reference the optimizer actually
-    scores against, so having it on the same axes shows how much of the gap to
-    ideal is real loss versus a genuine shape error. Pass () to omit.
+    orders (dashed black/grey) -- the reference the optimizer actually scores
+    against, so the same axes show how much of the gap to ideal is real loss
+    versus a genuine shape error. Pass () to omit.
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -1235,21 +1035,19 @@ def local_topology(topology: Topology, seed: dict[str, float],
                    floors: dict[str, float] | None = None):
     """Wrap `topology` so its param_space becomes a TIGHT box around `seed`.
 
-    Turns the global Bayesian search into a LOCAL polish. That distinction
-    decided this project's cascade work: a global GP over the assembled
-    filter never beat -5 dB S11 in 60+ driven evaluations, because its
-    objective contains the passband width, which is DISCONTINUOUS in the
-    external coupling (below a threshold only the centre pole clears -3 dB so
-    the band measures one pole; above it all N poles merge and the band
-    jumps -- measured 16/22/36/65/215 MHz on N=3). GPs model smooth
-    functions, so a global search inherits that. Around a physics-derived
-    seed the surface is locally smooth and the same optimizer behaves, which
-    is the regime it already works in for the dual-mode topology.
+    Turns a global Bayesian search into a local polish. This matters because
+    the assembled filter's passband width is DISCONTINUOUS in the external
+    coupling (below a threshold only the centre pole clears -3dB so the band
+    measures one pole; above it all N poles merge and the band jumps) --
+    GPs model smooth functions, so a global search over that objective
+    doesn't converge. Around a physics-derived seed the surface is locally
+    smooth and the same optimizer works.
 
     Parameters whose seed value is absent keep the parent's own range, and
     any parameter the parent pins (lo == hi, e.g. w_ms at the true 50-ohm
-    width) stays pinned -- letting w_ms float re-creates the
-    self-normalising-port artefact documented in palace_opt_sma.py.
+    width) stays pinned -- letting w_ms float re-creates a self-normalising-
+    port artefact where the trace is tuned against the port instead of a
+    real impedance.
     """
     spans = spans or {}
     floors = floors or {}

@@ -27,10 +27,8 @@ def build_mesh(iris_mm: float | None = None, mesh_max: float = 2.0,
                mesh_min: float = 0.35, show_stats: bool = True,
                spec=None, l_cav_mm: float | None = None,
                out_name: str = "siw_2cav.msh") -> str:
-    """spec/l_cav_mm/out_name (2026-08-30) exist so this can be SWEPT: the
-    k(w_iris) calibration needs many irises meshed under one spec, each to
-    its own file. All three default to the previous behaviour exactly
-    (module-global SPEC, build_geometry's own L_cav, siw_2cav.msh)."""
+    """spec/l_cav_mm/out_name let this be swept: the k(w_iris) calibration
+    meshes many irises under one spec, each to its own file."""
     spec = spec if spec is not None else SPEC
     g = build_geometry(spec)
     a = g.a_siw * 1e3           # mm
@@ -54,11 +52,8 @@ def build_mesh(iris_mm: float | None = None, mesh_max: float = 2.0,
         for y in ys:
             vias.append((x, y))
     # Middle iris: arms SPAN [iris/2, half] rather than being filtered out of
-    # the fixed `ys` grid, so the iris width is continuous. Filtering made it
-    # quantized in ~p steps -- measured here, w_iris 6/9, 12/15 and 18/21 mm
-    # each produced bit-identical meshes and identical k, collapsing a 6-point
-    # calibration sweep onto 3 real points. See _build_primitives in
-    # siw_geometry.py for the full note.
+    # the fixed `ys` grid, so the iris width stays continuous instead of
+    # quantized in steps of p (see _segment_positions in siw_geometry.py).
     from .siw_geometry import _segment_positions
     for y in _segment_positions(iris / 2.0, half, p):
         vias.append((L, +y))

@@ -265,33 +265,15 @@ def build_design_comparison(golden_paths: list[str], f0_ghz: float = 2.87,
     return True
 
 
-# Fabrication variants of ONE design: default set and their plot styling.
-# Unlike build_design_comparison (different designs, stacked per-design
-# subplots), these are the SAME geometry under different fabrication stacks,
-# so they belong on one shared pair of axes to be comparable at a glance.
-#: Fabrication variants. REVISED 2026-09-03 to drop the via-fill dimension.
-#:
-#: Setting via_conductivity_sm turns every SIW via into a VOLUMETRIC lossy
-#: conductor that Palace solves fields inside, which needs the copper skin
-#: depth resolved: 1.21 um at 2.9 GHz against a 200 um finest cell, 165x too
-#: coarse. The field then diffuses into an unresolved conductor and the solver
-#: books enormous spurious loss -- measured IL = -28.96 dB with S11w =
-#: -0.07 dB where the identical geometry gives -1.45 dB under PEC. The via
-#: fence IS the waveguide wall, so an artificially lossy fence destroys the
-#: cavity rather than perturbing it. Reproduced to four significant figures
-#: across two independent solves, i.e. deterministic model behaviour.
-#:
-#: Because `via_plated = via_conductivity_sm is not None` gates the hollow
-#: barrel geometry, dropping the conductor also drops tented-vs-open: that
-#: comparison is NOT ANSWERABLE at this mesh density. The older pad-only
-#: study's "<0.03 dB difference" came from the same defective path and was
-#: never a real measurement.
-#:
-#: What remains is both resolvable and the actual fabrication decision: the
-#: dielectric stack over the feed, plus real copper on the exterior ground
-#: planes (a surface-impedance BC, valid there because those faces are truly
-#: one-sided). Vias stay PEC -- their conductor loss is negligible beside the
-#: dielectric loss already modelled.
+# Fabrication variants of ONE design: unlike build_design_comparison
+# (different designs, stacked subplots), these share one geometry under
+# different fabrication stacks, so they go on one shared pair of axes.
+#
+# No via-fill/tented-vs-open dimension: volumetric via conductivity needs the
+# 1.21um copper skin depth resolved against a 200um finest cell, 165x too
+# coarse to be meaningful (see docs/STATE.md, "what the fabrication stack
+# costs"). Vias stay PEC; real copper is only applied to the exterior ground
+# planes, where Palace's surface-impedance BC is valid.
 FAB_VARIANTS = [
     ("pec_optimized",   "PEC (idealised, as optimised)",      "black",      "-",  2.2),
     ("only_cu",         "Real copper on exterior planes",     "tab:red",    "-",  1.8),
@@ -501,10 +483,8 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
     w_pad = CPWG.get("cpwg_w_feed_mm")
     _pad_end = (-Xf + CPWG.get("cpwg_len_mm", 5.0) + CPWG.get("cpwg_taper_mm", 4.0)
                 if w_pad else None)
-    # Same formulas build_mesh uses for the CPWG pad taper (see
-    # palace_dualmode_driven's _wp/_xp/_xh). Omitting them drew a
-    # constant-width feed with no gradual transition -- a real mismatch
-    # against the meshed geometry, and one the via-only verification missed.
+    # Must match build_mesh's CPWG pad taper (palace_dualmode_driven's
+    # _wp/_xp/_xh) or this draws a different feed than what's meshed.
     _clen = CPWG.get("cpwg_len_mm", 5.0)
     _ctap = CPWG.get("cpwg_taper_mm", 4.0)
     _wp = CPWG.get("cpwg_w_feed_mm") if CPWG.get("cpwg_gap_mm") is not None else None
@@ -758,15 +738,9 @@ def verify_cascade_drawing_matches_mesh(spec=None, params: dict | None = None) -
           f"width {w_ms:.4f} mm (drawn max half-width {max(abs(drawn[:,1])):.4f})")
     ok &= hit
 
-    # 5. The board outline must END where the trace ends. The launch is an
-    #    edge-mount SMA: its body straddles the board edge and its pin lands
-    #    on the last millimetre of the trace. A board even 1mm longer than
-    #    the trace cannot take the connector -- and until 2026-09-04 this one
-    #    was 3mm longer at each end, because `build_geometry` added a margin
-    #    in x as well as y while the mesher added it only in y. The gerbers
-    #    were already written before anyone looked. Checked against the
-    #    MESHED trace, not the drawn one, so it also catches the reverse
-    #    error (a board shorter than what was simulated).
+    # 5. The board outline must END where the trace ends -- the launch is an
+    #    edge-mount SMA whose pin lands on the last millimetre of the trace.
+    #    Checked against the MESHED trace, so it catches drift either way.
     trace_mesh = _np.array(g["trace_poly_in"])
     bx0 = geo.board[0] * MM
     x_trace_end = float(trace_mesh[:, 0].min())
@@ -779,12 +753,11 @@ def verify_cascade_drawing_matches_mesh(spec=None, params: dict | None = None) -
 def assert_sweep_complete(csv_path: str, expected: int | None = None) -> int:
     """Refuse to read a Palace sweep that is still being written.
 
-    Palace appends port-S.csv one row per frequency point, so a sweep in
-    progress looks like a complete-but-shorter sweep -- there is no marker
-    distinguishing them. Plotting one produces a figure that is simply
-    missing the top of the band, which is easy to mistake for a real
-    response (it happened: a 38-of-65-point sweep was plotted and read as
-    if finished). Returns the row count; raises if short or still growing.
+    Palace appends port-S.csv one row per frequency point, so an in-progress
+    sweep looks identical to a complete-but-shorter one -- no marker
+    distinguishes them, and plotting it just looks like a real response
+    missing the top of the band. Returns the row count; raises if short or
+    still growing.
     """
     import time
     if not os.path.exists(csv_path):

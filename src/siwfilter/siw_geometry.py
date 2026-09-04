@@ -128,15 +128,12 @@ def microstrip_guided_wavelength(f: float, eps_eff: float) -> float:
 # ---------------------------------------------------------------------------
 # Grounded coplanar waveguide (CPWG / conductor-backed CPW) for the SMA launch
 # ---------------------------------------------------------------------------
-# Why this exists (2026-08-29, user-prompted): the real Taoglas
-# EMPCB.SMAFSTJ.B.HT footprint is a CPWG launch -- a centre signal pad with
-# coplanar ground pads either side (legs at +-2.62mm) on the SAME layer, over
-# the bottom ground plane. The cavity feed, however, is a microstrip (no
-# coplanar grounds). Feeding a 50-ohm microstrip directly from a CPWG pad
-# without matching the CPWG section itself leaves an impedance step right at
-# the connector. These functions synthesise the CPWG gap `s` that makes the
-# launch 50 ohm for a given trace width, so the launch -> microstrip
-# transition can then be a smooth taper rather than a step.
+# The Taoglas EMPCB.SMAFSTJ.B.HT footprint is a CPWG launch (coplanar ground
+# pads either side of the signal pad, over the bottom ground plane); the
+# cavity feed is a plain microstrip. These functions synthesise the CPWG gap
+# `s` that makes the launch 50 ohm for a given trace width, so the
+# launch->microstrip transition is a smooth taper rather than an impedance
+# step at the connector.
 #
 # Formulation: Wadell / Simons conformal mapping for conductor-backed CPW.
 #   k1 = W/(W+2s)                      (upper, coplanar half)
@@ -494,18 +491,13 @@ def _build_primitives(g: Geometry) -> None:
     g.taper_polys = [in_taper, out_taper]
     g.feed_polys = [in_feed, out_feed]
 
-    # Board outline. In x the board ENDS AT THE FEED, with no margin: the
-    # launch is an edge-mount SMA, whose body straddles the board edge and
-    # whose pin lands on the very end of the trace. This is also exactly what
-    # the mesher builds (`palace_driven.build_mesh`: substrate box from
-    # X0=-(Lt+Lf) to X1=L_inner+Lt+Lf) and what `cst_export` draws.
-    #
-    # It did NOT used to be. Until 2026-09-04 a 3mm margin was added on all
-    # four sides, so the KiCad board outline and the 2D layout drawing were
-    # 6mm longer than the substrate that was simulated, and the CPWG pads sat
-    # 3mm INSIDE the edge -- a board on which the connector cannot be
-    # mounted. Only the transverse margin is real (the mesher's
-    # `ym = half + 3.0`): it is the dielectric shoulder outside the via wall.
+    # In x the board ENDS AT THE FEED, no margin: the edge-mount SMA's pin
+    # lands on the very end of the trace, and this matches what
+    # palace_driven.build_mesh actually builds (X0=-(Lt+Lf), X1=L_inner+Lt+Lf).
+    # Do not add a margin here -- it would desync the drawing from the mesh
+    # and put the CPWG pads inside the board edge, unmountable. Only the
+    # transverse margin is real (mesher's `ym = half + 3.0`, the dielectric
+    # shoulder outside the via wall).
     margin = 3e-3
     xmin = -Lt - Lf
     xmax = L_inner + Lt + Lf

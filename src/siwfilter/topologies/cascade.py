@@ -18,32 +18,19 @@ from ..layout_plot import plot_layout
 from .launch import TAOGLAS_CPWG as TAOGLAS_SMA
 from .base import MeshResult, ParamRange
 
-# Calibrated for the N=3 default (see palace_opt_sma.py); reused per-cavity
-# for other N since no per-N calibration exists yet -- a reasonable first
-# cut, not a claim of optimality for N!=3.
+# Calibrated for the N=3 default; reused per-cavity for other N (no per-N
+# calibration exists yet) -- a reasonable first cut, not optimal for N!=3.
 _L_INIT, _L_LO, _L_HI = 34.4, 30.0, 40.0
-# 2026-08-29 (v18): coupling lower bounds extended downward for the same
-# reason as dualmode's (see its _PARAMS comment) -- a narrower passband needs
-# WEAKER coupling, and the old floors (w_iris 8.0, w_ext 12.0) were set for a
-# wide-band design. N=3 targets k12=k23~0.046/Qe~20.6 and N=4 k12=k34~0.0415,
-# k23~0.0329/Qe~22.2, all weaker than the N=2 case, so the inline cascades
-# need at least as much headroom below.
+# Coupling lower bounds extend below what a wide-band design needs: a
+# narrower passband requires weaker coupling (smaller w_iris -> k, smaller
+# w_ext -> Qe) than these floors used to allow.
 _W_IRIS = (13.0, 4.0, 15.9)
 _W_EXT = (16.5, 7.0, 26.0)
 _L_TAPER = (15.73, 8.0, 26.0)
 
-# CPWG launch, matched 50-ohm (docs/TUNING_PLAN_2026-08-29.md sec 2, solved
-# not guessed): signal 1.2mm, coplanar gap 0.2512mm, ground inner edge
-# 0.8512mm -> 50.00 ohm (cpwg_gap_50ohm, Wadell/Simons conformal mapping).
-# Ground pads 0.851->3.6mm, 5mm deep; 6 stitch vias/side at +-2.62mm, fully
-# inside the copper. Real, sourceable part: Taoglas EMPCB.SMAFSTJ.B.HT.
-#
-# 2026-08-31: this was solved and verified in August but never actually
-# turned on as a default anywhere -- cascade only had a bare SMA coax stub
-# (with_sma, no ground plane at all near the launch), and even dualmode's own
-# TAOGLAS_SMA only enabled pad-only ground stitching (cpwg_gap_mm=None),
-# not the impedance-matched gap. This is the first place either topology
-# actually uses the solved CPWG numbers by default.
+# CPWG launch, matched 50-ohm (Wadell/Simons conformal mapping): signal
+# 1.2mm, gap 0.2512mm, ground inner edge 0.8512mm. Real, sourceable part:
+# Taoglas EMPCB.SMAFSTJ.B.HT.
 
 
 def _n_len_params(N: int) -> int:
@@ -323,17 +310,10 @@ class CascadeTopology:
                               "err": f"<2 modes (see {out_data(f'{tag}.log')})"}
                 continue
             # Select the even/odd pair by PROXIMITY TO f0, not by smallest
-            # gap. Palace returns N converged eigenvalues near the target
-            # without hard-clipping them to [Target, TargetUpper], so the list
-            # also carries higher-order modes -- and those cluster far more
-            # tightly than the split pair we want. Measured at w_iris=13mm:
-            #   2.9026  3.0770 | 4.6021 4.6492 4.6621 | 5.0653
-            #   gaps:   0.174    1.525  0.047  0.013    0.403
-            # A smallest-gap rule picks the 0.013 GHz pair at ~4.65 GHz (a
-            # higher-order family) instead of the real TE101 pair at
-            # 2.90/3.08, silently producing a meaningless k. Restrict to the
-            # requested window around f0 first, then take the two lowest --
-            # the fundamental's even/odd split.
+            # gap: Palace's eigenvalue list also carries higher-order modes,
+            # which cluster more tightly than the split pair wanted here.
+            # Restrict to the window around f0 first, then take the two
+            # lowest -- the fundamental's even/odd split.
             f0_ghz = spec.f0 / 1e9
             in_win = freqs[np.abs(freqs - f0_ghz) <= window]
             if len(in_win) < 2:
