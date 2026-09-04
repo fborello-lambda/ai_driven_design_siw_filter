@@ -235,6 +235,47 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
             f"-- an OPENING over the whole board, not an empty file",
             section="rules")
 
+    # ---- 6b. the connector physically fits ----------------------------
+    # From the datasheet in docs/sma_connector/ (Taoglas SPE-12-8-134/C/WY),
+    # checked 2026-09-04. These are the numbers that decide whether the part
+    # can be soldered on at all, which no gerber check can see.
+    if launch.get("cpwg_gap_mm") is not None:
+        from .topologies.launch import (TAOGLAS_MAX_BOARD_MM,
+                                        TAOGLAS_MAX_BOARD_FOOTPRINT_NOTE_MM)
+        fin = spec.substrate.h * MM + 2 * spec.substrate.cu_thickness * MM
+        add("Board fits the connector fork", fin <= TAOGLAS_MAX_BOARD_MM,
+            f"finished stack {fin:.4f} mm vs datasheet sec.2 max "
+            f"{TAOGLAS_MAX_BOARD_MM:.2f} mm (sec.3.1's footprint note says "
+            f"{TAOGLAS_MAX_BOARD_FOOTPRINT_NOTE_MM:.2f} mm -- we are "
+            f"{(fin - TAOGLAS_MAX_BOARD_FOOTPRINT_NOTE_MM)*1000:+.0f} um "
+            f"against that tighter figure, so there is NO margin). 1 oz "
+            f"copper would give {spec.substrate.h*MM + 0.070:.3f} mm and "
+            f"would not fit -- the 0.5 oz spec is load-bearing.",
+            section="rules")
+        # Datasheet sec.3.1: ground pads on a 2.62mm pitch, 1mm wide, 4.56mm
+        # long; centre pin 0.76mm dia. Every one of those must land on our
+        # copper or the part cannot be soldered.
+        leg_c = launch.get("gnd_stitch_offset_mm", 2.62)
+        lo, hi = leg_c - 0.5, leg_c + 0.5
+        y_in, y_out = launch["cpwg_y_gnd_mm"], launch["cpwg_y_out_mm"]
+        add("Connector ground legs land on the pours", y_in <= lo and hi <= y_out,
+            f"legs span y {lo:.3f}..{hi:.3f} mm, pours span "
+            f"{y_in:.4f}..{y_out:.4f} mm", section="rules")
+        wp = launch["cpwg_w_feed_mm"]
+        add("Connector centre pin lands on the trace", wp >= 0.76,
+            f"pin 0.76 mm dia on a {wp:.3f} mm trace", section="rules")
+        add("Ground pad length covers the connector legs",
+            launch.get("cpwg_len_mm", 5.0) >= 4.56,
+            f"pour {launch.get('cpwg_len_mm', 5.0):.2f} mm long vs the "
+            f"datasheet's 4.56 mm pad and 3.8 mm leg", section="rules")
+        # Informational: we are NOT on the recommended land pattern, and
+        # that is a decision, not an oversight.
+        add("Signal trace vs the datasheet land pattern", None,
+            f"{wp:.3f} mm against the datasheet's 0.85 +-0.2 mm. Outside the "
+            f"band ON PURPOSE: the CPWG gap and trace width together are what "
+            f"solve to 50 ohm on this substrate. The pin still lands on "
+            f"copper, so it solders normally.", section="rules")
+
     # ---- 7. SIW physics rules -----------------------------------------
     d, pv = spec.d_via * MM, spec.p_via * MM
     add("Via pitch/diameter ratio", 0.5 <= pv / d <= 2.5,

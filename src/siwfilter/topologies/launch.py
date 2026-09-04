@@ -32,21 +32,45 @@ solder to, rather than an idealised continuous ring.
 from __future__ import annotations
 
 TAOGLAS_CPWG: dict[str, float | bool | int] = {
-    # SMA coax stub
+    # SMA coax stub.
+    #   rin  = datasheet SPE-12-8-134/C/WY sec.2, pin diameter 0.76mm.
+    #          (Checked against the PDF in docs/sma_connector/, 2026-09-04.)
+    #   rout = DERIVED, not from the datasheet, which gives no dielectric OD:
+    #          Z0 = 50 ohm in PTFE eps_r 2.08 -> rout/rin = 3.326.
     "sma_rin_mm": 0.38,
     "sma_rout_mm": 1.2639,
     "sma_eps_r": 2.08,
     "sma_tand": 4.0e-4,
-    # ground stitching
+    # Ground stitching. The offset is the datasheet footprint pitch
+    # (sec.3.1: 2.62 / 2.62mm between the three front pads), so the
+    # connector's ground legs land on the pours. n_gnd_stitch is a REQUEST;
+    # gnd_stitch_layout fits as many as clear -- it builds 4 per pad, 16
+    # total. Report the measured count, never this number.
     "gnd_stitch": True,
     "n_gnd_stitch": 6,
     "gnd_stitch_offset_mm": 2.62,
-    # impedance-matched CPWG launch
+    # Impedance-matched CPWG launch. DELIBERATELY NOT the datasheet's
+    # recommended footprint: its ground pads are 1mm wide starting 2.12mm
+    # off centre, and its signal pad is 0.85 +-0.2mm. The pour inner edge is
+    # pulled in to 0.8512mm because that gap (0.2512mm against a 1.2mm
+    # trace) is what solves to 50 ohm on 0.76mm RO4350B. The connector still
+    # lands entirely on copper -- pin (0.76mm dia) on the 1.2mm trace, both
+    # legs (2.12..3.12mm) inside the 0.8512..3.6mm pours -- so it solders
+    # normally. The one deviation is trace width: 1.2mm vs 0.85 +-0.2mm.
     "cpwg_gap_mm": 0.2512,
     "cpwg_y_gnd_mm": 0.8512,
     "cpwg_y_out_mm": 3.6,
     "cpwg_w_feed_mm": 1.2,
 }
+
+#: Datasheet limits that constrain the BOARD rather than the launch pattern.
+#: sec.2's table says 0.8mm max PCB thickness; sec.3.1's footprint note says
+#: 0.79mm. This board's finished stack is 0.760 dielectric + 2 x 0.0175
+#: copper = 0.795mm, i.e. between the two, with no margin. It fits (the fork
+#: is sprung) but 1 oz copper would make it 0.830mm and it would NOT -- so
+#: the 0.5 oz specification is load-bearing, not a preference.
+TAOGLAS_MAX_BOARD_MM = 0.80
+TAOGLAS_MAX_BOARD_FOOTPRINT_NOTE_MM = 0.79
 
 #: Tag for golden entries measured under this launch (golden/README.md).
 LAUNCH_TAG = "cpwg_taoglas"

@@ -170,16 +170,59 @@ modelled at its TRUE datasheet size (0.76mm dia -> r=0.38mm): the historical
 
 ![cross-section](sma_cross_section.png)
 
-Geometry, and which numbers are sourced vs derived:
+### Verified against the datasheet, 2026-09-04
 
-| Quantity | Value | Source |
-|---|---|---|
-| Pin radius | 0.38 mm | datasheet (0.76mm dia) |
-| Ground-leg offset | +-2.62 mm | datasheet footprint |
-| PTFE outer radius | 1.2639 mm | **DERIVED** — Z0=50ohm, eps_r=2.08 (rout/rin=3.326). Substitute if the datasheet gives a real dielectric OD. |
-| GND pad x-extent | ~3.4 mm from board edge | **INFERRED** to cover 3 stitch vias — not read off the datasheet drawing |
-| Stitch vias | 3/pad, d=0.6mm, 1.2mm pitch (12 total) | design choice within JLCPCB rules (`config.VIA_PRESETS`) |
-| Coax stub length | 6 mm | model-only (port standoff), not a physical dimension |
+The datasheet is now IN THIS REPO —
+[`EMPCB.SMAFSTJ.B.HT_SPE-12-8-134-C-WY.pdf`](EMPCB.SMAFSTJ.B.HT_SPE-12-8-134-C-WY.pdf)
+(Taoglas SPE-12-8-134/C/WY, 4 pages, drawings are images) — so these numbers
+never again have to be taken on trust. What it says:
+
+* §2 spec table: impedance 50Ω, 0–12.4 GHz, connector 6.35 × 6.35 × 13.3 mm,
+  **connector pin diameter 0.76 mm**, **max. acceptable PCB thickness 0.8 mm**.
+* §3 drawing: body SQ 6.35±0.1, total length 13.3±0.3, leg length 3.8±0.2,
+  thread 1/4"-36UNS-2A, pin shown as Ø0.7±0.1 on the rear view (the §2
+  table's 0.76 mm sits inside that tolerance band).
+* §3.1 footprint: three front pads on a **2.62 / 2.62 mm** pitch, all
+  **4.56±0.2 mm** long; the two ground pads **1±0.2 mm** wide, the centre
+  signal pad **0.85±0.2 mm** wide. Two matching ground pads on the back at
+  5.23 mm spacing, no back centre pad. Note: **"Maximum board thickness is
+  0.79 mm"**.
+
+| Quantity | Value | Source | vs datasheet |
+|---|---|---|---|
+| Pin radius | 0.38 mm | datasheet §2 (0.76 mm dia) | ✔ exact |
+| Ground-leg offset | ±2.62 mm | datasheet §3.1 pitch | ✔ exact |
+| Ground pad length (x) | 5.0 mm (`cpwg_len_mm`) | design | ✔ covers the 4.56 mm pad and the 3.8 mm leg |
+| Ground pad span (y) | 0.8512 … 3.600 mm | CPWG solve | ✔ contains the leg's 2.12 … 3.12 mm |
+| Signal trace width | 1.2 mm (`cpwg_w_feed_mm`) | CPWG 50Ω solve | ✘ **outside** the 0.85±0.2 band — deliberate, see below |
+| PTFE outer radius | 1.2639 mm | **DERIVED** — Z0=50Ω, eps_r=2.08 (rout/rin=3.326). The datasheet gives no dielectric OD, so this stays derived. | — |
+| Stitch vias | 4/pad, d=0.6 mm, 1.2 mm pitch (**16** total) | design choice within JLCPCB rules (`config.VIA_PRESETS`) | not a datasheet feature |
+| Coax stub length | 6 mm | model-only (port standoff), not a physical dimension | — |
+
+**Two things the datasheet changes.**
+
+1. **Board thickness is marginal, and 0.5 oz copper is what makes it fit.**
+   The finished stack is 0.760 mm dielectric + 2 × 17.5 µm copper =
+   **0.795 mm**. The §2 table allows 0.8 mm; the §3.1 footprint note says
+   0.79 mm. We sit between the two, 5 µm over the tighter figure, before
+   ENIG. It will fit — the fork is sprung — but there is no margin, and
+   **1 oz copper would give 0.830 mm and would not fit at all**. The 0.5 oz
+   choice in FAB_NOTES is therefore load-bearing, not a preference.
+2. **This is not the recommended footprint, on purpose.** The datasheet's
+   ground pads are 1 mm wide starting 2.12 mm off centre; ours are a CPWG
+   pour whose inner edge is at 0.8512 mm, because that gap (0.2512 mm
+   against a 1.2 mm trace) is what solves to 50 Ω on this substrate. The
+   connector's own pads all land on copper — pin on the trace, both legs
+   inside the pours — so it solders normally. The deviation is the signal
+   trace being 1.2 mm where the datasheet draws 0.85 mm. Recorded rather
+   than silently "matching the footprint".
+
+The earlier "GND pad x-extent ~3.4 mm, INFERRED" line in this table was a
+guess, and it was wrong: the datasheet pad is 4.56 mm. It did no harm
+because the actual pour is 5.0 mm and covers it, but the row is corrected
+above. The stitch-via count was also stale here (3/pad, 12 total); the CPWG
+launch builds **4/pad, 16 total**, which is what the mesh, the gerbers and
+the drill file all agree on.
 
 Two corrections made while building this, both worth remembering:
 
