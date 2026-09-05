@@ -210,22 +210,27 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # constant-width feed here would NOT be the simulated structure.
         wp = launch["cpwg_w_feed_mm"]; hp2 = _fmm(wp / 2.0)
         clen = launch.get("cpwg_len_mm", 5.0); ctap = launch.get("cpwg_taper_mm", 4.0)
-        traces = {
-            "feed_in": [(xmin_e, hp2),
-                        (f"{xmin_e}+{_fmm(clen)}", hp2),
-                        (f"{xmin_e}+{_fmm(clen + ctap)}", hp),
-                        ("-L_taper", hp), ("-L_taper", f"-({hp})"),
-                        (f"{xmin_e}+{_fmm(clen + ctap)}", f"-({hp})"),
-                        (f"{xmin_e}+{_fmm(clen)}", f"-({hp2})"),
-                        (xmin_e, f"-({hp2})")],
-            "feed_out": [(xmax_e, hp2),
-                         (f"{xmax_e}-{_fmm(clen)}", hp2),
-                         (f"{xmax_e}-{_fmm(clen + ctap)}", hp),
-                         (f"{Li}+L_taper", hp), (f"{Li}+L_taper", f"-({hp})"),
-                         (f"{xmax_e}-{_fmm(clen + ctap)}", f"-({hp})"),
-                         (f"{xmax_e}-{_fmm(clen)}", f"-({hp2})"),
-                         (xmax_e, f"-({hp2})")],
-        }
+        # Overwrite feed_in/feed_out only -- taper_in/taper_out (the SIW-facing
+        # flare from the microstrip width out to the full cavity width, added
+        # above) are unrelated to the launch and must survive this branch.
+        # Reassigning the whole dict here once left them out entirely: the
+        # copper ended at the microstrip width (x=-L_taper) with nothing
+        # connecting it to the cavity's top plate at x=0 -- an ~L_taper-long
+        # (15.7mm) open gap in the trace, not merely a missing picture.
+        traces["feed_in"] = [(xmin_e, hp2),
+                             (f"{xmin_e}+{_fmm(clen)}", hp2),
+                             (f"{xmin_e}+{_fmm(clen + ctap)}", hp),
+                             ("-L_taper", hp), ("-L_taper", f"-({hp})"),
+                             (f"{xmin_e}+{_fmm(clen + ctap)}", f"-({hp})"),
+                             (f"{xmin_e}+{_fmm(clen)}", f"-({hp2})"),
+                             (xmin_e, f"-({hp2})")]
+        traces["feed_out"] = [(xmax_e, hp2),
+                              (f"{xmax_e}-{_fmm(clen)}", hp2),
+                              (f"{xmax_e}-{_fmm(clen + ctap)}", hp),
+                              (f"{Li}+L_taper", hp), (f"{Li}+L_taper", f"-({hp})"),
+                              (f"{xmax_e}-{_fmm(clen + ctap)}", f"-({hp})"),
+                              (f"{xmax_e}-{_fmm(clen)}", f"-({hp2})"),
+                              (xmax_e, f"-({hp2})")]
         y_g, y_o = launch["cpwg_y_gnd_mm"], launch["cpwg_y_out_mm"]
         for side, sgn in (("top", 1.0), ("bot", -1.0)):
             for end, xa, xb in (("in", xmin_e, f"{xmin_e}+{_fmm(clen)}"),

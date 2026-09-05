@@ -1520,6 +1520,24 @@ AddToHistory "define cylinder: component1:viaext_out_b3", "With Cylinder" & vbLf
   "End With"
 
 ' ---- microstrip feeds + tapers (extruded copper traces) -----------
+AddToHistory "define extrude: component1:taper_in", "With Extrude" & vbLf & _
+  ".Reset" & vbLf & _
+  ".Name ""taper_in""" & vbLf & _
+  ".Component ""component1""" & vbLf & _
+  ".Material ""PEC""" & vbLf & _
+  ".Mode ""pointlist""" & vbLf & _
+  ".Height ""t_cu""" & vbLf & _
+  ".Twist ""0""" & vbLf & _
+  ".Taper ""0""" & vbLf & _
+  ".Origin ""0"", ""0"", ""h_sub""" & vbLf & _
+  ".Uvector ""1"", ""0"", ""0""" & vbLf & _
+  ".Vvector ""0"", ""1"", ""0""" & vbLf & _
+  ".Point ""-L_taper"", ""W_ms/2""" & vbLf & _
+  ".LineTo ""0"", ""19.8950""" & vbLf & _
+  ".LineTo ""0"", ""-(19.8950)""" & vbLf & _
+  ".LineTo ""-L_taper"", ""-(W_ms/2)""" & vbLf & _
+  ".Create" & vbLf & _
+  "End With"
 AddToHistory "define extrude: component1:feed_in", "With Extrude" & vbLf & _
   ".Reset" & vbLf & _
   ".Name ""feed_in""" & vbLf & _
@@ -1540,6 +1558,24 @@ AddToHistory "define extrude: component1:feed_in", "With Extrude" & vbLf & _
   ".LineTo ""-(L_taper+L_feed)+9.0000"", ""-(W_ms/2)""" & vbLf & _
   ".LineTo ""-(L_taper+L_feed)+5.0000"", ""-(0.6000)""" & vbLf & _
   ".LineTo ""-(L_taper+L_feed)"", ""-(0.6000)""" & vbLf & _
+  ".Create" & vbLf & _
+  "End With"
+AddToHistory "define extrude: component1:taper_out", "With Extrude" & vbLf & _
+  ".Reset" & vbLf & _
+  ".Name ""taper_out""" & vbLf & _
+  ".Component ""component1""" & vbLf & _
+  ".Material ""PEC""" & vbLf & _
+  ".Mode ""pointlist""" & vbLf & _
+  ".Height ""t_cu""" & vbLf & _
+  ".Twist ""0""" & vbLf & _
+  ".Taper ""0""" & vbLf & _
+  ".Origin ""0"", ""0"", ""h_sub""" & vbLf & _
+  ".Uvector ""1"", ""0"", ""0""" & vbLf & _
+  ".Vvector ""0"", ""1"", ""0""" & vbLf & _
+  ".Point ""103.9810+L_taper"", ""W_ms/2""" & vbLf & _
+  ".LineTo ""103.9810"", ""19.8950""" & vbLf & _
+  ".LineTo ""103.9810"", ""-(19.8950)""" & vbLf & _
+  ".LineTo ""103.9810+L_taper"", ""-(W_ms/2)""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
 AddToHistory "define extrude: component1:feed_out", "With Extrude" & vbLf & _

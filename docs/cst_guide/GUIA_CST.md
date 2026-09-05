@@ -32,6 +32,30 @@ Archivos en esta carpeta:
 | `siw_cascade_N3.bas` | La macro VBA. Al ejecutarla en CST construye toda la geometría 3D. |
 | `palace_cascade_N3_reference.s2p` | Los parámetros S que dio Palace para este mismo diseño, para comparar contra lo que dé CST (ver §6 — el archivo tiene **fase puesta en cero**, sirve solo para comparar magnitud en dB, no para nada que dependa de la fase). |
 | `FAB_NOTES.md` | Notas de fabricación (sustrato, cobre, acabado) — no hace falta para simular, es referencia. |
+| `img/` | Imágenes de referencia (esta guía), generadas directamente desde la herramienta de línea de comandos del proyecto — no son capturas de CST. |
+
+## Cómo se ve la placa (vista de arriba, acotada)
+
+Esta imagen sale de `siw layout` (no de CST): las tres cavidades, los dos
+iris internos acoplando las cavidades, los acoplamientos externos de
+entrada/salida (`w_ext`), la fila de vías de cada pared, y las tapers
+microstrip-a-SIW en cada extremo (la zona en forma de flecha que se
+ensancha desde la línea angosta hasta el ancho completo de la cavidad).
+
+![Vista superior acotada del filtro cascade N=3. Las tapers grandes en
+cada extremo son la transición microstrip-a-SIW; el lanzador CPWG (mucho
+más chico) está fuera de este dibujo, pegado al conector.](img/board_top_dimensionado.png)
+
+## Cómo se ve en 3D (el modelo que arma la macro)
+
+![Vista 3D del sólido completo: sustrato, plano de tierra, fila de vías,
+tapers y el conector SMA en cada extremo.](img/board_3d.png)
+
+![Acercamiento al lanzador: el conector SMA, el gap CPWG angosto, y cómo
+se ensancha hacia la taper grande que entra a la cavidad. Esta es
+exactamente la zona que la macro debe reproducir en CST -- si en el
+modelo de CST falta la pieza ancha después del microstrip, la pista no
+llega a la cavidad.](img/board_3d_launch_closeup.png)
 
 \newpage
 
@@ -87,13 +111,22 @@ puertos.
    cada extremo el conector SMA (un cilindro de PTFE con su pin dorado
    adentro, sobresaliendo del borde de la placa).
 
-**Si algo de esto no aparece** (por ejemplo, faltan vías o el conector no
-se ve), lo más probable es que el archivo `.bas` esté desactualizado —
-pedir que se regenere desde el repositorio antes de seguir. El archivo de
-esta carpeta ya tiene corregidos dos errores de unidades que existieron en
-versiones anteriores de esta macro (uno hacía que el conector y las vías
-de referencia a tierra del lanzador se dibujaran 1000 veces más grandes o
-más lejos de lo correcto).
+Comparar contra las imágenes del §"Cómo se ve la placa" más arriba —
+en particular, verificar que **después de la pista angosta del microstrip
+haya una pieza ancha en forma de embudo antes de llegar a la cavidad**
+(la taper microstrip-a-SIW). Esa pieza es grande y fácil de ver en el
+árbol del modelador (se llama `taper_in`/`taper_out`); si falta, la pista
+queda cortada y no llega a la cavidad — la simulación no va a andar aunque
+CST no muestre ningún error al construir la geometría.
+
+**Si algo de esto no aparece** (falta la taper grande, faltan vías, o el
+conector no se ve), lo más probable es que el archivo `.bas` esté
+desactualizado — pedir que se regenere desde el repositorio antes de
+seguir. El archivo de esta carpeta ya tiene corregidos varios errores que
+existieron en versiones anteriores de esta macro (dos de unidades, que
+dibujaban el conector y las vías del lanzador 1000 veces más grandes o
+más lejos de lo correcto; y uno donde faltaba exactamente esa taper
+grande, dejando la pista sin conexión a la cavidad).
 
 \newpage
 
@@ -165,6 +198,17 @@ rango de frecuencia a algo como 0.5–8 GHz antes de correr.
 | Pérdida de retorno (peor caso en banda) | −13.37 dB |
 | Ancho de banda a −3 dB | 189 MHz |
 | Pérdida de inserción | −1.85 dB (PEC) / −2.44 dB (cobre real) |
+
+Esto es lo que dio Palace para este mismo diseño (gráfico generado desde
+la herramienta de línea de comandos, no es una captura de CST) — la forma
+que debería tener el resultado de CST, aunque los números exactos no
+coincidan al dígito por tratarse de dos solvers distintos:
+
+![|S21| y |S11| medidos con Palace para este diseño. Banda verde =
+banda de paso objetivo; línea punteada = objetivo de −16 dB. El diseño
+real queda en torno a −13 a −15 dB, no en el objetivo -- esa diferencia
+ya está identificada y aceptada, no es un error de la simulación (ver
+§7 y `FAB_NOTES.md`).](img/resultado_esperado_s11_s21.png)
 
 **Para superponer la curva de Palace directamente en el mismo gráfico de
 CST:**

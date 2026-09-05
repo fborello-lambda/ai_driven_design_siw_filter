@@ -344,6 +344,16 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
         add("CST macro coordinates are in millimetres", biggest < 2 * span,
             f"largest |x| is {biggest:.3f} mm against a {span:.1f} mm board",
             section="model")
+        # The microstrip-to-SIW taper (taper_in/taper_out) is the trace that
+        # actually connects the feed to the cavity. A launch branch once
+        # overwrote the whole traces{} dict instead of updating feed_in/
+        # feed_out, silently dropping both -- an ~L_taper-long (15mm+) open
+        # gap in the copper, not merely a missing picture.
+        has_taper = ('"taper_in"' in txt) and ('"taper_out"' in txt)
+        add("CST macro draws the microstrip-to-SIW taper", has_taper,
+            "taper_in/taper_out extrude blocks present" if has_taper else
+            "MISSING -- the feed trace does not reach the cavity",
+            section="model")
 
     # ---- 10. drawing vs mesh ------------------------------------------
     if with_mesh:
