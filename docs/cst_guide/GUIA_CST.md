@@ -95,6 +95,24 @@ Esto es lo que reemplaza a dibujar la geometría a mano — la macro hace
 **todo**: parámetros, sustrato, vías, iris, el conector SMA real y los
 puertos.
 
+## 3.0 Antes de correr nada: verificar que el archivo es la versión corregida
+
+Este `siw_cascade_N3.bas` tiene corregido un error real que se detectó
+recién (2026-09-05): al conector SMA le faltaba el cilindro metálico que
+lo blinda por afuera del dieléctrico. Sin ese blindaje el puerto coaxial
+no tiene ninguna referencia de 50 Ω real y CST refleja casi el 100% de la
+potencia en **toda** la banda (S1,1 nunca baja de −0.4 dB, ver §7) — un
+resultado que no se parece en nada al filtro real, aunque la macro corre
+sin ningún error visible.
+
+**Antes de ejecutar la macro**, abrir el archivo `.bas` con un editor de
+texto (Bloc de notas alcanza) y buscar (Ctrl+F) el texto `sma_in_shield`.
+
+- **Si aparece**: es la versión corregida, seguir con el resto de esta
+  sección.
+- **Si NO aparece**: es una versión vieja — pedir que se regenere o usar
+  el archivo que viene en este mismo paquete, no uno descargado antes.
+
 1. En el menú superior: **Macros → Macro Editor...** (o el ícono de
    macros, según la versión).
 2. En el editor de macros: **File → Open Macro File...**
@@ -267,6 +285,37 @@ es el valor correcto para simular, no un error.
 Todos los parámetros anteriores están fijados como `StoreParameter` al
 principio de la macro, así que se pueden inspeccionar (y, si hace falta,
 volver a calcular a mano) sin tener que correr nada.
+
+## 7.1 ¿Tenemos la referencia de 50 Ω?
+
+Sí, y se puede verificar sin correr CST, con la fórmula estándar de
+impedancia característica de un coaxial:
+
+$$Z_0 = \frac{60}{\sqrt{\varepsilon_r}} \ln\left(\frac{r_{out}}{r_{in}}\right)$$
+
+Con los valores reales del conector (pin $r_{in}=0.38$ mm, PTFE hasta
+$r_{out}=1.2639$ mm, $\varepsilon_r=2.08$):
+
+$$Z_0 = \frac{60}{\sqrt{2.08}} \ln\left(\frac{1.2639}{0.38}\right) = 49.997\ \Omega$$
+
+Es decir: el radio del PTFE (1.2639 mm) **no es un número cosmético** —
+se calculó exactamente para que este coaxial dé 50 Ω, la misma cuenta que
+ya está documentada en `topologies/launch.py`. Lo que arreglaba el error
+del §3.0 (el blindaje faltante) no era esta cuenta -- ya estaba bien --
+sino que sin un conductor metálico real envolviendo el PTFE, el puerto de
+CST no tenía ninguna pared conductora contra la cual esa impedancia
+pudiera referenciarse, y por eso el resultado salía roto (ver §7.2) aunque
+el coaxial en sí ya estaba dimensionado en 50 Ω desde el principio.
+
+## 7.2 Qué pasa si se corre con la versión vieja (referencia, no repetir)
+
+Ya se probó: con el `.bas` de antes de esta corrección, el resultado en
+CST fue S1,1 pegado a 0 dB en **toda** la banda 2.0–3.6 GHz (mejor caso
+apenas −0.37 dB) y S2,1 entre −30 y −95 dB — el puerto refleja casi toda
+la potencia y el filtro real (que sí existe, calibrado y con la geometría
+correcta) queda enterrado debajo de esa desadaptación. No indica ningún
+problema con Palace ni con el diseño; era específicamente la falta de
+este blindaje en el archivo exportado a CST.
 
 \newpage
 
