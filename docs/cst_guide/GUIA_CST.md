@@ -119,14 +119,18 @@ haya una pieza ancha en forma de embudo antes de llegar a la cavidad**
 queda cortada y no llega a la cavidad — la simulación no va a andar aunque
 CST no muestre ningún error al construir la geometría.
 
-**Si algo de esto no aparece** (falta la taper grande, faltan vías, o el
-conector no se ve), lo más probable es que el archivo `.bas` esté
-desactualizado — pedir que se regenere desde el repositorio antes de
+**Si algo de esto no aparece** (falta la taper grande, faltan vías, el
+conector no se ve, o al conector le falta el cilindro metálico que envuelve
+al dieléctrico PTFE por fuera), lo más probable es que el archivo `.bas`
+esté desactualizado — pedir que se regenere desde el repositorio antes de
 seguir. El archivo de esta carpeta ya tiene corregidos varios errores que
-existieron en versiones anteriores de esta macro (dos de unidades, que
-dibujaban el conector y las vías del lanzador 1000 veces más grandes o
-más lejos de lo correcto; y uno donde faltaba exactamente esa taper
-grande, dejando la pista sin conexión a la cavidad).
+existieron en versiones anteriores de esta macro: dos de unidades (que
+dibujaban el conector y las vías del lanzador 1000 veces más grandes o más
+lejos de lo correcto); uno donde faltaba la taper grande, dejando la pista
+sin conexión a la cavidad; y uno donde al conector coaxial le faltaba el
+blindaje metálico exterior (`sma_in_shield`/`sma_out_shield`) — sin ese
+cilindro de PEC envolviendo al PTFE, el coaxial no tiene pared conductora
+de retorno y no es la misma estructura que se simuló con Palace.
 
 \newpage
 
@@ -248,7 +252,7 @@ declarados con `StoreParameter` cerca del principio del archivo).
 | Vías | Ø1.5 mm, paso 3.0 mm, 102 en total | tamaño confirmado por búsqueda EM, no arbitrario |
 | Iris internos | `w_iris12`, `w_iris23` | calibrados por simulación EM (eigenmode), no una fórmula analítica |
 | Acoplamiento externo | `w_ext` | mismo proceso de calibración |
-| Conector | Taoglas EMPCB.SMAFSTJ.B.HT — pin de 0.38 mm de radio (0.76 mm de diámetro real de la hoja de datos), 6 mm de stub coaxial | Hoja de datos Taoglas (adjunta en el repositorio, `docs/sma_connector/`) |
+| Conector | Taoglas EMPCB.SMAFSTJ.B.HT — pin de 0.38 mm de radio (0.76 mm de diámetro real de la hoja de datos), dieléctrico PTFE hasta 1.2639 mm, **blindaje metálico (PEC) envolviendo el PTFE** desde 1.2639 hasta 1.5639 mm, 6 mm de stub coaxial | Hoja de datos Taoglas (adjunta en el repositorio, `docs/sma_connector/`) |
 | Lanzador CPWG | gap 0.2512 mm, ancho de pista 1.2 mm, 16 vías de "stitching" a tierra | resuelto para 50 Ω sobre este sustrato — **no** es el footprint recomendado por la hoja de datos del conector (que da 0.85 mm de pista), a propósito: ese ancho es el que da 50 Ω real en este sustrato |
 | Puertos | **Coaxiales**, sobre la cara externa de cada stub SMA — no puertos de guía de onda sobre el microstrip | así es como se simuló el diseño real; un puerto de guía de onda sobre el microstrip mediría un problema distinto (una línea idealizada, no el conector real) |
 

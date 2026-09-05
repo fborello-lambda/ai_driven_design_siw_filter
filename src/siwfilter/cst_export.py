@@ -311,6 +311,24 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                 f'.Xrange "{far}", "{x_edge}"',
                 '.Ycenter "0"', '.Zcenter "h_sub/2"', '.Segments "0"',
                 ".Create", "End With"]))
+            # Shield: Palace has no separate solid for this -- its mesh tags
+            # the PTFE's own outer face (r=rout) PEC directly, which is a
+            # valid coax boundary in an FEM mesh but has no CST equivalent.
+            # Without an actual PEC solid here the coax has no confining
+            # wall along the stub and is not the structure that was
+            # simulated. The wall thickness is cosmetic (PEC has no skin
+            # depth); what matters is Innerradius = rout, flush with the
+            # PTFE, so the port aperture (also sized to rout) sits exactly
+            # on the shield's inner face.
+            shell_t = 0.3   # mm, connector-body-like, not a physical constraint
+            s.append(_hist(f"define cylinder: component1:sma_{tag}_shield", [
+                "With Cylinder", ".Reset", f'.Name "sma_{tag}_shield"',
+                '.Component "component1"', '.Material "PEC"',
+                '.Axis "x"', f'.Outerradius "{_fmm(rout + shell_t)}"',
+                f'.Innerradius "{_fmm(rout)}"',
+                f'.Xrange "{far}", "{x_edge}"',
+                '.Ycenter "0"', '.Zcenter "h_sub/2"', '.Segments "0"',
+                ".Create", "End With"]))
 
     # ---- boundaries, background, ports ----------------------------------
     s.append("\n' ---- background + boundaries --------------------------------------\n")

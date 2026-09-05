@@ -354,6 +354,16 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
             "taper_in/taper_out extrude blocks present" if has_taper else
             "MISSING -- the feed trace does not reach the cavity",
             section="model")
+        # Palace has no separate solid for the coax shield -- it tags the
+        # PTFE's own outer face PEC, which is valid in an FEM mesh but has
+        # no CST equivalent. Without an explicit PEC solid there the coax
+        # is an unshielded dielectric rod, not the structure that was
+        # simulated.
+        has_shield = ('"sma_in_shield"' in txt) and ('"sma_out_shield"' in txt)
+        add("CST macro draws the SMA coax shield", has_shield,
+            "sma_in_shield/sma_out_shield present" if has_shield else
+            "MISSING -- the coax stub has no confining conductor",
+            section="model")
 
     # ---- 10. drawing vs mesh ------------------------------------------
     if with_mesh:

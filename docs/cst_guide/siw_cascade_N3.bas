@@ -1943,6 +1943,20 @@ AddToHistory "define cylinder: component1:sma_in_pin", "With Cylinder" & vbLf & 
   ".Segments ""0""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
+AddToHistory "define cylinder: component1:sma_in_shield", "With Cylinder" & vbLf & _
+  ".Reset" & vbLf & _
+  ".Name ""sma_in_shield""" & vbLf & _
+  ".Component ""component1""" & vbLf & _
+  ".Material ""PEC""" & vbLf & _
+  ".Axis ""x""" & vbLf & _
+  ".Outerradius ""1.5639""" & vbLf & _
+  ".Innerradius ""1.2639""" & vbLf & _
+  ".Xrange ""-(L_taper+L_feed)-6.0000"", ""-(L_taper+L_feed)""" & vbLf & _
+  ".Ycenter ""0""" & vbLf & _
+  ".Zcenter ""h_sub/2""" & vbLf & _
+  ".Segments ""0""" & vbLf & _
+  ".Create" & vbLf & _
+  "End With"
 AddToHistory "define cylinder: component1:sma_out_ptfe", "With Cylinder" & vbLf & _
   ".Reset" & vbLf & _
   ".Name ""sma_out_ptfe""" & vbLf & _
@@ -1965,6 +1979,20 @@ AddToHistory "define cylinder: component1:sma_out_pin", "With Cylinder" & vbLf &
   ".Axis ""x""" & vbLf & _
   ".Outerradius ""0.3800""" & vbLf & _
   ".Innerradius ""0""" & vbLf & _
+  ".Xrange ""103.9810+L_taper+L_feed+6.0000"", ""103.9810+L_taper+L_feed""" & vbLf & _
+  ".Ycenter ""0""" & vbLf & _
+  ".Zcenter ""h_sub/2""" & vbLf & _
+  ".Segments ""0""" & vbLf & _
+  ".Create" & vbLf & _
+  "End With"
+AddToHistory "define cylinder: component1:sma_out_shield", "With Cylinder" & vbLf & _
+  ".Reset" & vbLf & _
+  ".Name ""sma_out_shield""" & vbLf & _
+  ".Component ""component1""" & vbLf & _
+  ".Material ""PEC""" & vbLf & _
+  ".Axis ""x""" & vbLf & _
+  ".Outerradius ""1.5639""" & vbLf & _
+  ".Innerradius ""1.2639""" & vbLf & _
   ".Xrange ""103.9810+L_taper+L_feed+6.0000"", ""103.9810+L_taper+L_feed""" & vbLf & _
   ".Ycenter ""0""" & vbLf & _
   ".Zcenter ""h_sub/2""" & vbLf & _
