@@ -177,19 +177,31 @@ en CST que volvió con esa versión dio:
   +5.6 dB — un filtro pasivo no puede tener ganancia, así que el resultado
   está corrompido de punta a punta, no es un problema de ajuste fino.
 
-Sospecha (no confirmada, no hay licencia de CST acá para probarlo
-directamente): el corte (`Solid.Subtract`) atraviesa el blindaje, que es
-una lámina de PEC de solo 0.3 mm de espesor, y deja un escalón brusco
-entre la sección circular completa y la sección recortada — un disparador
-típico de inestabilidad en el mallado PBA de CST (celdas muy chicas o
-degeneradas), algo que Palace no sufre porque usa un mallado de tetraedros
-distinto. Se revirtió: **la versión actual de este archivo vuelve a dibujar
-el conector como un cilindro entero, sin ese recorte** — el contacto con
-tierra queda como una línea tangente en vez de una cara plana, una
-imperfección menor que nunca causó una falla observada, a cambio de un
-modelo estable. Queda como opción para quien quiera retomarlo con una
-sesión de CST real para probar distintos cortes o bajar el "stability
-factor" del solver primero.
+Primera sospecha: el corte (`Solid.Subtract`) atraviesa el blindaje, una
+lámina de PEC de solo 0.3 mm, dejando un escalón brusco entre la sección
+circular completa y la recortada — un disparador típico de inestabilidad
+en el mallado PBA. Se revirtió el recorte (conector otra vez como cilindro
+entero) y se volvió a correr: **la misma advertencia de inestabilidad
+apareció de nuevo, sin el recorte presente.** Esa sospecha quedó
+descartada por una prueba real, no por argumento.
+
+Revisando el archivo más a fondo aparecieron dos ajustes del solver que
+nadie había decidido ni revisado (`.LinesPerWavelength` en 35 en vez de
+25, y comentarios de los fixes #2/#4 reescritos de forma más vaga que la
+original) — quedaron mezclados en el archivo por un proceso automático
+que se interrumpió a mitad de una tarea distinta ese mismo día. Se
+revirtieron ambos a sus valores/redacción originales. Ninguno explica la
+inestabilidad con certeza (no hay licencia de CST acá para aislar la
+causa con una corrida de prueba), pero un mallado más fino (35 líneas por
+longitud de onda) sobre la misma geometría compleja (124 sólidos curvos)
+es, igual que el recorte, un factor plausible.
+
+Como estas dos corridas reales ya mostraron el mismo mensaje del solver
+("*reduce el stability factor*"), esta versión lo aplica directamente en
+la macro en vez de pedir un tercer round-trip: `Solver.StabilityFactor
+"0.8"` (el valor por defecto de CST está cerca de 1.0). Si la advertencia
+persiste, bajarlo más (0.6) es el siguiente paso, buscando en el editor de
+macros la línea `.StabilityFactor "0.8"` y cambiando el número.
 
 1. En el menú superior: **Macros → Macro Editor...** (o el ícono de
    macros, según la versión).

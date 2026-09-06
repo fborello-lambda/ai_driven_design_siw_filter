@@ -379,7 +379,6 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                 # full circular coax port. Recreate the cutter because CST
                 # Solid.Subtract consumes it. Keep the exposed vertical step
                 # open, as in Palace; CST has air there, Palace an absorbing BC.
-                import math
                 clip_len = min(1.5, .4 * sma_len_mm) + .1
                 near = f"{x_edge}{'-' if sgn < 0 else '+'}{_fmm(clip_len)}"
                 clip_x = (near, x_edge) if sgn < 0 else (x_edge, near)
@@ -393,11 +392,6 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                                    (_fmm(-ro-1), "0")))
                     s.append(_hist(f"clip SMA {tag} {part}", [
                         f'Solid.Subtract "component1:sma_{tag}_{part}", "component1:{tool_name}"']))
-                # Extend to the outer shell's z=0 chord to ensure an actual
-                # face bond to the shell as well as the board ground plane.
-                shoe_half = math.sqrt(ro**2 - (sub.h * MM)**2)
-                s.append(brick(f"sma_{tag}_ground_shoe", "PEC", clip_x,
-                               (_fmm(-shoe_half), _fmm(shoe_half)), ("-t_cu", "0")))
 
     # ---- boundaries, background, ports ----------------------------------
     s.append("\n' ---- background + boundaries --------------------------------------\n")
@@ -405,17 +399,32 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         "With Background", ".ResetBackground", '.Type "Normal"',
         '.XminSpace "0"', '.XmaxSpace "0"',
         '.YminSpace "0"', '.YmaxSpace "0"',
-        # The board ground is a PEC solid, not an electric domain floor.
-        # Open boundaries are not identical to Palace's truncated air domain.
+        # ZminSpace is NOT 0: the real ground plane is the gnd_bottom PEC
+        # solid, not this domain wall. With SMA stubs present (radius up to
+        # ~1.56mm) as the lowest geometry in the model, ZminSpace=0 auto-
+        # sizes the domain floor to sit TANGENT to the round connector shell
+        # -- a cylinder only touches a flat plane along a line, so an
+        # "electric" wall there would cover the whole board footprint as an
+        # unphysical extra PEC sheet a hair below the connector, with no
+        # counterpart in Palace's mesh (which has no z<0 volume at all;
+        # everything the SMA stub's own geometry doesn't classify as its
+        # own PEC surface -- see build_mesh's on_sma_shell/pin/cap -- is
+        # absorbing). 2mm is a general absorbing-boundary standoff, not a
+        # Palace parallel: Palace's own boundary IS the PTFE's r=rout face
+        # directly there, with no buffer beyond it either.
         '.ZminSpace "2.0"', '.ZmaxSpace "h_air"',
         "End With",
     ]))
     s.append(_hist("define boundaries", [
         "With Boundary",
-        # Ports replace part of the X boundary. PEC outside a correctly
-        # shielded coax aperture does not by itself short the centre pin.
-        # Open X walls remove an unnecessary enclosure from this board model;
-        # whether old walls caused the measured failure requires an A/B solve.
+        # X was "electric" (PEC end-caps) until an adversarial re-review
+        # (2026-09-06) caught it: XminSpace/XmaxSpace=0 fits the domain
+        # tightly to the SMA stub ends, so an electric wall there shorts
+        # the whole board-footprint cross-section outside the small coax
+        # port disk with a PEC bulkhead. Palace has no counterpart -- its
+        # classification loop (build_mesh, is_boundary catch-all) puts
+        # every non-port, non-PEC face on the X extremes into `absorbing`,
+        # same treatment as Y/Z. "open" matches that.
         '.Xmin "open"', '.Xmax "open"',
         '.Ymin "open"', '.Ymax "open"',
         '.Zmin "open"', '.Zmax "open"',
@@ -477,7 +486,7 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     s.append(_hist("define mesh settings", [
         "With Mesh", '.MeshType "PBA"',
         '.SetCreator "High Frequency"',
-        '.LinesPerWavelength "35"',
+        '.LinesPerWavelength "25"',
         '.MinimumLineNumber "10"',
         '.RatioLimit "20"',
         '.UseRatioLimit "True"',
@@ -489,7 +498,20 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         '.Method "Hexahedral"',
         '.CalculationType "TD-S"',
         '.StimulationPort "1"', '.StimulationMode "All"',
+        # -60dB (not -40) so a sharp Chebyshev null isn't cut off by an
+        # early steady-state stop -- deliberate, not the mesh-density bump
+        # below that a stray edit briefly introduced and was reverted.
         '.SteadyStateLimit "-60"',
+        # Two real CST runs (2026-09-06) both reported "the calculation
+        # seems to be unstable" with S-parameters violating passivity
+        # across the whole sweep -- present with AND without the SMA
+        # ground-clip fix, so that geometry was not the cause. Root cause
+        # still unconfirmed (no CST license here to A/B test), but this is
+        # CST's own standard remedy for exactly this warning: shrink the
+        # timestep below the automatic PBA/CFL estimate. 0.8 is a
+        # conservative first guess (default is close to 1.0); lower
+        # further (e.g. 0.6) if the warning persists.
+        '.StabilityFactor "0.8"',
         '.MeshAdaption "False"',
         '.StoreTDResultsInCache "False"',
         '.SParaSymmetry "True"',
@@ -535,57 +557,3 @@ def write_bas(path: str | None = None,
 if __name__ == "__main__":
     write_bas()
     print("Hand siw_filter.bas (+ target.s2p for overlay) to the CST user.")
-
-
-def generate_coax_control_bas(launch: dict | None = None, length_mm: float = 12.0) -> str:
-    """Straight 50-ohm coax control: test CST ports independently of the filter."""
-    from .topologies.launch import TAOGLAS_CPWG
-    launch = launch or TAOGLAS_CPWG
-    if length_mm <= 0:
-        raise ValueError("Coax length must be positive")
-    ri, ro = launch['sma_rin_mm'], launch['sma_rout_mm']
-    rs = ro + .3
-    s = ["' 2026-09-06-R5: straight coax diagnostic, NOT a filter.\n"
-         "Option Explicit\nSub Main\nResetAll\n"]
-    s.append(_hist('units', ['With Units', '.Geometry "mm"', '.Frequency "GHz"',
-                             '.Time "ns"', 'End With']))
-    s.append(_hist('frequency', ['Solver.FrequencyRange "2.0", "3.6"']))
-    s.append(_hist('PTFE', ['With Material', '.Reset', '.Name "PTFE_sma"',
-                           '.Folder ""', '.Type "Normal"',
-                           f'.Epsilon "{launch["sma_eps_r"]}"', '.Mu "1"',
-                           f'.TanD "{launch["sma_tand"]}"', '.TanDFreq "2.87"',
-                           '.TanDGiven "True"', '.TanDModel "ConstTanD"',
-                           '.Create', 'End With']))
-    for name, material, inner, outer in [('pin', 'PEC', 0., ri),
-                                         ('ptfe', 'PTFE_sma', ri, ro),
-                                         ('shield', 'PEC', ro, rs)]:
-        s.append(_hist(name, ['With Cylinder', '.Reset', f'.Name "{name}"',
-                             '.Component "component1"', f'.Material "{material}"',
-                             '.Axis "x"', f'.Outerradius "{outer:.4f}"',
-                             f'.Innerradius "{inner:.4f}"',
-                             f'.Xrange "0", "{length_mm:.4f}"',
-                             '.Ycenter "0"', '.Zcenter "0"', '.Segments "0"',
-                             '.Create', 'End With']))
-    s.append(_hist('background', ['With Background', '.ResetBackground', '.Type "Normal"',
-                                 '.XminSpace "0"', '.XmaxSpace "0"',
-                                 '.YminSpace "2"', '.YmaxSpace "2"',
-                                 '.ZminSpace "2"', '.ZmaxSpace "2"', 'End With']))
-    s.append(_hist('boundaries', ['With Boundary', '.ApplyInAllDirections "False"'] +
-                   [f'.{axis}{end} "open"' for axis in 'XYZ' for end in ('min', 'max')] + ['End With']))
-    for n, x, orientation in [(1, 0., 'xmin'), (2, length_mm, 'xmax')]:
-        s.append(_hist(f'coax port {n}', ['With Port', '.Reset', f'.PortNumber "{n}"',
-                      '.NumberOfModes "1"', '.Coordinates "Free"',
-                      f'.Orientation "{orientation}"', '.PortOnBound "True"',
-                      f'.Xrange "{x:.4f}", "{x:.4f}"',
-                      f'.Yrange "{-rs:.4f}", "{rs:.4f}"',
-                      f'.Zrange "{-rs:.4f}", "{rs:.4f}"', '.Create', 'End With']))
-    s.append(_hist('mesh', ['With Mesh', '.MeshType "PBA"',
-                           '.SetCreator "High Frequency"', '.LinesPerWavelength "35"',
-                           '.MinimumLineNumber "20"', '.RatioLimit "20"',
-                           '.UseRatioLimit "True"', 'End With']))
-    s.append(_hist('solver', ['With Solver', '.Method "Hexahedral"',
-                             '.CalculationType "TD-S"', '.StimulationPort "1"',
-                             '.StimulationMode "All"', '.SteadyStateLimit "-60"',
-                             '.MeshAdaption "False"', '.SParaSymmetry "False"', 'End With']))
-    s.append('MsgBox "Straight coax control built. Inspect the TEM mode and mesh, then solve."\nEnd Sub\n')
-    return ''.join(s)

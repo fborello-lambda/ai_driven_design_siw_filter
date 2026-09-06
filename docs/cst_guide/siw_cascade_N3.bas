@@ -2053,7 +2053,7 @@ AddToHistory "define port2 (coax)", "With Port" & vbLf & _
 AddToHistory "define mesh settings", "With Mesh" & vbLf & _
   ".MeshType ""PBA""" & vbLf & _
   ".SetCreator ""High Frequency""" & vbLf & _
-  ".LinesPerWavelength ""35""" & vbLf & _
+  ".LinesPerWavelength ""25""" & vbLf & _
   ".MinimumLineNumber ""10""" & vbLf & _
   ".RatioLimit ""20""" & vbLf & _
   ".UseRatioLimit ""True""" & vbLf & _
@@ -2065,6 +2065,7 @@ AddToHistory "define time domain solver parameters", "Mesh.SetCreator ""High Fre
   ".StimulationPort ""1""" & vbLf & _
   ".StimulationMode ""All""" & vbLf & _
   ".SteadyStateLimit ""-60""" & vbLf & _
+  ".StabilityFactor ""0.8""" & vbLf & _
   ".MeshAdaption ""False""" & vbLf & _
   ".StoreTDResultsInCache ""False""" & vbLf & _
   ".SParaSymmetry ""True""" & vbLf & _
