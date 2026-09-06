@@ -336,7 +336,11 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
             "With Material", ".Reset", '.Name "PTFE_sma"', '.Folder ""',
             '.Type "Normal"', f'.Epsilon "{launch["sma_eps_r"]}"', '.Mu "1"',
             f'.TanD "{launch["sma_tand"]}"', '.TanDGiven "True"',
-            '.TanDModel "ConstTanD"', '.Colour "0.9", "0.9", "0.9"',
+            # DispModelEps "None" added for consistency with the substrate
+            # material (line ~154) -- same property, already proven to
+            # parse fine there; PTFE_sma had simply never been given it.
+            '.TanDModel "ConstTanD"', '.DispModelEps "None"',
+            '.Colour "0.9", "0.9", "0.9"',
             ".Create", "End With"]))
         for tag, x_edge, sgn in (("in", xmin_e, -1.0), ("out", xmax_e, 1.0)):
             far = f"{x_edge}{'-' if sgn < 0 else '+'}{_fmm(sma_len_mm)}"
@@ -408,9 +412,26 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # z>=h, not the Y sides), so this is not a Palace-mismatch fix --
         # it is a CST-specific requirement (its open/absorbing BC math
         # needs a non-dispersive buffer) that Palace's FEM formulation
-        # apparently doesn't share. 2mm matches the standoff already used
-        # for ZminSpace below, not a new arbitrary number.
-        '.YminSpace "2.0"', '.YmaxSpace "2.0"',
+        # apparently doesn't share.
+        #
+        # 2.0mm cleared THAT warning but a follow-up real run (same day)
+        # gave a different, more specific one naming this exact boundary:
+        # "instability... small mesh step touching the open boundary...
+        # increase the mesh cell size at bounds y_min, y_max." Mechanism:
+        # the SIW via fence's outermost row sits at y=+-half, only
+        # `ym-half`=3mm from the substrate edge; raising RatioLimit to 100
+        # (below) lets local refinement near those vias get much smaller
+        # than before, and 2mm of standoff was not enough room for cell
+        # size to relax back to the global size before reaching the open
+        # boundary. Widened to 5mm for more relaxation room, paired with
+        # bringing RatioLimit back down from 100 to 50 (still >1.5x the
+        # ~31x this design's tightest gap needs at 35 lines/wl, just not
+        # the most extreme local refinement possible). CST's own message
+        # also names a GUI-only remedy, "Variable PML layer depth" in
+        # Solver Specials -- not scripted here (no CST license to verify
+        # the VBA property name; see the StabilityFactor incident above
+        # for why that isn't guessed at).
+        '.YminSpace "5.0"', '.YmaxSpace "5.0"',
         # ZminSpace is NOT 0: the real ground plane is the gnd_bottom PEC
         # solid, not this domain wall. With SMA stubs present (radius up to
         # ~1.56mm) as the lowest geometry in the model, ZminSpace=0 auto-
@@ -506,12 +527,22 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # analogue of what Palace does with a small absolute mesh_min: give
         # local refinement generous room rather than just barely clearing
         # the smallest feature. At 35 lines/wl the global cell drops to
-        # ~1.56mm, needing only a 31x ratio for that same gap -- RatioLimit
-        # 100 clears every feature in this design (CPWG gap, via-via gaps,
-        # coax pin) with >3x margin, not a bare pass.
+        # ~1.56mm, needing only a 31x ratio for that same gap.
+        #
+        # RatioLimit=100 (tried same day) cleared every gap with >3x margin
+        # but a follow-up real run then reported small mesh cells reaching
+        # the open Y boundary specifically -- almost certainly the SIW via
+        # fence's outer row, only 3mm from the substrate edge, refined far
+        # more aggressively than before. Backed off to 50: still >1.5x the
+        # ~31x this design's tightest gap (the CPWG gap) actually needs, but
+        # caps how small ANY local cell can get, including near that outer
+        # via row, rather than allowing the most extreme refinement
+        # possible everywhere at once. Paired with widening YminSpace/
+        # YmaxSpace to 5mm above (more room for cell size to relax back to
+        # the global size before reaching the open boundary).
         '.LinesPerWavelength "35"',
         '.MinimumLineNumber "15"',
-        '.RatioLimit "100"',
+        '.RatioLimit "50"',
         '.UseRatioLimit "True"',
         "End With",
     ]))

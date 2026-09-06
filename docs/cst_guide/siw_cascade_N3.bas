@@ -1914,6 +1914,7 @@ AddToHistory "define material: PTFE_sma", "With Material" & vbLf & _
   ".TanD ""0.0004""" & vbLf & _
   ".TanDGiven ""True""" & vbLf & _
   ".TanDModel ""ConstTanD""" & vbLf & _
+  ".DispModelEps ""None""" & vbLf & _
   ".Colour ""0.9"", ""0.9"", ""0.9""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
@@ -2008,8 +2009,8 @@ AddToHistory "define background", "With Background" & vbLf & _
   ".Type ""Normal""" & vbLf & _
   ".XminSpace ""0""" & vbLf & _
   ".XmaxSpace ""0""" & vbLf & _
-  ".YminSpace ""2.0""" & vbLf & _
-  ".YmaxSpace ""2.0""" & vbLf & _
+  ".YminSpace ""5.0""" & vbLf & _
+  ".YmaxSpace ""5.0""" & vbLf & _
   ".ZminSpace ""2.0""" & vbLf & _
   ".ZmaxSpace ""h_air""" & vbLf & _
   "End With"
@@ -2055,7 +2056,7 @@ AddToHistory "define mesh settings", "With Mesh" & vbLf & _
   ".SetCreator ""High Frequency""" & vbLf & _
   ".LinesPerWavelength ""35""" & vbLf & _
   ".MinimumLineNumber ""15""" & vbLf & _
-  ".RatioLimit ""100""" & vbLf & _
+  ".RatioLimit ""50""" & vbLf & _
   ".UseRatioLimit ""True""" & vbLf & _
   "End With"
 AddToHistory "define time domain solver parameters", "Mesh.SetCreator ""High Frequency""" & vbLf & _

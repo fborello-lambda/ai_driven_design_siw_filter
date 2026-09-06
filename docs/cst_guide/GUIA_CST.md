@@ -267,6 +267,41 @@ Esa corrida real trajo dos cosas nuevas:
    mismo ahí — no es un caso de "imitar mal a Palace", es un requisito
    propio de CST que nunca se había cubierto.
 
+### 3.0.5 La corrida con `MeshAdaption` + `RatioLimit=100`: mensaje más
+específico, no resuelto del todo (2026-09-06)
+
+Con esos cambios la advertencia de inestabilidad cambió de forma
+significativa — de un mensaje genérico a uno concreto, que apunta
+exactamente al mismo lugar que se acababa de tocar:
+
+> *"A possible source of instability could be given by small mesh step
+> touching the open boundary. Please retry with 'Variable PML layer depth'
+> switched on in Solver Specials GUI or try to increase the mesh cell size
+> at bounds y_min, y_max."*
+
+Mecanismo más probable: la fila más externa de vías de la cerca SIW está a
+solo 3 mm del borde del sustrato (`ym - half`). Subir `RatioLimit` a 100
+le dio a CST mucho más margen para refinar localmente ahí, generando
+celdas más chicas que antes cerca de esa fila — y los 2 mm de aire
+agregados en el punto anterior no alcanzaban para que el tamaño de celda
+"se relajara" de vuelta al tamaño global antes de llegar al borde abierto.
+
+Dos cambios en esta versión:
+
+- `YminSpace`/`YmaxSpace`: 2 mm → **5 mm** (más distancia para que el
+  tamaño de celda vuelva a lo normal antes del borde).
+- `RatioLimit`: 100 → **50** (sigue siendo más del doble de lo que pide el
+  hueco más exigente del diseño, el del CPWG, ~31x a este mallado — pero ya
+  no el refinamiento más extremo posible en todos lados a la vez).
+
+CST también nombra un remedio propio, **"Variable PML layer depth"**, en
+Solver Specials — no se agregó a la macro (no hay licencia de CST acá para
+confirmar el nombre exacto de esa propiedad en VBA, y ya se aprendió con
+`StabilityFactor` que adivinar sale caro). Si la advertencia persiste con
+esta versión, ese toggle manual en la GUI es el siguiente paso — buscar
+**Solver Specials → General → Variable PML layer depth** y activarlo antes
+de correr.
+
 1. En el menú superior: **Macros → Macro Editor...** (o el ícono de
    macros, según la versión).
 2. En el editor de macros: **File → Open Macro File...**
