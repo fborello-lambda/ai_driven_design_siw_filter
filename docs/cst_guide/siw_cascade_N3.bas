@@ -2012,8 +2012,8 @@ AddToHistory "define background", "With Background" & vbLf & _
   ".ZmaxSpace ""h_air""" & vbLf & _
   "End With"
 AddToHistory "define boundaries", "With Boundary" & vbLf & _
-  ".Xmin ""electric""" & vbLf & _
-  ".Xmax ""electric""" & vbLf & _
+  ".Xmin ""open""" & vbLf & _
+  ".Xmax ""open""" & vbLf & _
   ".Ymin ""open""" & vbLf & _
   ".Ymax ""open""" & vbLf & _
   ".Zmin ""open""" & vbLf & _

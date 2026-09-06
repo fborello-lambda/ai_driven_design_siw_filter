@@ -394,6 +394,20 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
             'MISSING -- .Zmin "electric" auto-sizes to sit tangent to the '
             'SMA stub, shorting the space under the whole board',
             section="model")
+        # Found by an independent adversarial re-review (2026-09-06): the
+        # same "auto-fit background wall covers the port's own cross-section"
+        # failure as Zmin, on X instead of Z. XminSpace/XmaxSpace=0 fits the
+        # domain tightly to the SMA stub ends, so an "electric" (PEC) X wall
+        # shorts the whole board-footprint cross-section outside the small
+        # coax port disk. Palace's classify loop has no PEC counterpart there
+        # -- every non-port, non-PEC face on the X extremes is `absorbing`,
+        # same as Y/Z -- so "open" is the match, not "electric".
+        xwall_open = '".Xmin ""open"""' in txt and '".Xmax ""open"""' in txt
+        add("CST domain end-walls are open, not PEC end-caps", xwall_open,
+            '.Xmin/.Xmax "open"' if xwall_open else
+            'MISSING -- .Xmin/.Xmax "electric" shorts the board footprint '
+            'outside the coax port disk at both ends',
+            section="model")
 
     # ---- 10. drawing vs mesh ------------------------------------------
     if with_mesh:

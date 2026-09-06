@@ -397,7 +397,15 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     ]))
     s.append(_hist("define boundaries", [
         "With Boundary",
-        '.Xmin "electric"', '.Xmax "electric"',
+        # X was "electric" (PEC end-caps) until an adversarial re-review
+        # (2026-09-06) caught it: XminSpace/XmaxSpace=0 fits the domain
+        # tightly to the SMA stub ends, so an electric wall there shorts
+        # the whole board-footprint cross-section outside the small coax
+        # port disk with a PEC bulkhead. Palace has no counterpart -- its
+        # classification loop (build_mesh, is_boundary catch-all) puts
+        # every non-port, non-PEC face on the X extremes into `absorbing`,
+        # same treatment as Y/Z. "open" matches that.
+        '.Xmin "open"', '.Xmax "open"',
         '.Ymin "open"', '.Ymax "open"',
         '.Zmin "open"', '.Zmax "open"',
         '.ApplyInAllDirections "False"',

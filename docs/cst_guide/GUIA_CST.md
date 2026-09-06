@@ -97,7 +97,7 @@ puertos.
 
 ## 3.0 Antes de correr nada: verificar que el archivo es la versión corregida
 
-Este `siw_cascade_N3.bas` tiene corregidos **tres** errores reales, todos
+Este `siw_cascade_N3.bas` tiene corregidos **cuatro** errores reales, todos
 detectados a partir de una corrida real en CST que dio un resultado roto
 (S1,1 pegado a 0 dB en toda la banda, ver §7.2 — no un problema de Palace
 ni del diseño, sino de cómo se armaba este archivo):
@@ -119,8 +119,24 @@ ni del diseño, sino de cómo se armaba este archivo):
    0.76 mm, pin de 0.38 mm de radio) esos dos números casualmente
    coinciden (`h_sub/2 = rin`), así que el pin quedaba tocando exactamente
    el plano de tierra de abajo -- prácticamente un cortocircuito del
-   conductor central a tierra. Este es, de los tres, el que más
-   directamente puede explicar un resultado roto.
+   conductor central a tierra.
+4. **2026-09-06** (encontrado por una segunda ronda de revisión adversarial,
+   buscando específicamente si quedaba algo más después de los tres
+   anteriores): las paredes **X** del dominio de simulación — los dos
+   extremos, justo donde están los puertos coaxiales — estaban declaradas
+   `electric` (PEC) en vez de `open`. Como el dominio se ajusta
+   automáticamente al tamaño de los stubs SMA (`XminSpace`/`XmaxSpace = 0`),
+   esa pared eléctrica queda pegada exactamente en el plano de cada puerto,
+   rodeando el pequeño disco coaxial con una tapa metálica del tamaño de
+   toda la sección transversal de la placa. Palace no tiene ningún
+   equivalente ahí — todo lo que no es el propio puerto ni un conductor
+   real en esos planos es `absorbing`, igual que en Y y Z. De los cuatro,
+   este es el que está **más cerca del puerto mismo** (el eléctrico anterior,
+   `.Zmin`, quedaba debajo de toda la placa; este queda rodeando el punto
+   exacto por donde entra la señal), así que es un buen candidato para
+   explicar por sí solo un S1,1 pegado a 0 dB en toda la banda — el puerto
+   quedaría prácticamente encerrado en una lata metálica en vez de radiar
+   hacia el resto del dominio.
 
 **Antes de ejecutar la macro**, abrir el archivo `.bas` con un editor de
 texto (Bloc de notas alcanza) y buscar (Ctrl+F):
@@ -130,11 +146,14 @@ texto (Bloc de notas alcanza) y buscar (Ctrl+F):
   `.Zmin "electric"`, es la versión vieja.
 - `"h_sub/2"` → **NO debe aparecer en ningún lado**. Si aparece, es la
   versión vieja del conector.
+- `.Xmin "open"` y `.Xmax "open"` → deben **aparecer los dos**. Si en
+  cambio aparece `.Xmin "electric"` o `.Xmax "electric"`, es la versión
+  vieja.
 
-Si alguna de estas tres búsquedas falla, es una versión vieja — usar el
+Si alguna de estas cuatro búsquedas falla, es una versión vieja — usar el
 archivo que viene en este mismo paquete, no uno descargado antes.
 
-**Nota honesta**: los tres errores se encontraron leyendo el código y
+**Nota honesta**: los cuatro errores se encontraron leyendo el código y
 comparándolo contra lo que realmente construye Palace, no corriendo CST
 (este entorno no tiene licencia de CST). Son diagnósticos bien
 fundamentados, pero la única prueba real es una corrida nueva.
@@ -173,9 +192,11 @@ dibujaban el conector y las vías del lanzador 1000 veces más grandes o más
 lejos de lo correcto); uno donde faltaba la taper grande, dejando la pista
 sin conexión a la cavidad; uno donde al conector coaxial le faltaba el
 blindaje metálico exterior (`sma_in_shield`/`sma_out_shield`); uno en la
-pared inferior del dominio de simulación (`.Zmin`); y uno donde el pin del
+pared inferior del dominio de simulación (`.Zmin`); uno donde el pin del
 conector estaba centrado en el plano medio del sustrato en vez del plano
-de la pista, casi tocando tierra (ver §3.0 y §7.2 para los tres últimos).
+de la pista, casi tocando tierra; y uno en las dos paredes **X** del
+dominio, justo en los puertos coaxiales (ver §3.0 y §7.2 para los cuatro
+últimos).
 
 \newpage
 
@@ -344,7 +365,7 @@ la potencia y el filtro real (que sí existe, calibrado y con la geometría
 correcta) queda enterrado debajo de esa desadaptación. No indica ningún
 problema con Palace ni con el diseño.
 
-Se identificaron tres causas posibles, las tres explicadas en el §3.0:
+Se identificaron cuatro causas posibles, las cuatro explicadas en el §3.0:
 
 1. **Falta de blindaje del coaxial** — confirmado por inspección directa
    del archivo que efectivamente se corrió: no tenía `sma_in_shield`.
@@ -353,16 +374,23 @@ Se identificaron tres causas posibles, las tres explicadas en el §3.0:
    Palace (que no tiene ninguna pared PEC ahí), **no** corriendo CST.
 3. **Pin centrado en el plano equivocado** (`h_sub/2` en vez de `h_sub`) —
    encontrado en una revisión independiente posterior, también por
-   comparación contra Palace. De las tres, esta es la que más
-   directamente explica un resultado roto: con las medidas de este diseño
-   el pin quedaba tocando el plano de tierra de abajo.
+   comparación contra Palace. Con las medidas de este diseño el pin
+   quedaba tocando el plano de tierra de abajo.
+4. **Paredes X del dominio mal declaradas** (`.Xmin`/`.Xmax "electric"` en
+   vez de `"open"`) — encontrado en una segunda ronda de revisión
+   adversarial, buscando específicamente algo más allá de las tres
+   anteriores. De las cuatro, esta es la que queda más pegada al puerto
+   mismo (rodea el disco coaxial con una tapa metálica en el mismo plano
+   donde entra la señal), así que es la mejor candidata para explicar por
+   sí sola un S1,1 pegado a 0 dB en **toda** la banda, no solo cerca de la
+   frecuencia central.
 
-Ninguna de las tres se verificó corriendo CST realmente — este entorno no
+Ninguna de las cuatro se verificó corriendo CST realmente — este entorno no
 tiene licencia para eso. Son diagnósticos bien fundamentados por lectura
 de código y comparación contra Palace, no resultados confirmados.
 
 Por eso conviene una corrida nueva con el archivo actual (que corrige las
-tres) antes de asumir que el problema está resuelto del todo — si el
+cuatro) antes de asumir que el problema está resuelto del todo — si el
 resultado sigue sin parecerse al de Palace, avisar con el archivo de
 resultados igual que la vez anterior; eso es información real, no un paso
 de más.
