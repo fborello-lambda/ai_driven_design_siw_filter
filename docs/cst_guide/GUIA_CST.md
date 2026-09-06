@@ -97,7 +97,7 @@ puertos.
 
 ## 3.0 Antes de correr nada: verificar que el archivo es la versión corregida
 
-Este `siw_cascade_N3.bas` tiene corregidos **cinco** errores reales, todos
+Este `siw_cascade_N3.bas` tiene corregidos **cuatro** errores reales, todos
 detectados a partir de una corrida real en CST que dio un resultado roto
 (S1,1 pegado a 0 dB en toda la banda, ver §7.2 — no un problema de Palace
 ni del diseño, sino de cómo se armaba este archivo):
@@ -137,25 +137,11 @@ ni del diseño, sino de cómo se armaba este archivo):
    explicar por sí solo un S1,1 pegado a 0 dB en toda la banda — el puerto
    quedaría prácticamente encerrado en una lata metálica en vez de radiar
    hacia el resto del dominio.
-5. **2026-09-06** (pedido explícitamente después de revisar el conector):
-   el conector, tal como se dibujaba por defecto, no tenía el mismo
-   "corte a tierra" que Palace sí aplica siempre. Palace recorta el PTFE y
-   el blindaje cerca del borde de la placa para que el blindaje quede
-   plano contra el plano de tierra inferior (un corte de ~1.5 mm, ver
-   `palace_driven.py`); la macro dibujaba en cambio cilindros enteros, sin
-   cortar, que solo tocan ese plano de tierra a lo largo de una línea
-   (donde la superficie curva del blindaje cruza el plano), no sobre una
-   cara plana. Ahora la macro aplica el mismo recorte por defecto siempre
-   que hay un lanzador CPWG real (cuatro operaciones `Solid.Subtract`,
-   dos por conector: PTFE y blindaje).
-
 **Sobre la posición del pin**: el pin del conector NO queda "flotando"
 sobre la placa — su eje está exactamente a la altura del plano de la
 pista (`h_sub`, la cara de arriba del sustrato) y se extiende hacia
 afuera del borde de la placa, en línea recta con la pista, como un
-conector de borde real. Lo único que no coincidía con Palace era cómo
-el cuerpo del conector (más ancho que el espesor de la placa) tocaba el
-plano de tierra de abajo cerca de ese borde — el error 5, ya corregido.
+conector de borde real.
 
 **Antes de ejecutar la macro**, abrir el archivo `.bas` con un editor de
 texto (Bloc de notas alcanza) y buscar (Ctrl+F):
@@ -168,17 +154,42 @@ texto (Bloc de notas alcanza) y buscar (Ctrl+F):
 - `.Xmin "open"` y `.Xmax "open"` → deben **aparecer los dos**. Si en
   cambio aparece `.Xmin "electric"` o `.Xmax "electric"`, es la versión
   vieja.
-- `"clip SMA in ptfe"` (y `in shield`/`out ptfe`/`out shield`) → deben
-  **aparecer los cuatro**. Si no aparecen, es la versión vieja del
-  conector (blindaje sin recortar).
 
-Si alguna de estas cinco búsquedas falla, es una versión vieja — usar el
+Si alguna de estas cuatro búsquedas falla, es una versión vieja — usar el
 archivo que viene en este mismo paquete, no uno descargado antes.
 
-**Nota honesta**: los cinco errores se encontraron leyendo el código y
+**Nota honesta**: los cuatro errores se encontraron leyendo el código y
 comparándolo contra lo que realmente construye Palace, no corriendo CST
 (este entorno no tiene licencia de CST). Son diagnósticos bien
 fundamentados, pero la única prueba real es una corrida nueva.
+
+### 3.0.1 Un quinto intento que se probó y se REVIRTIÓ (2026-09-06)
+
+Se probó además recortar el PTFE y el blindaje del conector cerca del
+borde de la placa para que queden a ras del plano de tierra inferior,
+igual que hace Palace (que sí aplica ese corte siempre). La corrida real
+en CST que volvió con esa versión dio:
+
+- Advertencia del solver: *"The calculation seems to be unstable! Consider
+  reducing the value for the stability factor..."*
+- S-parámetros sin sentido físico en **toda** la barrida: S1,1 nunca bajó
+  de 0 dB en ninguno de los 1001 puntos (llegó a +39 dB), S2,1 llegó a
+  +5.6 dB — un filtro pasivo no puede tener ganancia, así que el resultado
+  está corrompido de punta a punta, no es un problema de ajuste fino.
+
+Sospecha (no confirmada, no hay licencia de CST acá para probarlo
+directamente): el corte (`Solid.Subtract`) atraviesa el blindaje, que es
+una lámina de PEC de solo 0.3 mm de espesor, y deja un escalón brusco
+entre la sección circular completa y la sección recortada — un disparador
+típico de inestabilidad en el mallado PBA de CST (celdas muy chicas o
+degeneradas), algo que Palace no sufre porque usa un mallado de tetraedros
+distinto. Se revirtió: **la versión actual de este archivo vuelve a dibujar
+el conector como un cilindro entero, sin ese recorte** — el contacto con
+tierra queda como una línea tangente en vez de una cara plana, una
+imperfección menor que nunca causó una falla observada, a cambio de un
+modelo estable. Queda como opción para quien quiera retomarlo con una
+sesión de CST real para probar distintos cortes o bajar el "stability
+factor" del solver primero.
 
 1. En el menú superior: **Macros → Macro Editor...** (o el ícono de
    macros, según la versión).
@@ -216,10 +227,11 @@ sin conexión a la cavidad; uno donde al conector coaxial le faltaba el
 blindaje metálico exterior (`sma_in_shield`/`sma_out_shield`); uno en la
 pared inferior del dominio de simulación (`.Zmin`); uno donde el pin del
 conector estaba centrado en el plano medio del sustrato en vez del plano
-de la pista, casi tocando tierra; uno en las dos paredes **X** del
-dominio, justo en los puertos coaxiales; y uno donde el blindaje del
-conector no quedaba recortado a ras del plano de tierra inferior, igual
-que hace Palace (ver §3.0 y §7.2 para los últimos cuatro).
+de la pista, casi tocando tierra; y uno en las dos paredes **X** del
+dominio, justo en los puertos coaxiales (ver §3.0 y §7.2 para los cuatro
+últimos). Un quinto intento (recortar el blindaje a ras del plano de
+tierra, igual que Palace) se probó y se revirtió por causar inestabilidad
+real en el solver — ver §3.0.1.
 
 \newpage
 

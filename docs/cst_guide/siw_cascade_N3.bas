@@ -3,7 +3,7 @@
 '  f0 = 2.870 GHz, N = 3, FBW = 5.0 %, ripple = 0.1 dB
 '  substrate: RO4350B_0.76mm (eps_r = 3.66, tan_d = 0.0037, h = 0.760 mm)
 '  irises: geometry supplied by project; verify provenance in the package
-'  Audit revision: 2026-09-06-R6; connector ground: flat (matches Palace).
+'  Audit revision: 2026-09-06-R6; connector ground: unclipped edge contact.
 '  CST execution NOT validated locally; compare magnitude with both Palace meshes.
 '  CST Studio Suite 2021 — open in VBA macro editor and press F5.
 ' =====================================================================
@@ -1959,38 +1959,6 @@ AddToHistory "define cylinder: component1:sma_in_shield", "With Cylinder" & vbLf
   ".Segments ""0""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
-AddToHistory "define brick: component1:sma_in_ptfe_clip", "With Brick" & vbLf & _
-  ".Reset" & vbLf & _
-  ".Name ""sma_in_ptfe_clip""" & vbLf & _
-  ".Component ""component1""" & vbLf & _
-  ".Material ""Vacuum""" & vbLf & _
-  ".Xrange ""-(L_taper+L_feed)-1.6000"", ""-(L_taper+L_feed)""" & vbLf & _
-  ".Yrange ""-2.5639"", ""2.5639""" & vbLf & _
-  ".Zrange ""-2.5639"", ""0""" & vbLf & _
-  ".Create" & vbLf & _
-  "End With"
-AddToHistory "clip SMA in ptfe", "Solid.Subtract ""component1:sma_in_ptfe"", ""component1:sma_in_ptfe_clip"""
-AddToHistory "define brick: component1:sma_in_shield_clip", "With Brick" & vbLf & _
-  ".Reset" & vbLf & _
-  ".Name ""sma_in_shield_clip""" & vbLf & _
-  ".Component ""component1""" & vbLf & _
-  ".Material ""Vacuum""" & vbLf & _
-  ".Xrange ""-(L_taper+L_feed)-1.6000"", ""-(L_taper+L_feed)""" & vbLf & _
-  ".Yrange ""-2.5639"", ""2.5639""" & vbLf & _
-  ".Zrange ""-2.5639"", ""0""" & vbLf & _
-  ".Create" & vbLf & _
-  "End With"
-AddToHistory "clip SMA in shield", "Solid.Subtract ""component1:sma_in_shield"", ""component1:sma_in_shield_clip"""
-AddToHistory "define brick: component1:sma_in_ground_shoe", "With Brick" & vbLf & _
-  ".Reset" & vbLf & _
-  ".Name ""sma_in_ground_shoe""" & vbLf & _
-  ".Component ""component1""" & vbLf & _
-  ".Material ""PEC""" & vbLf & _
-  ".Xrange ""-(L_taper+L_feed)-1.6000"", ""-(L_taper+L_feed)""" & vbLf & _
-  ".Yrange ""-1.3668"", ""1.3668""" & vbLf & _
-  ".Zrange ""-t_cu"", ""0""" & vbLf & _
-  ".Create" & vbLf & _
-  "End With"
 AddToHistory "define cylinder: component1:sma_out_ptfe", "With Cylinder" & vbLf & _
   ".Reset" & vbLf & _
   ".Name ""sma_out_ptfe""" & vbLf & _
@@ -2031,38 +1999,6 @@ AddToHistory "define cylinder: component1:sma_out_shield", "With Cylinder" & vbL
   ".Ycenter ""0""" & vbLf & _
   ".Zcenter ""h_sub""" & vbLf & _
   ".Segments ""0""" & vbLf & _
-  ".Create" & vbLf & _
-  "End With"
-AddToHistory "define brick: component1:sma_out_ptfe_clip", "With Brick" & vbLf & _
-  ".Reset" & vbLf & _
-  ".Name ""sma_out_ptfe_clip""" & vbLf & _
-  ".Component ""component1""" & vbLf & _
-  ".Material ""Vacuum""" & vbLf & _
-  ".Xrange ""103.9810+L_taper+L_feed"", ""103.9810+L_taper+L_feed+1.6000""" & vbLf & _
-  ".Yrange ""-2.5639"", ""2.5639""" & vbLf & _
-  ".Zrange ""-2.5639"", ""0""" & vbLf & _
-  ".Create" & vbLf & _
-  "End With"
-AddToHistory "clip SMA out ptfe", "Solid.Subtract ""component1:sma_out_ptfe"", ""component1:sma_out_ptfe_clip"""
-AddToHistory "define brick: component1:sma_out_shield_clip", "With Brick" & vbLf & _
-  ".Reset" & vbLf & _
-  ".Name ""sma_out_shield_clip""" & vbLf & _
-  ".Component ""component1""" & vbLf & _
-  ".Material ""Vacuum""" & vbLf & _
-  ".Xrange ""103.9810+L_taper+L_feed"", ""103.9810+L_taper+L_feed+1.6000""" & vbLf & _
-  ".Yrange ""-2.5639"", ""2.5639""" & vbLf & _
-  ".Zrange ""-2.5639"", ""0""" & vbLf & _
-  ".Create" & vbLf & _
-  "End With"
-AddToHistory "clip SMA out shield", "Solid.Subtract ""component1:sma_out_shield"", ""component1:sma_out_shield_clip"""
-AddToHistory "define brick: component1:sma_out_ground_shoe", "With Brick" & vbLf & _
-  ".Reset" & vbLf & _
-  ".Name ""sma_out_ground_shoe""" & vbLf & _
-  ".Component ""component1""" & vbLf & _
-  ".Material ""PEC""" & vbLf & _
-  ".Xrange ""103.9810+L_taper+L_feed"", ""103.9810+L_taper+L_feed+1.6000""" & vbLf & _
-  ".Yrange ""-1.3668"", ""1.3668""" & vbLf & _
-  ".Zrange ""-t_cu"", ""0""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
 

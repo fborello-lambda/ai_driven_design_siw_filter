@@ -41,25 +41,36 @@ def _hist(header: str, body_lines: list[str]) -> str:
 
 def generate_bas(g: Geometry, launch: dict | None = None,
                  sma_len_mm: float = 6.0,
-                 flat_sma_ground: bool | None = None) -> str:
+                 flat_sma_ground: bool = False) -> str:
     """VBA macro for CST. `launch` is a TAOGLAS_CPWG-style dict; when given,
     the feed is built as the REAL launch actually simulated -- coplanar
     ground pours, stitching vias, the narrowed CPWG feed with its taper out
     to the microstrip, and the Taoglas SMA coax stub with coaxial ports --
     instead of a bare constant-width microstrip with waveguide ports.
 
-    `flat_sma_ground=None` (default) auto-derives to True whenever a real
-    CPWG/SMA launch is given: Palace's own build_mesh() unconditionally
-    clips the PTFE/shield near the board edge to z>=0 there (the
-    `clipbox` cut, palace_driven.py ~line 234) so the shield sits flush on
-    the bottom ground plane -- there is no "unclipped" mode in what Palace
-    actually simulates. An explicit True/False still overrides this."""
+    flat_sma_ground defaults back to False (2026-09-06, reverted same day
+    it was added): it matches Palace's ground-clip geometry more closely,
+    but a real CST run with it on came back with "the calculation seems
+    to be unstable" and S-parameters that violate passivity everywhere in
+    the sweep (S11 never negative across 1001 points, up to +39). The clip
+    cuts the 0.3mm PEC shield with a Boolean Subtract right at the board
+    edge, producing a sharp full-round -> D-shaped cross-section step --
+    a classic PBA thin/degenerate-cell trigger with no counterpart in
+    Palace's tet mesh. Not proven beyond doubt (no CST license here to
+    A/B test), but it is the one geometry change coincident with both the
+    instability warning and the visibly stepped connector the fab contact
+    flagged, and the tangent-line ground contact it "fixed" never
+    corresponded to an observed failure the way the other 4 fixes did.
+    Kept as an explicit opt-in for whoever revisits this with a real CST
+    session to test. Palace's own build_mesh() unconditionally clips the
+    PTFE/shield near the board edge to z>=0 there (the `clipbox` cut,
+    palace_driven.py ~line 234) so the shield sits flush on the bottom
+    ground plane -- there is no "unclipped" mode in what Palace
+    actually simulates. Pass True explicitly to re-enable it."""
     if sma_len_mm <= 0:
         raise ValueError("SMA length must be positive")
     has_cpwg = bool(launch and launch.get("cpwg_gap_mm") is not None)
-    if flat_sma_ground is None:
-        flat_sma_ground = has_cpwg
-    elif flat_sma_ground and not has_cpwg:
+    if flat_sma_ground and not has_cpwg:
         raise ValueError("flat_sma_ground requires a CPWG/SMA launch")
     spec, sub = g.spec, g.spec.substrate
     half = g.a_siw / 2.0
