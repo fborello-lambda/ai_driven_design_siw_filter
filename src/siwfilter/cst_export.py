@@ -192,6 +192,16 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     # locked to the via walls). hp = half-width string, ht = a_siw/2 numeric.
     hp = "W_ms/2"
     ht = _f(half)
+    # These point lists are a HAND-DUPLICATION of
+    # palace_dualmode_driven.feed_trace_poly's geometry, not a call to it --
+    # unavoidable here since CST needs the live VBA parameter names
+    # (L_taper/L_feed/W_ms) in these coordinate slots, and feed_trace_poly
+    # only accepts numeric floats. Verified against a numeric call to
+    # feed_trace_poly with this design's actual values (2026-09-06,
+    # adversarial re-review): exact vertex-for-vertex match, 10/10 points.
+    # That match is NOT guaranteed to survive a future edit to
+    # feed_trace_poly -- if its geometry ever changes, re-run that same
+    # numeric comparison before trusting this file again.
     traces = {
         "taper_in": [("-L_taper", hp), ("0", ht), ("0", f"-({ht})"),
                      ("-L_taper", f"-({hp})")],
@@ -348,8 +358,12 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # counterpart in Palace's mesh (which has no z<0 volume at all;
         # everything the SMA stub's own geometry doesn't classify as its
         # own PEC surface -- see build_mesh's on_sma_shell/pin/cap -- is
-        # absorbing). 2mm mirrors palace_driven.py's own
-        # `zlo = -(sma_rout_mm + 2.0)` clearance around the same stub.
+        # absorbing). 2mm is a general absorbing-boundary standoff, not a
+        # Palace parallel: Palace's `zlo = -(sma_rout_mm + 2.0)` only sizes
+        # a boolean cut box for the ground-contact clip -- away from that
+        # clip, Palace's own boundary IS the PTFE's r=rout face directly,
+        # with no buffer beyond it either. Checked by adversarial re-review
+        # (2026-09-06); the earlier comment here overclaimed this analogy.
         '.ZminSpace "2.0"', '.ZmaxSpace "h_air"',
         "End With",
     ]))
@@ -372,8 +386,9 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # not rout (the dielectric/shield interface): a port window that
         # stops exactly at the enclosing conductor's inner face risks CST's
         # 2D port-mode solver not cleanly registering that PEC boundary.
-        # Standard practice for a coax port is to size the aperture to fully
-        # contain the outer conductor, not touch it at one edge.
+        # This is inference, not a confirmed CST convention -- flagged as
+        # unverified by adversarial re-review (2026-09-06), since this
+        # environment has no CST install to check it against.
         rout = launch["sma_rout_mm"]
         shell_t = 0.3   # must match the shield Outerradius above
         rport = rout + shell_t
