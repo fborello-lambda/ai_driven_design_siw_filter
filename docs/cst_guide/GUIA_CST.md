@@ -196,12 +196,47 @@ causa con una corrida de prueba), pero un mallado más fino (35 líneas por
 longitud de onda) sobre la misma geometría compleja (124 sólidos curvos)
 es, igual que el recorte, un factor plausible.
 
-Como estas dos corridas reales ya mostraron el mismo mensaje del solver
-("*reduce el stability factor*"), esta versión lo aplica directamente en
-la macro en vez de pedir un tercer round-trip: `Solver.StabilityFactor
-"0.8"` (el valor por defecto de CST está cerca de 1.0). Si la advertencia
-persiste, bajarlo más (0.6) es el siguiente paso, buscando en el editor de
-macros la línea `.StabilityFactor "0.8"` y cambiando el número.
+### 3.0.2 Intento de "stability factor" en la macro: falló al abrir (2026-09-06)
+
+Un intento de agregar `Solver.StabilityFactor "0.8"` directamente a la
+macro (para no pedir un tercer round-trip) **rompió al abrir el archivo**:
+*"No such property or method. (.StabilityFactor "0.8")"* — esa propiedad
+VBA no existe en esta versión de CST 2021; fue una sintaxis adivinada sin
+poder probarla acá (no hay licencia de CST en este entorno). Se sacó de la
+macro en vez de adivinar de nuevo. Si en algún momento hace falta bajar el
+stability factor, es manual: **Home → Solver → Setup Solver → Specials… →
+pestaña General**.
+
+### 3.0.3 Auditoría geométrica real (2026-09-06) — probablemente la causa real
+
+En vez de seguir probando ajustes del solver a ciegas, se midió
+directamente (con las mismas coordenadas que dibuja esta macro, sin
+necesitar CST) la separación entre cada vía, cada borde de pista y cada
+plano de tierra del conector. Resultado:
+
+- **Ningún solape real** en ningún lado — la separación vía-a-vía más
+  chica es 0.6 mm (borde a borde), siempre positiva.
+- Pero al mallado actual (25 líneas por longitud de onda), la celda
+  global mide **~2.18 mm** — y el hueco del CPWG (0.2512 mm) es apenas el
+  **11%** de una celda, la separación entre vías (0.6 mm) apenas el
+  **27%**. Es decir: **todos** los huecos importantes del diseño son más
+  chicos que una sola celda del mallado global. Todo el modelo depende
+  pesadamente del refinamiento automático local de CST (`RatioLimit`) para
+  resolver esos huecos, y nadie había verificado con una pasada adaptativa
+  que ese refinamiento automático realmente convergía —
+  `.MeshAdaption` estaba en `"False"`.
+
+Esto explica mejor que cualquier de los intentos anteriores por qué la
+inestabilidad aparece siempre, sin importar si el conector tiene el
+recorte a tierra o no, ni si el mallado global es de 25 o 35 líneas por
+longitud de onda: el problema no está en un detalle puntual, sino en que
+**todo el diseño se apoya en un refinamiento automático nunca verificado**.
+
+**Este archivo ahora corre con `.MeshAdaption "True"`** — el mecanismo
+estándar de CST para exactamente esta situación (refina la malla en pasadas
+sucesivas hasta que el S-parámetro converge), no una propiedad adivinada.
+Es más lento (varias pasadas en vez de una), pero es la prueba directa de
+si el refinamiento automático alcanzaba o no.
 
 1. En el menú superior: **Macros → Macro Editor...** (o el ícono de
    macros, según la versión).

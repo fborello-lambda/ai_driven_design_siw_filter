@@ -2065,8 +2065,7 @@ AddToHistory "define time domain solver parameters", "Mesh.SetCreator ""High Fre
   ".StimulationPort ""1""" & vbLf & _
   ".StimulationMode ""All""" & vbLf & _
   ".SteadyStateLimit ""-60""" & vbLf & _
-  ".StabilityFactor ""0.8""" & vbLf & _
-  ".MeshAdaption ""False""" & vbLf & _
+  ".MeshAdaption ""True""" & vbLf & _
   ".StoreTDResultsInCache ""False""" & vbLf & _
   ".SParaSymmetry ""True""" & vbLf & _
   "End With"

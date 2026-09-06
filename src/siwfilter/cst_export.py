@@ -502,17 +502,25 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # early steady-state stop -- deliberate, not the mesh-density bump
         # below that a stray edit briefly introduced and was reverted.
         '.SteadyStateLimit "-60"',
-        # Two real CST runs (2026-09-06) both reported "the calculation
-        # seems to be unstable" with S-parameters violating passivity
-        # across the whole sweep -- present with AND without the SMA
-        # ground-clip fix, so that geometry was not the cause. Root cause
-        # still unconfirmed (no CST license here to A/B test), but this is
-        # CST's own standard remedy for exactly this warning: shrink the
-        # timestep below the automatic PBA/CFL estimate. 0.8 is a
-        # conservative first guess (default is close to 1.0); lower
-        # further (e.g. 0.6) if the warning persists.
-        '.StabilityFactor "0.8"',
-        '.MeshAdaption "False"',
+        # NOTE: an earlier revision of this file added .StabilityFactor
+        # "0.8" here -- CST 2021 rejected it outright ("No such property or
+        # method"), a guessed VBA name that was never actually valid.
+        # Removed rather than guessed again. If the instability warning
+        # persists, the stability factor has to be set by hand: Home ->
+        # Solver -> Setup Solver -> Specials... -> General tab.
+        #
+        # Real geometric audit (2026-09-06, no CST needed -- computed
+        # directly from the same coordinates this macro draws): no
+        # overlapping conductors anywhere (worst via-via gap 0.6mm, clean).
+        # But at 25 lines/wavelength the global mesh cell is ~2.18mm, while
+        # every conductor gap in this design is smaller than that -- the
+        # CPWG gap (0.2512mm) is 11% of a cell, via-to-via spacing (0.6mm)
+        # is 27%. The whole model leans on CST's automatic local refinement
+        # (RatioLimit below) to resolve features 4-9x smaller than the base
+        # grid, with no adaptive pass ever checking that refinement actually
+        # converged (MeshAdaption was False). Turned on: this is the direct,
+        # standard CST mechanism for exactly this situation, not a guess.
+        '.MeshAdaption "True"',
         '.StoreTDResultsInCache "False"',
         '.SParaSymmetry "True"',
         "End With",
