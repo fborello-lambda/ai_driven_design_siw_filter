@@ -73,7 +73,9 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
                cpwg_len_mm: float = 5.0,
                cpwg_taper_mm: float = 4.0,
                preview: bool = False, render_png: str | None = None,
-               spec: FilterSpec | None = None) -> dict:
+               spec: FilterSpec | None = None,
+               port_mesh_size: float | None = None,
+               audit_path: str | None = None) -> dict:
     """
     with_sma=True replaces the bare microstrip WavePort at each feed end with a
     coax launch (pin r=sma_rin_mm, PTFE r=sma_rout_mm, eps_r=2.08 -> ~50 ohm by
@@ -100,6 +102,8 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     impedance-matched CPWG launch instead of a pad-only approximation. Both
     default off/None, in which case the model is unchanged.
     """
+    if port_mesh_size is not None and (not with_sma or port_mesh_size <= 0):
+        raise ValueError("port_mesh_size requires SMA ports and a positive size in mm")
     spec = spec or SPEC
     g = build_geometry(spec)
     # ---- tuning overrides: reset dimensions then rebuild via/taper primitives ----
@@ -279,12 +283,13 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
     if sma_diel:
         gmsh.model.addPhysicalGroup(3, sma_diel, tag=3, name="sma_ptfe")
 
-    # trace outlines (z=h, in mm) for point-in-polygon metal test. The CPWG
-    # pad is narrower than W, not wider (see docstring), so testing against
-    # the constant-W outline (no pad) is a safe over-approximation -- same
-    # simplification palace_dualmode_driven.py's classification uses.
+    # Use the actual CPWG polygon both for tagging and for exported audit
+    # metadata. A constant-W envelope is not the meshed trace.
     def _outline(x_in, x_taper, x_siw):
-        return feed_trace_poly(x_in, x_taper, x_siw, W, -half, half)
+        incoming = x_in < x_siw
+        return feed_trace_poly(x_in, x_taper, x_siw, W, -half, half, _wp,
+                               _xp_in if incoming else _xp_out,
+                               _xh_in if incoming else _xh_out)
     trace_polys = [_outline(X0, -Lt, 0.0), _outline(X1, Li + Lt, Li)] + gnd_polys
 
     def _in_poly(px, py, poly) -> bool:
@@ -410,8 +415,22 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
         return {"render_png": render_png}
 
     # ---- mesh sizing ----
-    gmsh.option.setNumber("Mesh.MeshSizeMin", mesh_min)
+    # The old global minimum (.6 mm in the sweep preset) clamps the inner
+    # coax circle to very few edges. An optional local port field resolves
+    # the annulus; lowering the global clamp also allows curvature sizing
+    # elsewhere, so this is a refinement experiment, not an isolated change
+    # to the 2D mode solver.
+    gmsh.option.setNumber("Mesh.MeshSizeMin", min(mesh_min, port_mesh_size or mesh_min))
     gmsh.option.setNumber("Mesh.MeshSizeMax", mesh_max)
+    if port_mesh_size is not None:
+        distance = gmsh.model.mesh.field.add("Distance")
+        gmsh.model.mesh.field.setNumbers(distance, "SurfacesList", wave_in + wave_out)
+        gmsh.model.mesh.field.setNumber(distance, "Sampling", 100)
+        threshold = gmsh.model.mesh.field.add("Threshold")
+        for key, value in {"InField": distance, "SizeMin": port_mesh_size,
+                           "SizeMax": mesh_max, "DistMin": .5, "DistMax": 2.0}.items():
+            gmsh.model.mesh.field.setNumber(threshold, key, value)
+        gmsh.model.mesh.field.setAsBackgroundMesh(threshold)
     gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 10)
     gmsh.option.setNumber("Mesh.Algorithm3D", 1)
     gmsh.model.mesh.generate(3)
@@ -461,6 +480,18 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
               f"(7 GB ceiling) at Order 1")
         print(f"  tag legend: {legend}")
         print(f"  WROTE {out}")
+    if audit_path is not None:
+        import json
+        from pathlib import Path
+        from .mesh_audit import inspect_mesh
+        audit = inspect_mesh()
+        audit["settings"] = {"mesh_max_mm": mesh_max, "mesh_min_mm": mesh_min,
+                             "port_mesh_size_mm": port_mesh_size,
+                             "h_air_factor": h_air_factor}
+        Path(audit_path).write_text(json.dumps(audit, indent=2) + "\n")
+        if audit["quality"]["nonpositive"] or audit["unclassified_exterior"]:
+            gmsh.finalize()
+            raise RuntimeError(f"Invalid mesh; see {audit_path}")
     gmsh.finalize()
     return {"mesh": out, "tets": ntet, "nodes": nnode, "legend": legend,
             "metal_real": metal_info,
@@ -469,6 +500,7 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
             # once drifted from the mesh unnoticed for lack of this.
             "launch_geom": {
                 "gnd_via_centres": [list(map(float, c)) for c in gnd_via_centres],
+                "gnd_polys": [poly.tolist() for poly in gnd_polys],
                 "via_centres_mm": [[float(x * MM), float(y * MM)] for x, y in via_xy],
                 "cpwg_gap_mm": cpwg_gap_mm,
                 "n_gnd_stitch": n_gnd_stitch,

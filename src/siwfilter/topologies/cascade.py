@@ -152,6 +152,7 @@ class CascadeTopology:
         # studies ran with the feature switched off (CLAUDE.md sec 10c).
         return {"mesh_path": res["mesh"], "ports": res["ports"], "tets": res["tets"],
                 "nodes": res["nodes"], "sma": res.get("sma"),
+                "legend": res.get("legend"),
                 "metal_real": res.get("metal_real"),
                 "launch_geom": res.get("launch_geom"),
                 "eps_r": spec.substrate.eps_r, "tand": spec.substrate.tan_d}

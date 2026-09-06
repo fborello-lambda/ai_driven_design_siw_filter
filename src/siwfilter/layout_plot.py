@@ -41,7 +41,7 @@ def _cpwg_feed_polys(g: Geometry, launch: dict):
     for x_edge, sgn in ((X0, +1.0), (Li + Lt + Lf, -1.0)):
         xa = x_edge + sgn * clen                # end of constant CPWG section
         xb = xa + sgn * ctap                    # end of the taper
-        xc = x_edge + sgn * (Lt + Lf)           # SIW wall / start of the flare
+        xc = x_edge + sgn * Lf                  # microstrip end / start of SIW flare
         out.append(np.array([
             (x_edge, -wp / 2), (xa, -wp / 2), (xb, -wm / 2), (xc, -wm / 2),
             (xc,  wm / 2), (xb,  wm / 2), (xa,  wp / 2), (x_edge,  wp / 2),

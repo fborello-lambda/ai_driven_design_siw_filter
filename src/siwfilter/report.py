@@ -706,8 +706,9 @@ def verify_cascade_drawing_matches_mesh(spec=None, params: dict | None = None) -
     meshed_vias = _np.array(g["via_centres_mm"])
     hit = len(drawn_vias) == len(meshed_vias)
     if hit:
-        hit = bool(_np.allclose(_np.sort(drawn_vias, axis=0),
-                                _np.sort(meshed_vias, axis=0), atol=1e-6))
+        hit = bool(_np.allclose(drawn_vias[_np.lexsort((drawn_vias[:, 1], drawn_vias[:, 0]))],
+                                meshed_vias[_np.lexsort((meshed_vias[:, 1], meshed_vias[:, 0]))],
+                                atol=1e-6, rtol=0))
     print(f"  VERIFY {'ok' if hit else 'FAIL'}: fence vias "
           f"drawn={len(drawn_vias)} meshed={len(meshed_vias)}")
     ok &= hit
@@ -736,6 +737,19 @@ def verify_cascade_drawing_matches_mesh(spec=None, params: dict | None = None) -
           abs(float(_np.median(_np.abs(drawn[:, 1]))) * 2 - w_ms) < 0.5
     print(f"  VERIFY {'ok' if hit else 'FAIL'}: feed tapers out to the microstrip "
           f"width {w_ms:.4f} mm (drawn max half-width {max(abs(drawn[:,1])):.4f})")
+    ok &= hit
+
+    # Compare the complete trace outline, including both tapers. The old
+    # check only compared widths and the minimum X coordinate, while its
+    # purported meshed outline was a constant-width envelope.
+    drawn_full = _np.vstack([drawn[:4], [[0., -geo.a_siw * MM / 2],
+                                       [0., geo.a_siw * MM / 2]], drawn[4:]])
+    trace_actual = _np.asarray(g["trace_poly_in"])
+    hit = drawn_full.shape == trace_actual.shape and any(
+        _np.allclose(drawn_full, _np.roll(candidate, shift, axis=0), atol=1e-6, rtol=0)
+        for candidate in (trace_actual, trace_actual[::-1])
+        for shift in range(len(trace_actual)))
+    print(f"  VERIFY {'ok' if hit else 'FAIL'}: complete CPWG + SIW trace outline")
     ok &= hit
 
     # 5. The board outline must END where the trace ends -- the launch is an
