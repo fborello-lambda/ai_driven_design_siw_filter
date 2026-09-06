@@ -408,6 +408,20 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
             'MISSING -- .Xmin/.Xmax "electric" shorts the board footprint '
             'outside the coax port disk at both ends',
             section="model")
+        # Palace's build_mesh() unconditionally clips the near-board PTFE/
+        # shield to z>=0 (the `clipbox` cut) so the shield sits flush on the
+        # bottom ground plane -- there is no unclipped mode in what Palace
+        # simulates. generate_bas() now defaults flat_sma_ground to match
+        # whenever a real CPWG launch is present; check the clip actually
+        # ran for both stubs, not just that the option exists.
+        has_flat_clip = (('"clip SMA in ptfe"' in txt) and ('"clip SMA in shield"' in txt)
+                         and ('"clip SMA out ptfe"' in txt) and ('"clip SMA out shield"' in txt))
+        add("CST SMA ground clipped flush, matching Palace's clipbox cut",
+            has_flat_clip,
+            "all four clip Subtract ops present" if has_flat_clip else
+            "MISSING -- PTFE/shield meet the bottom ground plane along a "
+            "tangent line instead of a flat contact area",
+            section="model")
 
     # ---- 10. drawing vs mesh ------------------------------------------
     if with_mesh:
