@@ -294,8 +294,36 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                 ".Create", "End With"]))
 
         # Taoglas EMPCB.SMAFSTJ.B.HT edge launch: a PTFE-filled coax stub off
-        # each board edge, pin on the substrate mid-plane. Modelled at the
-        # datasheet pin radius; rout follows the 50-ohm PTFE relation.
+        # each board edge. Modelled at the datasheet pin radius; rout
+        # follows the 50-ohm PTFE relation.
+        #
+        # Centred on z=h_sub (the trace/top-copper plane), matching Palace's
+        # `occ.addCylinder(x0s, 0, h, ...)` -- NOT h_sub/2 (the substrate
+        # MIDPLANE), which is what this file drew until an independent
+        # adversarial review caught it (2026-09-06). h_sub/2 is not just a
+        # different reference plane: for THIS design, h_sub=0.76mm and
+        # rin=0.38mm satisfy h_sub/2==rin exactly, so a pin centred there
+        # spans z=0 to z=h_sub precisely -- its bottom edge tangent to the
+        # bottom ground plane brick, a near-direct short of the centre
+        # conductor to ground. Centred on h_sub, the pin spans
+        # h_sub-rin..h_sub+rin, clear of z=0 by rin, and naturally overlaps
+        # the trace copper (drawn from h_sub to h_sub+t_cu) the same way
+        # Palace's does -- no separate end-cap solid needed, matching
+        # Palace, which uses the cap only to bridge a CUT annulus, not a
+        # solid pin.
+        #
+        # KNOWN GAP, not fixed here (found by the same review, 2026-09-06):
+        # Palace additionally cuts the PTFE/pin/shield flat at the bottom
+        # over a short board-edge segment (`sma_ground_mm`, <=1.5mm) so the
+        # shield bonds to the bottom ground plane over a real flat FACE.
+        # This file draws plain, uncut cylinders along the whole stub --
+        # with the z-centre fix above the shield still reaches the ground
+        # plane (it dips well below z=0 like Palace's unclipped ptfe does),
+        # but only along a tangent LINE, not Palace's deliberate flat bond.
+        # Secondary to the z-centre bug (that one risked shorting the
+        # SIGNAL conductor; this one only affects how robustly the SHIELD
+        # grounds), left open rather than rushing a boolean-cut
+        # implementation in CST VBA under time pressure.
         rin, rout = launch["sma_rin_mm"], launch["sma_rout_mm"]
         shell_t = 0.3   # mm, connector-body-like wall thickness (cosmetic --
                         # PEC has no skin depth); also used to size the port
@@ -315,14 +343,14 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                 '.Axis "x"', f'.Outerradius "{_fmm(rout)}"',
                 f'.Innerradius "{_fmm(rin)}"',
                 f'.Xrange "{far}", "{x_edge}"',
-                '.Ycenter "0"', '.Zcenter "h_sub/2"', '.Segments "0"',
+                '.Ycenter "0"', '.Zcenter "h_sub"', '.Segments "0"',
                 ".Create", "End With"]))
             s.append(_hist(f"define cylinder: component1:sma_{tag}_pin", [
                 "With Cylinder", ".Reset", f'.Name "sma_{tag}_pin"',
                 '.Component "component1"', '.Material "PEC"',
                 '.Axis "x"', f'.Outerradius "{_fmm(rin)}"', '.Innerradius "0"',
                 f'.Xrange "{far}", "{x_edge}"',
-                '.Ycenter "0"', '.Zcenter "h_sub/2"', '.Segments "0"',
+                '.Ycenter "0"', '.Zcenter "h_sub"', '.Segments "0"',
                 ".Create", "End With"]))
             # Shield: Palace has no separate solid for this -- its mesh tags
             # the PTFE's own outer face (r=rout) PEC directly, which is a
@@ -339,7 +367,7 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                 '.Axis "x"', f'.Outerradius "{_fmm(rout + shell_t)}"',
                 f'.Innerradius "{_fmm(rout)}"',
                 f'.Xrange "{far}", "{x_edge}"',
-                '.Ycenter "0"', '.Zcenter "h_sub/2"', '.Segments "0"',
+                '.Ycenter "0"', '.Zcenter "h_sub"', '.Segments "0"',
                 ".Create", "End With"]))
 
     # ---- boundaries, background, ports ----------------------------------
@@ -402,7 +430,7 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                 f'.Orientation "{orient}"', '.PortOnBound "True"',
                 f'.Xrange "{face}", "{face}"',
                 f'.Yrange "{_fmm(-rport)}", "{_fmm(rport)}"',
-                f'.Zrange "h_sub/2-{_fmm(rport)}", "h_sub/2+{_fmm(rport)}"',
+                f'.Zrange "h_sub-{_fmm(rport)}", "h_sub+{_fmm(rport)}"',
                 ".Create", "End With"]))
         _emit_ports = False
     else:

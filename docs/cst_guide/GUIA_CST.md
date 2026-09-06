@@ -97,7 +97,7 @@ puertos.
 
 ## 3.0 Antes de correr nada: verificar que el archivo es la versión corregida
 
-Este `siw_cascade_N3.bas` tiene corregidos **dos** errores reales, ambos
+Este `siw_cascade_N3.bas` tiene corregidos **tres** errores reales, todos
 detectados a partir de una corrida real en CST que dio un resultado roto
 (S1,1 pegado a 0 dB en toda la banda, ver §7.2 — no un problema de Palace
 ni del diseño, sino de cómo se armaba este archivo):
@@ -111,6 +111,16 @@ ni del diseño, sino de cómo se armaba este archivo):
    pegada al conector SMA -- una plancha de tierra ficticia del tamaño de
    toda la placa, sin ningún equivalente en el modelo de Palace, justo
    debajo del lanzador.
+3. **2026-09-06** (encontrado por una segunda revisión independiente,
+   después de que las dos anteriores ya estuvieran corregidas): el pin del
+   conector estaba centrado en el **plano medio del sustrato**
+   (`h_sub/2`), no en el plano de arriba donde está la pista (`h_sub`),
+   que es donde lo pone Palace. Con las medidas de este diseño (sustrato
+   0.76 mm, pin de 0.38 mm de radio) esos dos números casualmente
+   coinciden (`h_sub/2 = rin`), así que el pin quedaba tocando exactamente
+   el plano de tierra de abajo -- prácticamente un cortocircuito del
+   conductor central a tierra. Este es, de los tres, el que más
+   directamente puede explicar un resultado roto.
 
 **Antes de ejecutar la macro**, abrir el archivo `.bas` con un editor de
 texto (Bloc de notas alcanza) y buscar (Ctrl+F):
@@ -118,9 +128,16 @@ texto (Bloc de notas alcanza) y buscar (Ctrl+F):
 - `sma_in_shield` → debe **aparecer**.
 - `.Zmin "open"` → debe **aparecer**. Si en cambio aparece
   `.Zmin "electric"`, es la versión vieja.
+- `"h_sub/2"` → **NO debe aparecer en ningún lado**. Si aparece, es la
+  versión vieja del conector.
 
-Si cualquiera de las dos búsquedas falla, es una versión vieja — usar el
+Si alguna de estas tres búsquedas falla, es una versión vieja — usar el
 archivo que viene en este mismo paquete, no uno descargado antes.
+
+**Nota honesta**: los tres errores se encontraron leyendo el código y
+comparándolo contra lo que realmente construye Palace, no corriendo CST
+(este entorno no tiene licencia de CST). Son diagnósticos bien
+fundamentados, pero la única prueba real es una corrida nueva.
 
 1. En el menú superior: **Macros → Macro Editor...** (o el ícono de
    macros, según la versión).
@@ -155,8 +172,10 @@ existieron en versiones anteriores de esta macro: dos de unidades (que
 dibujaban el conector y las vías del lanzador 1000 veces más grandes o más
 lejos de lo correcto); uno donde faltaba la taper grande, dejando la pista
 sin conexión a la cavidad; uno donde al conector coaxial le faltaba el
-blindaje metálico exterior (`sma_in_shield`/`sma_out_shield`); y uno en la
-pared inferior del dominio de simulación (`.Zmin`, ver §3.0 y §7.2).
+blindaje metálico exterior (`sma_in_shield`/`sma_out_shield`); uno en la
+pared inferior del dominio de simulación (`.Zmin`); y uno donde el pin del
+conector estaba centrado en el plano medio del sustrato en vez del plano
+de la pista, casi tocando tierra (ver §3.0 y §7.2 para los tres últimos).
 
 \newpage
 
@@ -325,20 +344,26 @@ la potencia y el filtro real (que sí existe, calibrado y con la geometría
 correcta) queda enterrado debajo de esa desadaptación. No indica ningún
 problema con Palace ni con el diseño.
 
-Se identificaron dos causas posibles, ambas explicadas en el §3.0:
+Se identificaron tres causas posibles, las tres explicadas en el §3.0:
 
 1. **Falta de blindaje del coaxial** — confirmado por inspección directa
    del archivo que efectivamente se corrió: no tenía `sma_in_shield`.
 2. **Pared inferior del dominio mal declarada** (`.Zmin "electric"` en vez
-   de `"open"`) — encontrado después, por comparación directa contra la
-   lógica de Palace (que no tiene ninguna pared PEC ahí), **no** corriendo
-   CST. Es un diagnóstico bien fundamentado, pero no verificado con una
-   corrida real todavía, porque este entorno no tiene CST instalado para
-   probarlo directamente.
+   de `"open"`) — encontrado por comparación directa contra la lógica de
+   Palace (que no tiene ninguna pared PEC ahí), **no** corriendo CST.
+3. **Pin centrado en el plano equivocado** (`h_sub/2` en vez de `h_sub`) —
+   encontrado en una revisión independiente posterior, también por
+   comparación contra Palace. De las tres, esta es la que más
+   directamente explica un resultado roto: con las medidas de este diseño
+   el pin quedaba tocando el plano de tierra de abajo.
 
-Por eso conviene una corrida nueva con el archivo actual (que corrige
-ambas cosas) antes de asumir que el problema está resuelto del todo — si
-el resultado sigue sin parecerse al de Palace, avisar con el archivo de
+Ninguna de las tres se verificó corriendo CST realmente — este entorno no
+tiene licencia para eso. Son diagnósticos bien fundamentados por lectura
+de código y comparación contra Palace, no resultados confirmados.
+
+Por eso conviene una corrida nueva con el archivo actual (que corrige las
+tres) antes de asumir que el problema está resuelto del todo — si el
+resultado sigue sin parecerse al de Palace, avisar con el archivo de
 resultados igual que la vez anterior; eso es información real, no un paso
 de más.
 

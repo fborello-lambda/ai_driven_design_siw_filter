@@ -1925,7 +1925,7 @@ AddToHistory "define cylinder: component1:sma_in_ptfe", "With Cylinder" & vbLf &
   ".Innerradius ""0.3800""" & vbLf & _
   ".Xrange ""-(L_taper+L_feed)-6.0000"", ""-(L_taper+L_feed)""" & vbLf & _
   ".Ycenter ""0""" & vbLf & _
-  ".Zcenter ""h_sub/2""" & vbLf & _
+  ".Zcenter ""h_sub""" & vbLf & _
   ".Segments ""0""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
@@ -1939,7 +1939,7 @@ AddToHistory "define cylinder: component1:sma_in_pin", "With Cylinder" & vbLf & 
   ".Innerradius ""0""" & vbLf & _
   ".Xrange ""-(L_taper+L_feed)-6.0000"", ""-(L_taper+L_feed)""" & vbLf & _
   ".Ycenter ""0""" & vbLf & _
-  ".Zcenter ""h_sub/2""" & vbLf & _
+  ".Zcenter ""h_sub""" & vbLf & _
   ".Segments ""0""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
@@ -1953,7 +1953,7 @@ AddToHistory "define cylinder: component1:sma_in_shield", "With Cylinder" & vbLf
   ".Innerradius ""1.2639""" & vbLf & _
   ".Xrange ""-(L_taper+L_feed)-6.0000"", ""-(L_taper+L_feed)""" & vbLf & _
   ".Ycenter ""0""" & vbLf & _
-  ".Zcenter ""h_sub/2""" & vbLf & _
+  ".Zcenter ""h_sub""" & vbLf & _
   ".Segments ""0""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
@@ -1967,7 +1967,7 @@ AddToHistory "define cylinder: component1:sma_out_ptfe", "With Cylinder" & vbLf 
   ".Innerradius ""0.3800""" & vbLf & _
   ".Xrange ""103.9810+L_taper+L_feed+6.0000"", ""103.9810+L_taper+L_feed""" & vbLf & _
   ".Ycenter ""0""" & vbLf & _
-  ".Zcenter ""h_sub/2""" & vbLf & _
+  ".Zcenter ""h_sub""" & vbLf & _
   ".Segments ""0""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
@@ -1981,7 +1981,7 @@ AddToHistory "define cylinder: component1:sma_out_pin", "With Cylinder" & vbLf &
   ".Innerradius ""0""" & vbLf & _
   ".Xrange ""103.9810+L_taper+L_feed+6.0000"", ""103.9810+L_taper+L_feed""" & vbLf & _
   ".Ycenter ""0""" & vbLf & _
-  ".Zcenter ""h_sub/2""" & vbLf & _
+  ".Zcenter ""h_sub""" & vbLf & _
   ".Segments ""0""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
@@ -1995,7 +1995,7 @@ AddToHistory "define cylinder: component1:sma_out_shield", "With Cylinder" & vbL
   ".Innerradius ""1.2639""" & vbLf & _
   ".Xrange ""103.9810+L_taper+L_feed+6.0000"", ""103.9810+L_taper+L_feed""" & vbLf & _
   ".Ycenter ""0""" & vbLf & _
-  ".Zcenter ""h_sub/2""" & vbLf & _
+  ".Zcenter ""h_sub""" & vbLf & _
   ".Segments ""0""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
@@ -2031,7 +2031,7 @@ AddToHistory "define port1 (coax)", "With Port" & vbLf & _
   ".PortOnBound ""True""" & vbLf & _
   ".Xrange ""-(L_taper+L_feed)-6.0000"", ""-(L_taper+L_feed)-6.0000""" & vbLf & _
   ".Yrange ""-1.5639"", ""1.5639""" & vbLf & _
-  ".Zrange ""h_sub/2-1.5639"", ""h_sub/2+1.5639""" & vbLf & _
+  ".Zrange ""h_sub-1.5639"", ""h_sub+1.5639""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
 AddToHistory "define port2 (coax)", "With Port" & vbLf & _
@@ -2043,7 +2043,7 @@ AddToHistory "define port2 (coax)", "With Port" & vbLf & _
   ".PortOnBound ""True""" & vbLf & _
   ".Xrange ""103.9810+L_taper+L_feed+6.0000"", ""103.9810+L_taper+L_feed+6.0000""" & vbLf & _
   ".Yrange ""-1.5639"", ""1.5639""" & vbLf & _
-  ".Zrange ""h_sub/2-1.5639"", ""h_sub/2+1.5639""" & vbLf & _
+  ".Zrange ""h_sub-1.5639"", ""h_sub+1.5639""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
 

@@ -364,6 +364,22 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
             "sma_in_shield/sma_out_shield present" if has_shield else
             "MISSING -- the coax stub has no confining conductor",
             section="model")
+        # Palace centres the coax on z=h_sub (the trace plane), not h_sub/2
+        # (the substrate midplane) -- confirmed by an independent adversarial
+        # review (2026-09-06) reading palace_driven.py's actual
+        # occ.addCylinder call. On THIS design h_sub/2 happens to equal rin
+        # exactly, so a midplane-centred pin spans z=0..h_sub precisely --
+        # tangent to the bottom ground plane, close to a direct short of the
+        # centre conductor. Checked as absence of the wrong string rather
+        # than presence of the right one, since "h_sub" alone can't be
+        # searched for (it's also a bare parameter name used elsewhere).
+        no_midplane_sma = '"h_sub/2"' not in txt
+        add("SMA coax centred on the trace plane, not the substrate midplane",
+            no_midplane_sma,
+            'no "h_sub/2" Zcenter/Zrange found' if no_midplane_sma else
+            'MISSING -- Zcenter "h_sub/2" found; for rin==h_sub/2 designs '
+            'this puts the pin tangent to the bottom ground plane',
+            section="model")
         # .Zmin "electric" with ZminSpace=0 auto-sizes the domain floor to
         # sit tangent to the SMA stub (the lowest solid, wider than the
         # board is thick) -- a cylinder only touches a flat plane along a
