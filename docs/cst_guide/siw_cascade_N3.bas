@@ -2008,8 +2008,8 @@ AddToHistory "define background", "With Background" & vbLf & _
   ".Type ""Normal""" & vbLf & _
   ".XminSpace ""0""" & vbLf & _
   ".XmaxSpace ""0""" & vbLf & _
-  ".YminSpace ""0""" & vbLf & _
-  ".YmaxSpace ""0""" & vbLf & _
+  ".YminSpace ""2.0""" & vbLf & _
+  ".YmaxSpace ""2.0""" & vbLf & _
   ".ZminSpace ""2.0""" & vbLf & _
   ".ZmaxSpace ""h_air""" & vbLf & _
   "End With"
@@ -2053,9 +2053,9 @@ AddToHistory "define port2 (coax)", "With Port" & vbLf & _
 AddToHistory "define mesh settings", "With Mesh" & vbLf & _
   ".MeshType ""PBA""" & vbLf & _
   ".SetCreator ""High Frequency""" & vbLf & _
-  ".LinesPerWavelength ""25""" & vbLf & _
-  ".MinimumLineNumber ""10""" & vbLf & _
-  ".RatioLimit ""20""" & vbLf & _
+  ".LinesPerWavelength ""35""" & vbLf & _
+  ".MinimumLineNumber ""15""" & vbLf & _
+  ".RatioLimit ""100""" & vbLf & _
   ".UseRatioLimit ""True""" & vbLf & _
   "End With"
 AddToHistory "define time domain solver parameters", "Mesh.SetCreator ""High Frequency""" & vbLf & _

@@ -238,6 +238,35 @@ sucesivas hasta que el S-parámetro converge), no una propiedad adivinada.
 Es más lento (varias pasadas en vez de una), pero es la prueba directa de
 si el refinamiento automático alcanzaba o no.
 
+### 3.0.4 Dos hallazgos más de la corrida con `MeshAdaption` (2026-09-06)
+
+Esa corrida real trajo dos cosas nuevas:
+
+1. **`MeshAdaption` solo no alcanzó** — la advertencia de inestabilidad
+   siguió apareciendo. Esperable, ahora que se calculó el número real: el
+   hueco del CPWG necesita una relación celda-global/celda-local de ~43.5
+   para tener aunque sea 5 celdas de ancho, y `RatioLimit` (el techo de
+   cuánto puede refinar CST localmente) estaba en apenas 20 — `MeshAdaption`
+   puede querer refinar ahí, pero no puede pasar ese techo. Ahora:
+   `.LinesPerWavelength "35"` (celda global ~1.56 mm, antes 25 -> 2.18 mm) y
+   `.RatioLimit "100"` (antes 20) — con margen de más de 3x sobre lo que
+   pide el hueco más chico del diseño, no apenas lo justo. Es el equivalente
+   en CST de lo que Palace hace con un `mesh_min` chico en milímetros:
+   refinar localmente sin exigir un mallado global finísimo en toda la
+   placa.
+2. **Advertencia nueva y real**: *"Dispersive materials are not supported
+   at open boundary... Locations: ymin ymax"*. Esta sí es un bug de verdad,
+   no una sospecha: `YminSpace`/`YmaxSpace` estaban en `"0"` desde la
+   primerísima versión de este archivo — nadie los había tocado, todos los
+   fixes anteriores fueron en X o Z. Eso deja al sustrato (que tiene pérdida
+   dieléctrica, un material "dispersivo" para CST) tocando directamente el
+   borde abierto en Y, sin aire de por medio — algo que la condición de
+   frontera abierta de CST no admite bien. Corregido: `YminSpace`/
+   `YmaxSpace` ahora en `"2.0"` mm (el mismo margen que ya se usaba en Z).
+   Palace no tiene este problema porque su formulación FEM no exige lo
+   mismo ahí — no es un caso de "imitar mal a Palace", es un requisito
+   propio de CST que nunca se había cubierto.
+
 1. En el menú superior: **Macros → Macro Editor...** (o el ícono de
    macros, según la versión).
 2. En el editor de macros: **File → Open Macro File...**

@@ -398,7 +398,19 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     s.append(_hist("define background", [
         "With Background", ".ResetBackground", '.Type "Normal"',
         '.XminSpace "0"', '.XmaxSpace "0"',
-        '.YminSpace "0"', '.YmaxSpace "0"',
+        # YminSpace/YmaxSpace were 0 from the very first version of this
+        # file -- never touched by any of the X/Z boundary fixes -- so the
+        # dispersive substrate (RO4350B, TanD-based loss) sat directly on
+        # the open Y boundary with no air gap. A real CST run (2026-09-06)
+        # flagged this explicitly: "Dispersive materials are not supported
+        # at open boundary... Locations: ymin ymax". Palace's own mesh has
+        # this same zero-Y-padding geometry (its own air boxes only cover
+        # z>=h, not the Y sides), so this is not a Palace-mismatch fix --
+        # it is a CST-specific requirement (its open/absorbing BC math
+        # needs a non-dispersive buffer) that Palace's FEM formulation
+        # apparently doesn't share. 2mm matches the standoff already used
+        # for ZminSpace below, not a new arbitrary number.
+        '.YminSpace "2.0"', '.YmaxSpace "2.0"',
         # ZminSpace is NOT 0: the real ground plane is the gnd_bottom PEC
         # solid, not this domain wall. With SMA stubs present (radius up to
         # ~1.56mm) as the lowest geometry in the model, ZminSpace=0 auto-
@@ -486,9 +498,20 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     s.append(_hist("define mesh settings", [
         "With Mesh", '.MeshType "PBA"',
         '.SetCreator "High Frequency"',
-        '.LinesPerWavelength "25"',
-        '.MinimumLineNumber "10"',
-        '.RatioLimit "20"',
+        # Computed directly (2026-09-06, no CST needed): at 25 lines/wl the
+        # global cell is ~2.18mm, but the CPWG gap (0.2512mm) needs a cell
+        # of ~0.05mm to get even 5 cells across it -- a 43.5x local/global
+        # ratio, which the old RatioLimit=20 could never permit no matter
+        # how much MeshAdaption wanted to refine there. This is CST's
+        # analogue of what Palace does with a small absolute mesh_min: give
+        # local refinement generous room rather than just barely clearing
+        # the smallest feature. At 35 lines/wl the global cell drops to
+        # ~1.56mm, needing only a 31x ratio for that same gap -- RatioLimit
+        # 100 clears every feature in this design (CPWG gap, via-via gaps,
+        # coax pin) with >3x margin, not a bare pass.
+        '.LinesPerWavelength "35"',
+        '.MinimumLineNumber "15"',
+        '.RatioLimit "100"',
         '.UseRatioLimit "True"',
         "End With",
     ]))
