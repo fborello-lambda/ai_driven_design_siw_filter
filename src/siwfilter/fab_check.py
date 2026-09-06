@@ -364,6 +364,20 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
             "sma_in_shield/sma_out_shield present" if has_shield else
             "MISSING -- the coax stub has no confining conductor",
             section="model")
+        # .Zmin "electric" with ZminSpace=0 auto-sizes the domain floor to
+        # sit tangent to the SMA stub (the lowest solid, wider than the
+        # board is thick) -- a cylinder only touches a flat plane along a
+        # line, so that wall covers the WHOLE board footprint as an
+        # unphysical extra PEC sheet a hair below the connector, with no
+        # counterpart in Palace's mesh (no z<0 volume there at all; every
+        # exterior face the SMA geometry itself doesn't classify as its own
+        # conductor is absorbing, never a domain-wide PEC wall).
+        zmin_open = '".Zmin ""open"""' in txt
+        add("CST domain floor is open, not an extra ground plane", zmin_open,
+            '.Zmin "open"' if zmin_open else
+            'MISSING -- .Zmin "electric" auto-sizes to sit tangent to the '
+            'SMA stub, shorting the space under the whole board',
+            section="model")
 
     # ---- 10. drawing vs mesh ------------------------------------------
     if with_mesh:

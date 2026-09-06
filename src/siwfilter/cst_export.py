@@ -287,6 +287,9 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # each board edge, pin on the substrate mid-plane. Modelled at the
         # datasheet pin radius; rout follows the 50-ohm PTFE relation.
         rin, rout = launch["sma_rin_mm"], launch["sma_rout_mm"]
+        shell_t = 0.3   # mm, connector-body-like wall thickness (cosmetic --
+                        # PEC has no skin depth); also used to size the port
+                        # aperture below so it encloses the shield.
         s.append("\n' ---- Taoglas SMA coax stubs (real connector) --------------------\n")
         s.append(_hist("define material: PTFE_sma", [
             "With Material", ".Reset", '.Name "PTFE_sma"', '.Folder ""',
@@ -316,11 +319,10 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
             # valid coax boundary in an FEM mesh but has no CST equivalent.
             # Without an actual PEC solid here the coax has no confining
             # wall along the stub and is not the structure that was
-            # simulated. The wall thickness is cosmetic (PEC has no skin
-            # depth); what matters is Innerradius = rout, flush with the
-            # PTFE, so the port aperture (also sized to rout) sits exactly
-            # on the shield's inner face.
-            shell_t = 0.3   # mm, connector-body-like, not a physical constraint
+            # simulated. Innerradius = rout keeps it flush with the PTFE;
+            # the port aperture below is sized to rout+shell_t (not rout)
+            # so it fully encloses this conductor, not just touches its
+            # inner face.
             s.append(_hist(f"define cylinder: component1:sma_{tag}_shield", [
                 "With Cylinder", ".Reset", f'.Name "sma_{tag}_shield"',
                 '.Component "component1"', '.Material "PEC"',
@@ -336,14 +338,26 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         "With Background", ".ResetBackground", '.Type "Normal"',
         '.XminSpace "0"', '.XmaxSpace "0"',
         '.YminSpace "0"', '.YmaxSpace "0"',
-        '.ZminSpace "0"', '.ZmaxSpace "h_air"',
+        # ZminSpace is NOT 0: the real ground plane is the gnd_bottom PEC
+        # solid, not this domain wall. With SMA stubs present (radius up to
+        # ~1.56mm) as the lowest geometry in the model, ZminSpace=0 auto-
+        # sizes the domain floor to sit TANGENT to the round connector shell
+        # -- a cylinder only touches a flat plane along a line, so an
+        # "electric" wall there would cover the whole board footprint as an
+        # unphysical extra PEC sheet a hair below the connector, with no
+        # counterpart in Palace's mesh (which has no z<0 volume at all;
+        # everything the SMA stub's own geometry doesn't classify as its
+        # own PEC surface -- see build_mesh's on_sma_shell/pin/cap -- is
+        # absorbing). 2mm mirrors palace_driven.py's own
+        # `zlo = -(sma_rout_mm + 2.0)` clearance around the same stub.
+        '.ZminSpace "2.0"', '.ZmaxSpace "h_air"',
         "End With",
     ]))
     s.append(_hist("define boundaries", [
         "With Boundary",
         '.Xmin "electric"', '.Xmax "electric"',
         '.Ymin "open"', '.Ymax "open"',
-        '.Zmin "electric"', '.Zmax "open"',
+        '.Zmin "open"', '.Zmax "open"',
         '.ApplyInAllDirections "False"',
         "End With",
     ]))
@@ -353,7 +367,16 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # driven this way (wave ports on the coax cross-section), so
         # microstrip ports here would make the CST run a different problem
         # from the one the design was optimised against.
+        #
+        # The aperture is sized to rout+shell_t (the SHIELD's outer radius),
+        # not rout (the dielectric/shield interface): a port window that
+        # stops exactly at the enclosing conductor's inner face risks CST's
+        # 2D port-mode solver not cleanly registering that PEC boundary.
+        # Standard practice for a coax port is to size the aperture to fully
+        # contain the outer conductor, not touch it at one edge.
         rout = launch["sma_rout_mm"]
+        shell_t = 0.3   # must match the shield Outerradius above
+        rport = rout + shell_t
         s.append("\n' ---- coaxial ports on the SMA stubs -----------------------------\n")
         for n, (x_edge, sgn, orient) in enumerate(
                 [(xmin_e, -1.0, "xmin"), (xmax_e, 1.0, "xmax")], start=1):
@@ -363,8 +386,8 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
                 '.NumberOfModes "1"', '.Coordinates "Free"',
                 f'.Orientation "{orient}"', '.PortOnBound "True"',
                 f'.Xrange "{face}", "{face}"',
-                f'.Yrange "{_fmm(-rout)}", "{_fmm(rout)}"',
-                f'.Zrange "h_sub/2-{_fmm(rout)}", "h_sub/2+{_fmm(rout)}"',
+                f'.Yrange "{_fmm(-rport)}", "{_fmm(rport)}"',
+                f'.Zrange "h_sub/2-{_fmm(rport)}", "h_sub/2+{_fmm(rport)}"',
                 ".Create", "End With"]))
         _emit_ports = False
     else:

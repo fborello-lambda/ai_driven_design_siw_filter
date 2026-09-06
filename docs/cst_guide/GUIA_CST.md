@@ -1,7 +1,7 @@
 ---
 title: "Guía para simular el filtro SIW en CST"
 subtitle: "Cascade N=3, 2.87 GHz — pasos para correr la macro y verificar el modelo"
-date: "2026-09-04"
+date: "2026-09-06"
 lang: es
 geometry: margin=2.5cm
 papersize: a4
@@ -97,21 +97,30 @@ puertos.
 
 ## 3.0 Antes de correr nada: verificar que el archivo es la versión corregida
 
-Este `siw_cascade_N3.bas` tiene corregido un error real que se detectó
-recién (2026-09-05): al conector SMA le faltaba el cilindro metálico que
-lo blinda por afuera del dieléctrico. Sin ese blindaje el puerto coaxial
-no tiene ninguna referencia de 50 Ω real y CST refleja casi el 100% de la
-potencia en **toda** la banda (S1,1 nunca baja de −0.4 dB, ver §7) — un
-resultado que no se parece en nada al filtro real, aunque la macro corre
-sin ningún error visible.
+Este `siw_cascade_N3.bas` tiene corregidos **dos** errores reales, ambos
+detectados a partir de una corrida real en CST que dio un resultado roto
+(S1,1 pegado a 0 dB en toda la banda, ver §7.2 — no un problema de Palace
+ni del diseño, sino de cómo se armaba este archivo):
+
+1. **2026-09-05**: al conector SMA le faltaba el cilindro metálico que lo
+   blinda por afuera del dieléctrico.
+2. **2026-09-06**: la pared inferior del dominio de simulación estaba
+   declarada `electric` (un plano de tierra extra) en vez de `open`. El
+   plano de tierra real de la placa ya es un sólido PEC aparte (correcto);
+   esta pared de más quedaba, por el tamaño automático del dominio,
+   pegada al conector SMA -- una plancha de tierra ficticia del tamaño de
+   toda la placa, sin ningún equivalente en el modelo de Palace, justo
+   debajo del lanzador.
 
 **Antes de ejecutar la macro**, abrir el archivo `.bas` con un editor de
-texto (Bloc de notas alcanza) y buscar (Ctrl+F) el texto `sma_in_shield`.
+texto (Bloc de notas alcanza) y buscar (Ctrl+F):
 
-- **Si aparece**: es la versión corregida, seguir con el resto de esta
-  sección.
-- **Si NO aparece**: es una versión vieja — pedir que se regenere o usar
-  el archivo que viene en este mismo paquete, no uno descargado antes.
+- `sma_in_shield` → debe **aparecer**.
+- `.Zmin "open"` → debe **aparecer**. Si en cambio aparece
+  `.Zmin "electric"`, es la versión vieja.
+
+Si cualquiera de las dos búsquedas falla, es una versión vieja — usar el
+archivo que viene en este mismo paquete, no uno descargado antes.
 
 1. En el menú superior: **Macros → Macro Editor...** (o el ícono de
    macros, según la versión).
@@ -120,7 +129,7 @@ texto (Bloc de notas alcanza) y buscar (Ctrl+F) el texto `sma_in_shield`.
 4. Con el archivo abierto en el editor, presionar **F5** (o
    **Macros → Run Macro**).
 5. Al terminar debería aparecer un cuadro de diálogo:
-   *"SIW filter built: 122 solids. Check the modeler tree, then run the
+   *"SIW filter built: 124 solids. Check the modeler tree, then run the
    Time Domain solver."*
 6. Cerrar el cuadro de diálogo y mirar el árbol del modelador
    (**Navigation Tree → Components**): debería verse la geometría
@@ -145,10 +154,9 @@ seguir. El archivo de esta carpeta ya tiene corregidos varios errores que
 existieron en versiones anteriores de esta macro: dos de unidades (que
 dibujaban el conector y las vías del lanzador 1000 veces más grandes o más
 lejos de lo correcto); uno donde faltaba la taper grande, dejando la pista
-sin conexión a la cavidad; y uno donde al conector coaxial le faltaba el
-blindaje metálico exterior (`sma_in_shield`/`sma_out_shield`) — sin ese
-cilindro de PEC envolviendo al PTFE, el coaxial no tiene pared conductora
-de retorno y no es la misma estructura que se simuló con Palace.
+sin conexión a la cavidad; uno donde al conector coaxial le faltaba el
+blindaje metálico exterior (`sma_in_shield`/`sma_out_shield`); y uno en la
+pared inferior del dominio de simulación (`.Zmin`, ver §3.0 y §7.2).
 
 \newpage
 
@@ -307,15 +315,32 @@ CST no tenía ninguna pared conductora contra la cual esa impedancia
 pudiera referenciarse, y por eso el resultado salía roto (ver §7.2) aunque
 el coaxial en sí ya estaba dimensionado en 50 Ω desde el principio.
 
-## 7.2 Qué pasa si se corre con la versión vieja (referencia, no repetir)
+## 7.2 Qué pasa si se corre con una versión vieja (referencia, no repetir)
 
-Ya se probó: con el `.bas` de antes de esta corrección, el resultado en
-CST fue S1,1 pegado a 0 dB en **toda** la banda 2.0–3.6 GHz (mejor caso
+Ya se probó: con una versión anterior de este `.bas` (no queda del todo
+claro cuál de los dos errores del §3.0 tenía sin corregir), el resultado
+en CST fue S1,1 pegado a 0 dB en **toda** la banda 2.0–3.6 GHz (mejor caso
 apenas −0.37 dB) y S2,1 entre −30 y −95 dB — el puerto refleja casi toda
 la potencia y el filtro real (que sí existe, calibrado y con la geometría
 correcta) queda enterrado debajo de esa desadaptación. No indica ningún
-problema con Palace ni con el diseño; era específicamente la falta de
-este blindaje en el archivo exportado a CST.
+problema con Palace ni con el diseño.
+
+Se identificaron dos causas posibles, ambas explicadas en el §3.0:
+
+1. **Falta de blindaje del coaxial** — confirmado por inspección directa
+   del archivo que efectivamente se corrió: no tenía `sma_in_shield`.
+2. **Pared inferior del dominio mal declarada** (`.Zmin "electric"` en vez
+   de `"open"`) — encontrado después, por comparación directa contra la
+   lógica de Palace (que no tiene ninguna pared PEC ahí), **no** corriendo
+   CST. Es un diagnóstico bien fundamentado, pero no verificado con una
+   corrida real todavía, porque este entorno no tiene CST instalado para
+   probarlo directamente.
+
+Por eso conviene una corrida nueva con el archivo actual (que corrige
+ambas cosas) antes de asumir que el problema está resuelto del todo — si
+el resultado sigue sin parecerse al de Palace, avisar con el archivo de
+resultados igual que la vez anterior; eso es información real, no un paso
+de más.
 
 \newpage
 

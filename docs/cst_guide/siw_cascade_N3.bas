@@ -2008,7 +2008,7 @@ AddToHistory "define background", "With Background" & vbLf & _
   ".XmaxSpace ""0""" & vbLf & _
   ".YminSpace ""0""" & vbLf & _
   ".YmaxSpace ""0""" & vbLf & _
-  ".ZminSpace ""0""" & vbLf & _
+  ".ZminSpace ""2.0""" & vbLf & _
   ".ZmaxSpace ""h_air""" & vbLf & _
   "End With"
 AddToHistory "define boundaries", "With Boundary" & vbLf & _
@@ -2016,7 +2016,7 @@ AddToHistory "define boundaries", "With Boundary" & vbLf & _
   ".Xmax ""electric""" & vbLf & _
   ".Ymin ""open""" & vbLf & _
   ".Ymax ""open""" & vbLf & _
-  ".Zmin ""electric""" & vbLf & _
+  ".Zmin ""open""" & vbLf & _
   ".Zmax ""open""" & vbLf & _
   ".ApplyInAllDirections ""False""" & vbLf & _
   "End With"
@@ -2030,8 +2030,8 @@ AddToHistory "define port1 (coax)", "With Port" & vbLf & _
   ".Orientation ""xmin""" & vbLf & _
   ".PortOnBound ""True""" & vbLf & _
   ".Xrange ""-(L_taper+L_feed)-6.0000"", ""-(L_taper+L_feed)-6.0000""" & vbLf & _
-  ".Yrange ""-1.2639"", ""1.2639""" & vbLf & _
-  ".Zrange ""h_sub/2-1.2639"", ""h_sub/2+1.2639""" & vbLf & _
+  ".Yrange ""-1.5639"", ""1.5639""" & vbLf & _
+  ".Zrange ""h_sub/2-1.5639"", ""h_sub/2+1.5639""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
 AddToHistory "define port2 (coax)", "With Port" & vbLf & _
@@ -2042,8 +2042,8 @@ AddToHistory "define port2 (coax)", "With Port" & vbLf & _
   ".Orientation ""xmax""" & vbLf & _
   ".PortOnBound ""True""" & vbLf & _
   ".Xrange ""103.9810+L_taper+L_feed+6.0000"", ""103.9810+L_taper+L_feed+6.0000""" & vbLf & _
-  ".Yrange ""-1.2639"", ""1.2639""" & vbLf & _
-  ".Zrange ""h_sub/2-1.2639"", ""h_sub/2+1.2639""" & vbLf & _
+  ".Yrange ""-1.5639"", ""1.5639""" & vbLf & _
+  ".Zrange ""h_sub/2-1.5639"", ""h_sub/2+1.5639""" & vbLf & _
   ".Create" & vbLf & _
   "End With"
 
