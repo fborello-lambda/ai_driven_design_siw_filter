@@ -654,12 +654,17 @@ def cmd_cst(args) -> int:
     g = topo._geometry(spec, params)
     launch = None if args.launch == "none" else LAUNCHES[args.launch]
     path = args.out or out_bas(f"siw_{args.topology}_N{spec.N}.bas")
-    write_bas(path, spec=spec, geometry=g, launch=launch, sma_len_mm=args.sma_len)
+    write_bas(path, spec=spec, geometry=g, launch=launch, sma_len_mm=args.sma_len,
+             solver=args.solver)
     if launch:
         print(f"  launch: {args.launch} (real SMA coax stubs + coaxial ports)")
     else:
         print("  launch: NONE -- bare microstrip with waveguide ports. This is "
               "NOT what was simulated; use --launch cpwg for the real thing.")
+    if args.solver == "fd":
+        print("  solver: fd -- FDSolver VBA block is UNVERIFIED (no CST license "
+              "in this environment). If CST rejects a property, report the exact "
+              "line/error text; do not substitute another guessed name.")
     return 0
 
 def cmd_kicad(args) -> int:
@@ -1157,6 +1162,12 @@ def main(argv: list[str] | None = None) -> int:
                             "with waveguide ports, which is not.")
     p_cst.add_argument("--sma-len", type=float, default=6.0,
                        help="length of each SMA coax stub [mm]")
+    p_cst.add_argument("--solver", default="td", choices=["td", "fd"],
+                       help="td (default): Time Domain, hex/PBA mesh -- the only path "
+                            "actually run in CST so far. fd: Frequency Domain, "
+                            "tetrahedral mesh -- emits an UNVERIFIED FDSolver VBA block "
+                            "(see cst_export.generate_bas docstring); if CST rejects a "
+                            "property, report the exact line, do not re-guess it.")
     p_cst.add_argument("--out", default=None, help="output .bas path")
     p_cst.set_defaults(func=cmd_cst)
 

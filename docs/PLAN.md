@@ -46,6 +46,18 @@ optimised until it is made.
 > dual-mode's −10.76 dB / 316.6 MHz), at ~1.5× the board length (166.4 vs
 > 119.0 mm). Steps 2 and 3 below are now DONE for this design — see the
 > status block that follows — not merely planned.
+>
+> **Caveat added 2026-09-06, found during the CST/Palace audit
+> (`docs/audit_cst_palace/`): the −13.37 dB S11 above is NOT mesh-converged.**
+> `output/data/mesh_convergence_cascade_N3.json` (already in the repo,
+> predates this audit) refines the mesh from (3.5, 0.6, 6.0) mm to
+> (2.5, 0.45, 6.0) mm and S11w gets **4 dB worse** (−13.37 → −9.34 dB), while
+> fc/BW/IL barely move. A separate 61-point sweep with refined ports
+> (`docs/audit_cst_palace/AUDITORIA.md` §4) independently lands in the same
+> place: worst in-band S11 ≈ −10.56 dB. So cascade N=3's real match is
+> probably close to dual-mode's −10.76 dB, not the −13.37 dB this decision
+> was made on — the "closer to spec on every axis" claim above needs
+> re-checking against a real mesh-convergence study before it's trusted.
 
 ---
 

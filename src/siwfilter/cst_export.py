@@ -41,7 +41,8 @@ def _hist(header: str, body_lines: list[str]) -> str:
 
 def generate_bas(g: Geometry, launch: dict | None = None,
                  sma_len_mm: float = 6.0,
-                 flat_sma_ground: bool = False) -> str:
+                 flat_sma_ground: bool = False,
+                 solver: str = "td") -> str:
     """VBA macro for CST. `launch` is a TAOGLAS_CPWG-style dict; when given,
     the feed is built as the REAL launch actually simulated -- coplanar
     ground pours, stitching vias, the narrowed CPWG feed with its taper out
@@ -516,8 +517,15 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
 
     # ---- mesh + solver ----------------------------------------------------
     s.append("\n' ---- mesh + solver setup ------------------------------------------\n")
+    # PBA/Hexahedral mesh is what the Time Domain (transient) solver uses.
+    # The Frequency Domain solver needs a Tetrahedral mesh instead -- this
+    # single string is the one part of the FD path with real precedent:
+    # `.MeshType "PBA"` already parsed correctly in a real CST 2021 run
+    # (this exact `With Mesh` block, just the other string), so the
+    # PROPERTY name is proven; only the "Tetrahedral" VALUE is unverified.
+    mesh_type = "Tetrahedral" if solver == "fd" else "PBA"
     s.append(_hist("define mesh settings", [
-        "With Mesh", '.MeshType "PBA"',
+        "With Mesh", f'.MeshType "{mesh_type}"',
         '.SetCreator "High Frequency"',
         # Computed directly (2026-09-06, no CST needed): at 25 lines/wl the
         # global cell is ~2.18mm, but the CPWG gap (0.2512mm) needs a cell
@@ -546,43 +554,81 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         '.UseRatioLimit "True"',
         "End With",
     ]))
-    s.append(_hist("define time domain solver parameters", [
-        "Mesh.SetCreator \"High Frequency\"",
-        "With Solver",
-        '.Method "Hexahedral"',
-        '.CalculationType "TD-S"',
-        '.StimulationPort "1"', '.StimulationMode "All"',
-        # -60dB (not -40) so a sharp Chebyshev null isn't cut off by an
-        # early steady-state stop -- deliberate, not the mesh-density bump
-        # below that a stray edit briefly introduced and was reverted.
-        '.SteadyStateLimit "-60"',
-        # NOTE: an earlier revision of this file added .StabilityFactor
-        # "0.8" here -- CST 2021 rejected it outright ("No such property or
-        # method"), a guessed VBA name that was never actually valid.
-        # Removed rather than guessed again. If the instability warning
-        # persists, the stability factor has to be set by hand: Home ->
-        # Solver -> Setup Solver -> Specials... -> General tab.
+    if solver == "fd":
+        # UNVERIFIED BLOCK (2026-09-06): FDSolver is a different COM object
+        # from Solver (Transient) -- properties proven on one are NOT proof
+        # of the other. Real CST run (2026-09-06) rejected `.SParaSymmetry
+        # "False"` outright: "No such property or method" -- that property
+        # only exists on Solver (Time Domain), not FDSolver. Removed, not
+        # replaced with another guess (see the .StabilityFactor incident
+        # above for the same lesson). If S-parameter symmetry deduction
+        # needs disabling for FDSolver, that has to be found by hand in the
+        # GUI (Solver Setup -> Specials, or the port list itself) and
+        # reported back before it gets scripted.
         #
-        # Real geometric audit (2026-09-06, no CST needed -- computed
-        # directly from the same coordinates this macro draws): no
-        # overlapping conductors anywhere (worst via-via gap 0.6mm, clean).
-        # But at 25 lines/wavelength the global mesh cell is ~2.18mm, while
-        # every conductor gap in this design is smaller than that -- the
-        # CPWG gap (0.2512mm) is 11% of a cell, via-to-via spacing (0.6mm)
-        # is 27%. The whole model leans on CST's automatic local refinement
-        # (RatioLimit below) to resolve features 4-9x smaller than the base
-        # grid, with no adaptive pass ever checking that refinement actually
-        # converged (MeshAdaption was False). Turned on: this is the direct,
-        # standard CST mechanism for exactly this situation, not a guess.
-        '.MeshAdaption "True"',
-        '.StoreTDResultsInCache "False"',
-        '.SParaSymmetry "True"',
-        "End With",
-    ]))
+        # The remaining lines are individually well-attested in CST's own
+        # recorded-macro output across versions, but each is still
+        # unconfirmed here. If any one of them also throws "No such
+        # property or method", report the EXACT line and it gets removed
+        # the same way, not guessed again.
+        #
+        # .Stimulation "All", "All" exists specifically to rule in/out the
+        # audit's leading hypothesis (docs/audit_cst_palace/AUDITORIA.md
+        # sec.3): that port 2 was never actually excited.
+        s.append(_hist("define frequency domain solver parameters", [
+            "With FDSolver",
+            ".Reset",
+            '.SetMethod "Tetrahedral", "General purpose"',
+            '.MeshAdaptionTet "True"',
+            '.MeshAdaptionHex "False"',
+            '.Stimulation "All", "All"',
+            "End With",
+        ]))
+        msg = ('"Check the modeler tree, select Frequency Domain Solver, ' +
+               'verify BOTH port modes are TEM before running, then Start."')
+    else:
+        s.append(_hist("define time domain solver parameters", [
+            "Mesh.SetCreator \"High Frequency\"",
+            "With Solver",
+            '.Method "Hexahedral"',
+            '.CalculationType "TD-S"',
+            '.StimulationPort "1"', '.StimulationMode "All"',
+            # -60dB (not -40) so a sharp Chebyshev null isn't cut off by an
+            # early steady-state stop -- deliberate, not the mesh-density
+            # bump below that a stray edit briefly introduced and was
+            # reverted.
+            '.SteadyStateLimit "-60"',
+            # NOTE: an earlier revision of this file added .StabilityFactor
+            # "0.8" here -- CST 2021 rejected it outright ("No such
+            # property or method"), a guessed VBA name that was never
+            # actually valid. Removed rather than guessed again. If the
+            # instability warning persists, the stability factor has to be
+            # set by hand: Home -> Solver -> Setup Solver -> Specials... ->
+            # General tab.
+            #
+            # Real geometric audit (2026-09-06, no CST needed -- computed
+            # directly from the same coordinates this macro draws): no
+            # overlapping conductors anywhere (worst via-via gap 0.6mm,
+            # clean). But at 25 lines/wavelength the global mesh cell is
+            # ~2.18mm, while every conductor gap in this design is smaller
+            # than that -- the CPWG gap (0.2512mm) is 11% of a cell,
+            # via-to-via spacing (0.6mm) is 27%. The whole model leans on
+            # CST's automatic local refinement (RatioLimit below) to
+            # resolve features 4-9x smaller than the base grid, with no
+            # adaptive pass ever checking that refinement actually
+            # converged (MeshAdaption was False). Turned on: this is the
+            # direct, standard CST mechanism for exactly this situation,
+            # not a guess.
+            '.MeshAdaption "True"',
+            '.StoreTDResultsInCache "False"',
+            '.SParaSymmetry "True"',
+            "End With",
+        ]))
+        msg = '"Check the modeler tree, then run the Time Domain solver."'
 
-    s.append('''
+    s.append(f'''
 MsgBox "SIW filter built: " & Solid.GetNumberOfShapes() & " solids. " & _
-       "Check the modeler tree, then run the Time Domain solver."
+       {msg}
 
 End Sub
 ''')
@@ -593,14 +639,17 @@ def write_bas(path: str | None = None,
               spec: FilterSpec = SPEC,
               geometry: Geometry | None = None,
               launch: dict | None = None,
-              sma_len_mm: float = 6.0) -> Geometry:
+              sma_len_mm: float = 6.0,
+              solver: str = "td") -> Geometry:
     """`geometry` overrides the analytical default so a LANDED design can be
     exported (the defaults are not any optimised geometry). `launch` adds the
-    real CPWG + Taoglas SMA."""
+    real CPWG + Taoglas SMA. `solver`: "td" (Time Domain, hex/PBA mesh -- the
+    path this project has actually run in CST) or "fd" (Frequency Domain,
+    tetrahedral mesh -- UNVERIFIED FDSolver VBA block, see generate_bas)."""
     if path is None:
         path = out_bas("siw_filter.bas")
     g = geometry if geometry is not None else build_geometry(spec)
-    bas = generate_bas(g, launch=launch, sma_len_mm=sma_len_mm)
+    bas = generate_bas(g, launch=launch, sma_len_mm=sma_len_mm, solver=solver)
     with open(path, "w", newline="\r\n") as fh:   # CST/VBA expects CRLF
         fh.write(bas)
     n_lines = bas.count("\n")

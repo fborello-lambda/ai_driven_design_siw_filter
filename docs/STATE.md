@@ -45,6 +45,16 @@ For what to do next, see `PLAN.md`. Superseded documents are in
 > `siw kicad --topology cascade --N 3 --params ... --launch cpwg` reproduces
 > all of it. `siw kicad --topology dualmode ...` refuses (dualmode has no
 > `_geometry()` for CST/KiCad export) — that gap is real, not yet closed.
+>
+> **Caveat added 2026-09-06 (CST/Palace audit, `docs/audit_cst_palace/`):
+> the −13.37 dB number above is NOT mesh-converged.** The repo's own
+> `output/data/mesh_convergence_cascade_N3.json` refines the mesh and gets
+> **−9.34 dB** (4 dB worse) with fc/BW/IL essentially unchanged; a separate
+> 61-point refined-port sweep lands at a worst in-band S11 ≈ −10.56 dB —
+> right around dual-mode's −10.76 dB. The "closer to spec on every axis"
+> justification for fabricating cascade N=3 instead of dual-mode rests on a
+> non-converged mesh and should be re-run with a real convergence study
+> before being cited as settled.
 
 \newpage
 
