@@ -47,6 +47,28 @@ de solver:
    coaxial (~0.15mm) — el paso que de verdad resolvió el −60dB, porque la malla
    tetraédrica global no alcanzaba a representar un gap de 0.25mm.
 
+## Prueba del dominio de aire en Palace
+
+Se hizo una comprobación corta con la misma geometría y puertos coaxiales
+refinados a 0.15 mm, variando solamente la altura de aire sobre los feeds.
+El punto de 2.80 GHz fue:
+
+| Aire sobre los feeds | S11 | S21 |
+|---|---:|---:|
+| 4.56 mm | −19.59 dB | −2.607 dB |
+| 9.12 mm | −21.57 dB | −2.424 dB |
+| 18.24 mm | −21.04 dB | −2.386 dB |
+
+El salto relevante fue de 4.56 a 9.12 mm. Al duplicar nuevamente de 9.12 a
+18.24 mm, S21 cambió solo 0.038 dB y S11 0.53 dB a 2.80 GHz. La corrida de
+tres puntos a 18.24 mm alcanzó a resolver ese primer punto, con puertos de
+49.83/49.84 Ω, pero se interrumpió antes de escribir los otros dos S-parámetros;
+por eso no se presenta como una convergencia completa de toda la banda.
+
+Como verificación práctica, 9.12 mm de aire es una elección razonable para el
+modelo de Palace. Esta prueba no justifica retocar la geometría: CST Frequency
+Domain ya reproduce la transmisión de Palace de forma independiente.
+
 ## Hallazgo colateral, no menor
 
 La auditoría (`docs/audit_cst_palace/`) encontró que el S11=−13.37dB usado para

@@ -575,6 +575,18 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
         # .Stimulation "All", "All" exists specifically to rule in/out the
         # audit's leading hypothesis (docs/audit_cst_palace/AUDITORIA.md
         # sec.3): that port 2 was never actually excited.
+        # A `MeshSettings` block scripting per-solid "Local Mesh Properties"
+        # (CPWG gap solids at 0.05mm, SMA PTFE rings at 0.10mm) was tried
+        # here and removed (2026-09-06): a real CST run rejected `.SetName`
+        # outright -- "No such property or method" -- on every single solid
+        # it was tried on, not just one, confirming it is the wrong object/
+        # method shape entirely, not a one-line typo. Not re-guessed (same
+        # rule as .StabilityFactor and FDSolver's .SParaSymmetry above).
+        # Local mesh refinement on the CPWG gap and SMA rings has to be done
+        # by hand for now: right-click the solid (Components -> component1
+        # -> feed_in/feed_out/cpwg_gnd_*/sma_*_ptfe) -> Local Mesh
+        # Properties -> Max. step width -> 0.05 (gap solids) or 0.10 (SMA
+        # rings) -- this manual path is already confirmed to work.
         s.append(_hist("define frequency domain solver parameters", [
             "With FDSolver",
             ".Reset",
