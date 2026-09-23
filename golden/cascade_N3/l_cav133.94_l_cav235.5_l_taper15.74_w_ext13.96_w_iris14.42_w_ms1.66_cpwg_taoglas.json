@@ -1,0 +1,53 @@
+{
+ "_comment": "Golden design constants. See golden/README.md for the naming convention and CLAUDE.md Golden designs. Do not hand-edit numbers without re-running the CLI.",
+ "topology": "cascade",
+ "N": 3,
+ "spec": {
+  "f0_hz": 2870000000.0,
+  "FBW": 0.05,
+  "ripple_db": 0.1,
+  "substrate": "RO4350B_0.76mm",
+  "eps_r": 3.66,
+  "tan_d": 0.0037,
+  "h_mm": 0.76,
+  "d_via_mm": 1.5,
+  "p_via_mm": 3.0
+ },
+ "launch": {
+  "model": "cpwg_taoglas",
+  "description": "Real Taoglas EMPCB.SMAFSTJ.B.HT SMA + impedance-matched CPWG launch (gap 0.2512mm, ground inner edge 0.8512mm, feed 1.2mm, 6 stitch vias/side, solved 50.00 ohm) -- topologies/cascade.py TAOGLAS_SMA, the actual default for every cascade mesh since 2026-08-31."
+ },
+ "params": {
+  "l_cav1": 33.939,
+  "l_cav2": 35.503,
+  "w_iris": 14.416,
+  "w_ext": 13.96,
+  "l_taper": 15.738,
+  "w_ms": 1.6636
+ },
+ "metrics": {
+  "fc_ghz": 2.8758,
+  "il_db": -1.7,
+  "bw_mhz": 182.3,
+  "s11w_db": -11.15,
+  "il_band_db": -2.58
+ },
+ "shape_check": {
+  "note": "Fine mesh: 3 reflection zeros (2.81/2.85/2.92 GHz); interior ripple peak -14.53 dB; worst in-band S11 is at the upper target-band edge (2.94 GHz)."
+ },
+ "known_open_item": "NOT spec: S11w -11.15 dB vs -16 dB, bw 182 MHz vs 143.5 MHz. Fabricated as a prototype with these deviations written down (docs/final_check/REPORT.md).",
+ "supersedes": {
+  "stem": "l_cav134.24_l_cav235.5_l_taper15.74_w_ext13.96_w_iris14.42_w_ms1.66_cpwg_taoglas",
+  "why": "End cavities trimmed -0.3 mm after a coupling-matrix fit showed them ~19 MHz low. Same fine-mesh model: golden -10.71 dB -> this -11.15 dB worst in band, interior ripple -11.15 -> -14.53 dB. Chosen over 4 other fine-mesh variants (l_cav1 -0.6, w_iris +0.6, w_ext +0.4 combinations) in docs/final_check/tuning_summary.json.",
+  "old_fine_mesh_metrics": {
+   "fc_ghz": 2.8721,
+   "il_db": -1.76,
+   "bw_mhz": 184.3,
+   "s11w_db": -10.71
+  }
+ },
+ "provenance": {
+  "reproduce_with": "uv run python docs/final_check/run_final.py 4 -0.3   (fine mesh 2.5/0.45 mm, coax ports 0.15 mm, h_air_factor 12, 2.72-3.02 GHz step 5 MHz, needs ~6 GB RAM)",
+  "saved": "2026-09-23"
+ }
+}

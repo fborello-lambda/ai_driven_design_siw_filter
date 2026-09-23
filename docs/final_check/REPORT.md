@@ -1,8 +1,10 @@
 # Final pre-fab check — cascade N=3 (2026-09-23)
 
-**Verdict: GO, as a prototype that deviates from spec in writing. It is not a
-spec-compliant part.** Fine-mesh final check: −10.71 dB worst in band
-(−11.15 dB with the −0.3 mm end-cavity trim; see sec. 2a). Every model agrees on the passband: fc ≈ 2.872 GHz,
+**Verdict: GO, with the end cavities trimmed −0.3 mm (`l_cav1` = 33.939 mm),
+as a prototype that deviates from spec in writing. It is not a
+spec-compliant part.** Fine-mesh final check: −11.15 dB worst in band (golden:
+−10.71 dB). This was the best of six fine-mesh variants (sec. 2c). The fab
+package is `fab/siw_cascade_N3_jlcpcb.zip` (34/34 checks pass). Every model agrees on the passband: fc ≈ 2.872 GHz,
 BW ≈ 184 MHz, IL ≈ 2.0 dB. None of them reaches the −16 dB return-loss spec.
 The coupling-matrix fit (sec. 3) says why. The one correction tried so far
 (sec. 2a) gains 3.4 dB of interior ripple but only 0.44 dB on the
@@ -59,6 +61,41 @@ stays within 5 %.
 
 **Fab files still describe the golden (untrimmed) board.** Adopting the trim
 means regenerating `siw kicad` and a new golden entry.
+
+## 2c. Tuning: two iterations, six fine-mesh runs
+
+![tuning](tuning_comparison.png)
+
+| run (Δ from golden, mm) | worst in band | interior ripple | BW | fc | IL in band |
+|---|---|---|---|---|---|
+| golden | −10.71 | −11.15 | 184.3 | 2.872 | −2.38 |
+| **l_cav1 −0.3 (CHOSEN)** | **−11.15** | **−14.53** | 182.3 | 2.876 | −2.58 |
+| l_cav1 −0.6 | −11.22 | −14.61 | 181.6 | 2.881 | −2.99 |
+| l_cav1 −0.3, w_iris +0.6 | −10.70 | −14.51 | 202.9 | 2.867 | −2.37 |
+| l_cav1 −0.6, w_iris +0.6 | −9.15 | −10.19 | 204.1 | 2.873 | −2.54 |
+| l_cav1 −0.3, w_iris +0.6, w_ext +0.4 | −5.05 | −9.38 | 195.4 | 2.855 | −3.50 |
+
+What the runs showed:
+
+- **`l_cav1` saturates after −0.3 mm.** −0.6 mm matches it on S11 (0.07 dB) but
+  pushes the band up to 2.881 GHz and costs 0.4 dB of in-band IL at the lower
+  edge. −0.3 mm is chosen.
+- **A wider `w_iris` widens the band (203 MHz) without improving the worst
+  case.** It opens a new hump between the first two reflection zeros
+  (2.81 GHz).
+- **A wider `w_ext` is strongly harmful.** The larger aperture also pulls the end
+  cavities down (fc falls to 2.855 GHz), so external coupling can't be
+  adjusted on its own. The planned +0.8 mm run was cancelled.
+- The remaining gap (worst S11 sitting at the 2.94 GHz band edge) would need a
+  coordinated multi-parameter move (`w_ext` + `l_cav1` + `w_iris` together).
+  That is a job for a local optimiser (`siw design --seed ...`), not
+  single-knob trims. It was not pursued, per the 2-iteration budget.
+
+**Fab package regenerated for the chosen geometry.** It has a new golden entry
+(`golden/cascade_N3/l_cav133.94_...json`), CST macros for both the time-domain
+(TD) and frequency-domain (FD) solvers, and KiCad gerbers/drill. The board is
+165.78 × 45.79 mm (0.6 mm shorter), and **34/34 checks pass**, including
+drawn-vs-meshed geometry and CST-vs-mesh via positions.
 
 ## 2b. First attempt on the 3.7 GB host — did not complete
 
@@ -134,7 +171,8 @@ correction was then simulated on the fine mesh; see sec. 2a for the result.
 
 - `run_final.py` is the fine-mesh final check (needs ≥ 6 GB RAM).
 - `analyze_final.py` does the coupling-matrix fit, rejection and group delay.
-- `final_fine.json` and `final_fine_lcav1-0.30.json` are the fine-mesh final runs; `analysis_final.json` and `analysis_trim.json` are their fits.
-- `trim_comparison.png` compares the two runs.
+- `runs_*.json` are all six fine-mesh runs (`runs_final_golden.json` is the golden). `tuning_summary.json` and `tuning_comparison.png` summarise them, and `compare_runs.py` rebuilds both.
+- `analysis_final.json` and `analysis_trim.json` are the coupling-matrix fits of the golden and chosen runs. `trim_comparison.png` compares those two.
+- `fab/` holds the files to order: `siw_cascade_N3_jlcpcb.zip` (gerbers + drill), `FAB_CHECKLIST.md`, `FAB_NOTES.md`, and the CST macros (`.bas`, TD and FD).
 - `refined_sweep.json` is the Palace data analysed (copied from `output/data/postpro/audit_refined_sweep/`).
 - `analysis.json` and `analysis.png` are the fit results.

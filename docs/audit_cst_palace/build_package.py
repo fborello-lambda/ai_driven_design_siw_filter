@@ -146,7 +146,7 @@ def check_filter(macro):
 
 def main():
     PACKAGE.mkdir(parents=True,exist_ok=True)
-    golden_path=next((ROOT/'golden/cascade_N3').glob('*taoglas.json'))
+    golden_path=ROOT/'golden/cascade_N3/l_cav134.24_l_cav235.5_l_taper15.74_w_ext13.96_w_iris14.42_w_ms1.66_cpwg_taoglas.json'
     golden=json.loads(golden_path.read_text())
     g=CascadeTopology()._geometry(FilterSpec(N=3),golden['params'])
     macro=generate_bas(g,launch=TAOGLAS_CPWG,flat_sma_ground=False)

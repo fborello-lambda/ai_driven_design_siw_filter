@@ -10,7 +10,7 @@ from siwfilter.topologies.cascade import CascadeTopology
 
 out = Path('output/audit_cst_palace')
 out.mkdir(parents=True, exist_ok=True)
-golden = next(Path('golden/cascade_N3').glob('*taoglas.json'))
+golden = Path('golden/cascade_N3/l_cav134.24_l_cav235.5_l_taper15.74_w_ext13.96_w_iris14.42_w_ms1.66_cpwg_taoglas.json')
 params = json.loads(golden.read_text())['params']
 experiments = [('baseline', None, 6.), ('ports_015', .15, 6.),
                ('ports_008', .08, 6.), ('air_12', .15, 12.)]

@@ -1,0 +1,68 @@
+[
+  {
+    "run": "final",
+    "l_cav1": 34.239,
+    "w_iris": 14.416,
+    "s11w_db": -10.71,
+    "ripple_db": -11.15,
+    "bw_mhz": 184.3,
+    "fc_3db_ghz": 2.8721,
+    "il_db": -1.76,
+    "il_band_db": -2.38
+  },
+  {
+    "run": "final_lcav1-0.30",
+    "l_cav1": 33.939,
+    "w_iris": 14.416,
+    "s11w_db": -11.15,
+    "ripple_db": -14.53,
+    "bw_mhz": 182.3,
+    "fc_3db_ghz": 2.8758,
+    "il_db": -1.7,
+    "il_band_db": -2.58
+  },
+  {
+    "run": "final_lcav1-0.30_wiris+0.60",
+    "l_cav1": 33.939,
+    "w_iris": 15.016,
+    "s11w_db": -10.7,
+    "ripple_db": -14.51,
+    "bw_mhz": 202.9,
+    "fc_3db_ghz": 2.8673,
+    "il_db": -1.61,
+    "il_band_db": -2.37
+  },
+  {
+    "run": "final_lcav1-0.30_wiris+0.60_wext+0.40",
+    "l_cav1": 33.939,
+    "w_iris": 15.016,
+    "s11w_db": -5.05,
+    "ripple_db": -9.38,
+    "bw_mhz": 195.4,
+    "fc_3db_ghz": 2.8554,
+    "il_db": -1.79,
+    "il_band_db": -3.5
+  },
+  {
+    "run": "final_lcav1-0.60",
+    "l_cav1": 33.639,
+    "w_iris": 14.416,
+    "s11w_db": -11.22,
+    "ripple_db": -14.61,
+    "bw_mhz": 181.6,
+    "fc_3db_ghz": 2.8808,
+    "il_db": -1.63,
+    "il_band_db": -2.99
+  },
+  {
+    "run": "final_lcav1-0.60_wiris+0.60",
+    "l_cav1": 33.639,
+    "w_iris": 15.016,
+    "s11w_db": -9.15,
+    "ripple_db": -10.19,
+    "bw_mhz": 204.1,
+    "fc_3db_ghz": 2.8731,
+    "il_db": -1.55,
+    "il_band_db": -2.54
+  }
+]

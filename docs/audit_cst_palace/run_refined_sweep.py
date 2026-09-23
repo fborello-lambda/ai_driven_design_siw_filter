@@ -5,7 +5,7 @@ import numpy as np
 from siwfilter.config import FilterSpec
 from siwfilter.optimize import run_driven
 from siwfilter.topologies.cascade import CascadeTopology
-p=json.loads(next(Path('golden/cascade_N3').glob('*taoglas.json')).read_text())['params']
+p=json.loads(Path('golden/cascade_N3/l_cav134.24_l_cav235.5_l_taper15.74_w_ext13.96_w_iris14.42_w_ms1.66_cpwg_taoglas.json').read_text())['params']
 p.update(port_mesh_size=.15, audit_path='output/audit_cst_palace/refined_sweep_mesh.json')
 r=run_driven(CascadeTopology(),FilterSpec(N=3),p,'audit_refined_sweep',
              2.72,3.02,.005,3.5,.6,6.,device='CPU',np_ranks=4)
