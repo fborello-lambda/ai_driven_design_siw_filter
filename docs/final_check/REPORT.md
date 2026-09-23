@@ -186,8 +186,8 @@ Checked against JLCPCB's own pages ([capabilities](https://jlcpcb.com/capabiliti
 | our assumption | JLCPCB RO4350B offer | status |
 |---|---|---|
 | RO4350B 0.76 mm core | cores 0.51 / 0.76 / 1.52 mm; finished 0.6(0.65) / **0.9** / 1.65 mm, 2-layer | ✔ laminate available |
-| **0.5 oz copper**, finished stack 0.795 mm | **"Outer Copper Weight: 1 oz"** only; finished ≈ 0.9 mm (±0.1 mm) | ✘ **BLOCKER**: the Taoglas fork allows ≤ 0.79–0.80 mm |
-| **No soldermask** | soldermask "Green"; no no-mask option listed anywhere | ✘ not offered. Mask over the SIW detuned dual-mode by ~4 dB S11 (2026-09-01 study) |
+| **0.5 oz copper**, finished stack 0.795 mm | **"Outer Copper Weight: 1 oz"** only; finished ≈ 0.9 mm catalogue (±0.1 mm) | ⚠ **marginal**. At the (mask-free) pads it is ≈ 0.84 mm vs the fork slot 0.81 ± 0.1 mm (datasheet §3 front view; §1/§2 say 0.8 max, §3.1 says 0.79). Fix if tight: scrape ~15–20 µm of copper per side under the leg pads only, never the laminate, then re-tin. RF effect is nil (skin depth 1.2 µm). |
+| **No soldermask** | colour "Green"; no no-mask option in the form | ⚠ **order note**. Mask coverage comes from the gerbers, and ours open F.Mask/B.Mask over the whole board, so no mask is applied. State it in the remarks so their CAM doesn't "fix" it. |
 | ENIG | ENIG only (1U/2U) | ✔ |
 | Dk 3.66 (Rogers *design* Dk) | quotes 3.48 (Rogers *process* Dk at 10 GHz) | ✔ same laminate. 3.66 is the right value to design with |
 | copper to routed edge (launch pads run to the edge for the edge-mount SMA) | "≧0.2 mm" | ⚠ needs an explicit order note, or they pull the copper back |
@@ -195,11 +195,10 @@ Checked against JLCPCB's own pages ([capabilities](https://jlcpcb.com/capabiliti
 | min track / space 0.10 mm, drill ≥ 0.2 mm, hole-to-hole 0.2 mm | ours 1.2 mm / 0.2512 mm / 0.6–1.5 mm / 1.5 mm | ✔ |
 | board 165.78 × 45.79 mm | max 590 × 438 mm; the $99.5 promo covers only ≤ 10 × 10 cm | ✔ (quoted price, not promo) |
 
-**Conclusion:** the gerbers are fine, but JLCPCB's RO4350B process (1 oz,
-green mask, ~0.9 mm finished) breaks two load-bearing assumptions: the SMA fork
-fit and no soldermask. Options:
-(a) use a fab that offers RO4350B 30 mil with 0.5 oz and no mask (e.g. a
-Rogers-specialist house), which keeps the design as simulated;
-(b) stay with JLCPCB, choose an edge-mount SMA rated for a ~0.9–1.0 mm board,
-and re-simulate with a green mask and 1 oz copper (launch + mask detuning);
-(c) ask JLCPCB support in writing for 0.5 oz / no mask as a special order.
+**Conclusion (revised the same day):** orderable at JLCPCB with order notes.
+The earlier "blocker" reading was too strict. 1 oz is about 0.03 mm over the
+nominal fork slot and can be fixed at assembly by scraping. No-mask is set by
+our gerbers and only needs a remark. The remaining DFM question for their
+engineers is the copper and stitching vias intentionally at the board edge
+(0.10 mm copper-to-edge vs their 0.2 mm rule, 0.25 mm hole-to-edge) for the
+edge-mount SMA.
