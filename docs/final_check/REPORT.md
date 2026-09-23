@@ -1,10 +1,12 @@
 # Final pre-fab check — cascade N=3 (2026-09-23)
 
 **Verdict: GO, as a prototype that deviates from spec in writing. It is not a
-spec-compliant part.** Every model agrees on the passband: fc ≈ 2.872 GHz,
+spec-compliant part.** Fine-mesh final check: −10.71 dB worst in band
+(−11.15 dB with the −0.3 mm end-cavity trim; see sec. 2a). Every model agrees on the passband: fc ≈ 2.872 GHz,
 BW ≈ 184 MHz, IL ≈ 2.0 dB. None of them reaches the −16 dB return-loss spec.
-The coupling-matrix fit below says why, and the error is small enough that
-retuning before we have a measured board isn't worth it.
+The coupling-matrix fit (sec. 3) says why. The one correction tried so far
+(sec. 2a) gains 3.4 dB of interior ripple but only 0.44 dB on the
+worst-in-band number.
 
 ## 1. Board verification
 
@@ -23,7 +25,42 @@ into a scratch directory and diffed against `output/kicad/`:
   - **Hole-to-edge clearance of 0.25 mm** on the launch stitching vias.
   - **0.5 oz copper is load-bearing.** The finished stack is 0.795 mm against the SMA fork's 0.80 mm maximum. 1 oz copper does not fit.
 
-## 2. Final Palace run — did not complete, and why
+## 2a. Final Palace run — DONE (2026-09-23, on a 16 GB host)
+
+`run_final.py` (0.15 mm coax ports, 9.12 mm air, 2.5/0.45 mm volume mesh,
+direct solver, 4 ranks, ~5.5 GB) completed all 61 points, then the same run
+with the end cavities trimmed per sec. 3 (`run_final.py 4 -0.3`):
+
+![trim](trim_comparison.png)
+
+| fine mesh | golden (baseline) | `l_cav1` −0.3 mm |
+|---|---|---|
+| worst in-band S11 | −10.71 dB (at 2.940 GHz) | **−11.15 dB** (at 2.940 GHz) |
+| interior ripple peak (2.83–2.92 GHz) | −11.15 dB | **−14.53 dB** |
+| S11 at 2.87 GHz | −12.0 dB | −17.1 dB |
+| BW / fc (−3 dB from peak) | 184.3 MHz / 2.872 GHz | 182.3 MHz / 2.876 GHz |
+| IL peak / worst in band | −1.76 / −2.38 dB | −1.70 / −2.58 dB |
+| fit: end-cavity detune | −19 MHz | −11 MHz |
+| fit: internal k error | −5 % | −8 % |
+| fit: Qu | 276 | 229 |
+
+**The fine-mesh baseline confirms the refined-port sweep** (−10.71 vs
+−10.56 dB). The golden's −13.37 dB was a coarse-mesh artefact.
+
+**The trim works as predicted**. It lifts the interior ripple by 3.4 dB and
+halves the end-cavity detune. The sensitivity is ~27 MHz/mm here, not the
+~50 MHz/mm rule of thumb, so a full correction would be about −0.6 mm. But the
+worst-in-band number moved only 0.44 dB. It is now pinned at the **upper edge
+of the target band (2.94 GHz)**, where S11 already climbs out of the passband.
+The equiripple region ends near 2.935 GHz and the target band ends at 2.942 GHz.
+The next knobs are the internal coupling (now 8 % weak, so a wider `w_iris`)
+and a slightly higher centre. Neither trim touches the external Qe, which
+stays within 5 %.
+
+**Fab files still describe the golden (untrimmed) board.** Adopting the trim
+means regenerating `siw kicad` and a new golden entry.
+
+## 2b. First attempt on the 3.7 GB host — did not complete
 
 `run_final.py` combines every audit fix: 0.15 mm coax ports, 9.12 mm air and the
 finer 2.5/0.45 mm volume mesh. That gives 315k ND unknowns. **This host has
@@ -77,9 +114,8 @@ So the missing return loss is **not** the external-coupling problem suspected
 since 2026-08-30. The main error is the two end cavities sitting about 17 MHz
 below the middle one. By the project's rule of thumb (~50 MHz per mm), that
 means `l_cav1` is about 0.3 mm too long. The internal irises are also roughly
-5 % weak, which is about 0.5 mm of `w_iris`. **Not applied.** The finer mesh
-moves S11 by 4 dB, which is larger than the effect of either correction. The
-measured board should tell us which one to make.
+5 % weak, which is about 0.5 mm of `w_iris`. The `l_cav1` −0.3 mm
+correction was then simulated on the fine mesh; see sec. 2a for the result.
 
 ### Fun numbers
 
@@ -98,5 +134,7 @@ measured board should tell us which one to make.
 
 - `run_final.py` is the fine-mesh final check (needs ≥ 6 GB RAM).
 - `analyze_final.py` does the coupling-matrix fit, rejection and group delay.
+- `final_fine.json` and `final_fine_lcav1-0.30.json` are the fine-mesh final runs; `analysis_final.json` and `analysis_trim.json` are their fits.
+- `trim_comparison.png` compares the two runs.
 - `refined_sweep.json` is the Palace data analysed (copied from `output/data/postpro/audit_refined_sweep/`).
 - `analysis.json` and `analysis.png` are the fit results.
