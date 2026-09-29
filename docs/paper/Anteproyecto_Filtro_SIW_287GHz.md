@@ -16,9 +16,8 @@ abstract: |
   sobre Rogers RO4350B de 0.76 mm. Una primera iteración analítica, verificada
   con openEMS y CST, reprodujo la banda pero no la adaptación: los puertos de
   openEMS no entregan un $S_{11}$ confiable. El trabajo pasó entonces a Palace,
-  un solver de elementos finitos de código abierto con puertos modales, y a una
-  cadena de herramientas en Python escrita y operada por un agente de
-  programación basado en un modelo de lenguaje (Claude Code). Se modeló el
+  un solver de elementos finitos de código abierto con puertos modales,
+  controlado desde una cadena de herramientas propia en Python. Se modeló el
   conector SMA real con un lanzador CPWG adaptado, se exploraron varias
   topologías (cavidad de modo dual N=2, geometrías alternativas y variantes
   N=4) y se reemplazó la optimización bayesiana global, que falla porque el
@@ -69,7 +68,7 @@ header-includes:
 \begin{IEEEkeywords}
 banda S, filtro pasabanda, guía de onda integrada en sustrato, SIW,
 cavidades resonantes, síntesis de Chebyshev, simulación electromagnética,
-Palace, agentes de IA, optimización bayesiana
+Palace, optimización bayesiana
 \end{IEEEkeywords}
 ```
 
@@ -517,21 +516,7 @@ CST: centro $-3$ dB en 2.858 GHz, $|S_{11}|=-20.9$ dB y $|S_{21}|=-1.19$ dB en b
 \end{figure*}
 ```
 
-# Evolución del proyecto: herramientas y método
-
-La Fig. \ref{fig:timeline} resume la historia del proyecto, reconstruida a
-partir del repositorio git (211 commits entre junio y septiembre de 2026).
-
-```{=latex}
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.95\textwidth]{figures/fig_timeline.png}
-\caption{Commits por día y por tipo. P1: primera iteración (Secciones II--VIII).
-P2--P6: trabajo dirigido por el agente de programación, desde el conector real
-hasta la verificación final y el pedido a JLCPCB.}
-\label{fig:timeline}
-\end{figure*}
-```
+# Herramientas y método
 
 ## De openEMS a Palace
 
@@ -555,29 +540,23 @@ Palace [@palace2023], basado en MFEM [@anderson2021mfem] y con mallas de gmsh
 - incluye un solver de autovalores;
 - se controla íntegramente con archivos JSON.
 
-## Un agente de IA como operador de la cadena de diseño
+## Cadena de herramientas en Python
 
-Desde agosto, el código de diseño fue escrito y ejecutado por un agente de
-programación basado en un modelo de lenguaje (Claude Code [@claudecode]), bajo
-la supervisión de los autores. El agente unificó tres scripts de optimización
-duplicados en un paquete de Python con una única herramienta de línea de
-comandos (`siw`). Esa herramienta cubre síntesis, layout, simulaciones de
-autovalores y excitadas, optimización bayesiana, barridos, calibraciones y
-exportación a KiCad y CST. Los diseños validados se guardan en una carpeta
-`golden/` junto con sus parámetros S y el comando que los reproduce. De los
-211 commits, 119 fueron coescritos por el agente.
+Todo el flujo se implementó como un paquete de Python con una única
+herramienta de línea de comandos (`siw`). Esa herramienta cubre síntesis,
+layout, simulaciones de autovalores y excitadas, optimización bayesiana,
+barridos, calibraciones y exportación a KiCad y CST. Los diseños validados se
+guardan junto con sus parámetros S y el comando que los reproduce.
 
-La capa de aprendizaje automático es un optimizador bayesiano con proceso
-gaussiano (scikit-optimize [@skopt; @jones1998efficient]). Evalúa con malla
-gruesa, confirma con malla fina y descarta candidatos no resonantes antes de
-cada simulación completa. Su función objetivo pasó por diez versiones.
+La optimización usa un proceso gaussiano (scikit-optimize
+[@skopt; @jones1998efficient]). Evalúa con malla gruesa, confirma con malla
+fina y descarta candidatos no resonantes antes de cada simulación completa.
+Su función objetivo pasó por diez versiones.
 
-## GPU, control remoto y CPU
+## GPU y CPU
 
 Para acelerar la búsqueda, el trabajo se trasladó a una estación con una GPU
-NVIDIA GTX 1660 SUPER de 6 GB, con Palace compilado con soporte de GPU. Las
-sesiones largas del agente se supervisaron a distancia mediante *Remote
-Control* de Claude Code.
+NVIDIA GTX 1660 SUPER de 6 GB, con Palace compilado con soporte de GPU.
 
 La GPU fue 1.24 veces más rápida que 4 procesos de CPU en el filtro de modo
 dual, con parámetros S idénticos. Sin embargo, 6 GB limitan el modelo a unos
@@ -728,8 +707,8 @@ optimizador de caja negra, salta cuando los polos se unen.}
 \end{figure*}
 ```
 
-**Errores silenciosos.** Se registraron 47 commits de corrección. En la mayoría
-de los casos el defecto no generaba ningún error: la simulación convergía y el
+**Errores silenciosos.** Durante el desarrollo aparecieron numerosos defectos
+de modelado. En la mayoría de los casos el defecto no generaba ningún error: la simulación convergía y el
 gráfico parecía razonable, pero el número era incorrecto. Algunos ejemplos:
 
 - anchos de iris cuantizados por la construcción de las vías
@@ -886,10 +865,6 @@ Los cambios que más influyeron en el resultado fueron dos. El primero,
 reemplazar la optimización bayesiana global por la calibración de los
 acoplamientos en estructuras pequeñas seguida de inversión. El segundo,
 verificar sistemáticamente cada resultado contra lo que la física permite.
-
-El agente de programación automatizó la escritura y la operación de toda la
-cadena de diseño y el diagnóstico de errores. Las decisiones de diseño y las
-verificaciones en CST quedaron a cargo de los autores.
 
 El filtro N=3 fabricado centra la banda a 6 MHz del objetivo, con 1.7 dB de
 pérdida, cerca del límite del laminado. No alcanza la especificación de
