@@ -13,6 +13,30 @@ toc-depth: 2
 
 \newpage
 
+# Recommendation for the sole-author paper (updated 2026-09-29)
+
+The draft `ai_driven_rf_design.md` uses both framings. Framing 2
+(agent-driven design) is the headline, and framing 1 (the filter, the
+calibrate-and-invert method and the fabricated board) supplies the evidence.
+The board is in manufacture, so the timing depends on the measurements.
+
+| Step | Venue | Why | When |
+|---|---|---|---|
+| 1 | **arXiv** (`eess.SP` primary, `cs.AI` cross-list) | Establishes priority. Closest prior work (arXiv:2608.31006, RF-Agent, RFAmpDesigner) is also on arXiv | As soon as measurements are in; optionally now, as v1 |
+| 2 | **IEEE Access** | Rolling, broad, fast. Accepts a methods paper with hardware and no novel ML model | After measurements |
+| alt. | **Int. J. RF & Microwave CAE** (Wiley) | Exactly on-topic (CAD for RF). Rolling | After measurements |
+| stretch | **IEEE IMS 2027** (4-page) | Flagship, and has an explicit AI/ML-for-RF track. Needs measured data by the deadline | Deadline 6 Jan 2027 |
+| watch | **IEEE LAD 2027** | Best topical fit for the agent angle. CFP not yet posted (LAD 2026 closed 2 Mar 2026) | Spring 2027 |
+
+**First choice: arXiv, then IEEE Access**, once the measured section is
+filled in. IMS 2027 is worth attempting only if the boards are measured before
+mid-December.
+
+AI disclosure is required by every venue above. The draft's Acknowledgment
+already names the tool, the models and what they did.
+
+\newpage
+
 # What this paper actually is
 
 Two different papers could be written from this project, and they point at

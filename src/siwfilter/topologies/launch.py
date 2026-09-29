@@ -1,7 +1,7 @@
 """THE launch footprint. One definition, used by every topology.
 
 Real Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA jack + its impedance-matched
-CPWG launch (gap solved to 50 ohm, see docs/TUNING_PLAN_2026-08-29.md sec 2).
+CPWG launch (gap solved to 50 ohm, see docs/TUNING_PLAN_2026-08-29.md (tag docs-archive-2026-09-29) sec 2).
 
 Deliberately only ONE launch dict per variant. Per-topology copies have
 previously drifted apart (a launch simulated by one topology but not

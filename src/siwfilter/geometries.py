@@ -52,7 +52,7 @@ def _segment(lo: float, hi: float, p: float) -> np.ndarray:
 
     Endpoints move continuously with lo/hi, so gap parameters stay smooth for
     the optimizer instead of snapping in p-sized jumps (the quantization bug
-    documented in docs/dualmode_cavity/README.md)."""
+    documented in docs/dualmode_cavity/README.md (tag docs-archive-2026-09-29))."""
     if hi <= lo:
         return np.array([])
     n = max(1, round((hi - lo) / p))
@@ -635,7 +635,7 @@ def dualmode_cascade(a_mm, w_iris_mm, x_iris_mm, w_ext_mm, d_via_mm, p_via_mm,
     +-y_wall_mm so the row never crosses its own cavity's side wall.
 
     y_ext_off_mm / y_ext2_off_mm / y_inter_off_mm (2026-08-28, v6 -- see
-    dualmode_cascade_v6_handoff_2026-08-28.md): shift the PORT and
+    dualmode_cascade_v6_handoff_2026-08-28.md (tag docs-archive-2026-09-29)): shift the PORT and
     INTER-CAVITY coupling apertures off y=0, same motivation as
     y_iris_off_mm/y_iris2_off_mm but for the three walls that were still
     hardcoded to a centred gap. Eigenmode ground truth on the v5 best design

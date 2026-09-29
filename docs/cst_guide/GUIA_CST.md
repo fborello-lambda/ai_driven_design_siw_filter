@@ -11,7 +11,7 @@ toc: true
 toc-depth: 2
 ---
 
-> **Nota (2026-09-29):** esta guía y los archivos de esta carpeta (`.bas`, `FAB_NOTES.md`, `.s2p`) corresponden a la placa **antes** del recorte de −0,3 mm en las cavidades extremas (166,38 mm). La placa que se fabrica mide 165,78 mm; su macro y paquete de fabricación están en `docs/final_check/fab/`. Los pasos en CST son los mismos.
+> **Nota (2026-09-29):** las macros y las notas de fabricación de la placa que se fabrica (cavidades extremas recortadas −0,3 mm, 165,78 mm) están en `docs/final_check/fab/`. El `.s2p` de referencia de esta carpeta corresponde a ese mismo diseño. Algunas capturas y cifras de esta guía son de la versión anterior (166,38 mm); los pasos en CST son los mismos.
 
 \newpage
 
@@ -27,13 +27,13 @@ El diseño ya fue optimizado y simulado con otro solver (Palace, FEM,
 open-source) durante todo el proceso. Esta corrida en CST sirve como
 **verificación independiente**, con un solver distinto, del mismo diseño.
 
-Archivos en esta carpeta:
+Archivos que usa esta guía:
 
 | Archivo | Qué es |
 |---|---|
-| `siw_cascade_N3.bas` | La macro VBA. Al ejecutarla en CST construye toda la geometría 3D. |
+| `../final_check/fab/siw_cascade_N3.bas` (y `_fd.bas` para el solver de frecuencia) | La macro VBA. Al ejecutarla en CST construye toda la geometría 3D. |
 | `palace_cascade_N3_reference.s2p` | Los parámetros S que dio Palace para este mismo diseño, para comparar contra lo que dé CST (ver §6 — el archivo tiene **fase puesta en cero**, sirve solo para comparar magnitud en dB, no para nada que dependa de la fase). |
-| `FAB_NOTES.md` | Notas de fabricación (sustrato, cobre, acabado) — no hace falta para simular, es referencia. |
+| `../final_check/fab/FAB_NOTES.md` | Notas de fabricación (sustrato, cobre, acabado) — no hace falta para simular, es referencia. |
 | `img/` | Imágenes de referencia (esta guía), generadas directamente desde la herramienta de línea de comandos del proyecto — no son capturas de CST. |
 
 ## Cómo se ve la placa (vista de arriba, acotada)
@@ -67,7 +67,7 @@ llega a la cavidad.](img/board_3d_launch_closeup.png)
   `AddToHistory`/`Brick`/`Cylinder` — el macro fue escrito y pensado para
   2021, pero el VBA de estas instrucciones es estable en versiones más
   nuevas también).
-- El archivo `siw_cascade_N3.bas` de esta misma carpeta.
+- El archivo `docs/final_check/fab/siw_cascade_N3.bas`.
 - Unos ~15-20 minutos: la macro tarda segundos en construir la geometría,
   pero la simulación en sí (paso 5) puede tardar bastante más según la PC
   (una malla fina 3D con un conector coaxial real no es trivial).
@@ -307,7 +307,7 @@ de correr.
 1. En el menú superior: **Macros → Macro Editor...** (o el ícono de
    macros, según la versión).
 2. En el editor de macros: **File → Open Macro File...**
-3. Seleccionar `siw_cascade_N3.bas` de esta carpeta.
+3. Seleccionar `docs/final_check/fab/siw_cascade_N3.bas`.
 4. Con el archivo abierto en el editor, presionar **F5** (o
    **Macros → Run Macro**).
 5. Al terminar debería aparecer un cuadro de diálogo:
@@ -332,7 +332,7 @@ CST no muestre ningún error al construir la geometría.
 conector no se ve, o al conector le falta el cilindro metálico que envuelve
 al dieléctrico PTFE por fuera), lo más probable es que el archivo `.bas`
 esté desactualizado — pedir que se regenere desde el repositorio antes de
-seguir. El archivo de esta carpeta ya tiene corregidos varios errores que
+seguir. La macro ya tiene corregidos varios errores que
 existieron en versiones anteriores de esta macro: dos de unidades (que
 dibujaban el conector y las vías del lanzador 1000 veces más grandes o más
 lejos de lo correcto); uno donde faltaba la taper grande, dejando la pista
@@ -466,7 +466,7 @@ declarados con `StoreParameter` cerca del principio del archivo).
 | Vías | Ø1.5 mm, paso 3.0 mm, 102 en total | tamaño confirmado por búsqueda EM, no arbitrario |
 | Iris internos | `w_iris12`, `w_iris23` | calibrados por simulación EM (eigenmode), no una fórmula analítica |
 | Acoplamiento externo | `w_ext` | mismo proceso de calibración |
-| Conector | Taoglas EMPCB.SMAFSTJ.B.HT — pin de 0.38 mm de radio (0.76 mm de diámetro real de la hoja de datos), dieléctrico PTFE hasta 1.2639 mm, **blindaje metálico (PEC) envolviendo el PTFE** desde 1.2639 hasta 1.5639 mm, 6 mm de stub coaxial | Hoja de datos Taoglas (adjunta en el repositorio, `docs/sma_connector/`) |
+| Conector | Taoglas EMPCB.SMAFSTJ.B.HT — pin de 0.38 mm de radio (0.76 mm de diámetro real de la hoja de datos), dieléctrico PTFE hasta 1.2639 mm, **blindaje metálico (PEC) envolviendo el PTFE** desde 1.2639 hasta 1.5639 mm, 6 mm de stub coaxial | Hoja de datos Taoglas (adjunta en el repositorio, `docs/sma_connector/` (tag docs-archive-2026-09-29)) |
 | Lanzador CPWG | gap 0.2512 mm, ancho de pista 1.2 mm, 16 vías de "stitching" a tierra | resuelto para 50 Ω sobre este sustrato — **no** es el footprint recomendado por la hoja de datos del conector (que da 0.85 mm de pista), a propósito: ese ancho es el que da 50 Ω real en este sustrato |
 | Puertos | **Coaxiales**, sobre la cara externa de cada stub SMA — no puertos de guía de onda sobre el microstrip | así es como se simuló el diseño real; un puerto de guía de onda sobre el microstrip mediría un problema distinto (una línea idealizada, no el conector real) |
 

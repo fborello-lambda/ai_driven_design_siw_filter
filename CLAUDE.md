@@ -1,8 +1,14 @@
 # SIW Bandpass Filter — Project Brief
 
-**Read first:** `docs/STATE.md` (what is true now), `docs/PLAN.md` (what's
-next), `docs/final_check/REPORT.md` (fab verdict + JLCPCB check). Where this
-file disagrees with those or with `golden/`, they are right.
+**Read first:** `docs/final_check/REPORT.md` (fab verdict + JLCPCB check) and
+`docs/paper/ai_driven_rf_design.md` (the whole project written up: method,
+results, bug taxonomy, gaps). Where this file disagrees with those or with
+`golden/`, they are right. Historical notes (roadmaps, handoffs, exploration
+logs) were removed from the tree; they live in git tag `docs-archive-2026-09-29`.
+
+**Status (2026-09-29):** board ordered at JLCPCB, measurements pending. The
+paper drafts (`docs/paper/`) have a placeholder "Measured results" section to
+fill when the board arrives.
 
 ## 1. Project
 
@@ -123,8 +129,9 @@ tags** — that silently gives invalid results (e.g. −7.8 dB IL on solid coppe
 **N=4 compact is closed.** Five mechanisms plus a joint GP on dual-mode
 cascades / quad-mode cavities all hit the same 2-of-4-pole ceiling; read
 `docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md` §9–16
+(tag `docs-archive-2026-09-29`)
 before trying any variant (offset apertures, corner placement, posts,
 top-copper slots, quad-mode are already falsified). A 4-cavity single-mode
 cascade works but needs ~180–206 mm.
 
-Superseded plans and handoffs: `docs/archive/`.
+Superseded plans and handoffs: git tag `docs-archive-2026-09-29`.

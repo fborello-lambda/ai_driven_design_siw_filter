@@ -83,7 +83,7 @@ def find_palace() -> str:
         return home
     raise FileNotFoundError(
         "Palace binary not found. Set $PALACE_BIN, put `palace` on $PATH, "
-        "or symlink it at ~/opt/palace/bin/palace (see HANDOFF.md).")
+        "or symlink it at ~/opt/palace/bin/palace (see README.md).")
 
 
 def has_gpu() -> bool:
@@ -191,7 +191,7 @@ FAB_RULES = {
 DEFAULT_FAB = "JLCPCB_2layer"
 
 # siw_fence 1.5/3.0mm is not arbitrary: smaller sizes were searched three
-# times under three scoring methods and never matched it (docs/dualmode_cavity/
+# times under three scoring methods and never matched it (docs/dualmode_cavity/ (tag docs-archive-2026-09-29)
 # README.md) -- don't shrink it for fab reasons alone. gnd_stitch is
 # deliberately much smaller so several fit per pad (lower ground-return
 # inductance at the launch).

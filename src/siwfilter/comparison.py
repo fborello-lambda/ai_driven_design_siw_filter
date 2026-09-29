@@ -39,8 +39,8 @@ from .topologies import REGISTRY
 # to resolve the in-band ripple that a coarser step aliases over.
 SWEEP = (2.60, 3.15, 0.01)
 
-# The landed dual-mode geometry (docs/dualmode_cavity/README.md) and the v2
-# cascade (docs/sma_connector/README.md), i.e. the published references.
+# The landed dual-mode geometry (docs/dualmode_cavity/README.md (tag docs-archive-2026-09-29)) and the v2
+# cascade (docs/sma_connector/README.md (tag docs-archive-2026-09-29)), i.e. the published references.
 LANDED_DM = {"a": 57.212, "w_iris": 15.261, "x_iris": 28.678,
              "y_wall": 8.619, "w_ext": 16.311}
 CASCADE_V2 = {"l_cav1": 32.81, "l_cav2": 33.86, "w_iris": 13.0,

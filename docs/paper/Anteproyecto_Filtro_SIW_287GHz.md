@@ -9,29 +9,28 @@ title: >-
 author: "\\vspace{-2em}"
 date: 2026
 abstract: |
-  Se presenta el diseño, la síntesis y la simulación electromagnética de un
-  filtro pasabanda de tercer orden en tecnología de guía de onda integrada en
-  sustrato (SIW), centrado en 2.87 GHz dentro de la banda S. La topología
-  consiste en tres cavidades resonantes en modo TE101 acopladas por iris
-  inductivos, con una respuesta de Chebyshev de ancho de banda fraccional del
-  5 % y rizado de 0.1 dB. El filtro se implementa sobre sustrato laminado de
-  microondas Rogers RO4350B de 0.76 mm de espesor (epsilon_r = 3.66,
-  tan(delta) = 0.0037), con vías de 0.8 mm de diámetro y paso de 1.5 mm. Las
-  dimensiones se obtienen de forma analítica y se verifican
-  mediante simulación de onda completa con openEMS: el acoplamiento de los
-  iris se calibra con un modelo de dos cavidades. openEMS reproduce bien la
-  banda y el $S_{21}$, pero sus puertos no proveen un $S_{11}$ confiable, por lo
-  que la adaptación no pudo ajustarse con esa herramienta. Se incorpora entonces
-  un iris de entrada/salida ($w_{\text{ext}}$) para fijar el acoplamiento externo
-  $Q_e$, y el diseño se optimiza con Palace, un solver de elementos finitos con
-  puertos modales (wave ports) equivalentes a los de CST, previamente validado
-  contra una simulación de CST. La optimización ajusta longitudes de cavidad,
-  iris internos/externo y el alimentador, alcanzando $S_{11} < -16$ dB en banda,
-  pérdida de inserción $\approx 1.5$ dB y centro en 2.87 GHz. El modelo 3D
-  paramétrico final se genera para CST Studio Suite 2021. Se comparan en una
-  misma figura la respuesta de síntesis, la primera iteración de CST, openEMS y
-  el diseño final optimizado con Palace.
-bibliography: references_siw.bib
+  Se presenta el diseño, la simulación electromagnética y la preparación para
+  fabricación de un filtro pasabanda de tercer orden en tecnología de guía de
+  onda integrada en sustrato (SIW), centrado en 2.87 GHz (banda S), con
+  respuesta de Chebyshev de 5 % de ancho de banda fraccional y 0.1 dB de rizado,
+  sobre Rogers RO4350B de 0.76 mm. Una primera iteración analítica, verificada
+  con openEMS y CST, reprodujo la banda pero no la adaptación: los puertos de
+  openEMS no entregan un $S_{11}$ confiable. El trabajo pasó entonces a Palace,
+  un solver de elementos finitos de código abierto con puertos modales, y a una
+  cadena de herramientas en Python escrita y operada por un agente de
+  programación basado en un modelo de lenguaje (Claude Code). Se modeló el
+  conector SMA real con un lanzador CPWG adaptado, se exploraron varias
+  topologías (cavidad de modo dual N=2, geometrías alternativas y variantes
+  N=4) y se reemplazó la optimización bayesiana global, que falla porque el
+  ancho de banda del filtro ensamblado es discontinuo, por calibración de
+  acoplamientos sobre estructuras pequeñas e inversión. El diseño fabricado
+  (N=3, vías de 1.5 mm con paso de 3.0 mm) centra la banda en 2.876 GHz, con
+  182 MHz de ancho de banda, pérdida de inserción de 1.70 dB y
+  $|S_{11}| = -11.2$ dB en el peor punto de la banda. No alcanza la
+  especificación de $-16$ dB, y un ajuste de matriz de acoplamiento explica por
+  qué. La placa fue enviada a fabricar a JLCPCB; las mediciones se agregarán
+  al recibirla.
+bibliography: references.bib
 csl: ieee-jestpe.csl
 header-includes:
   - \usepackage[spanish]{babel}
@@ -57,22 +56,20 @@ header-includes:
     \makeatother
 ---
 
-> **NOTA DE ESTADO (2026-08-29).** Este anteproyecto describe el plan ORIGINAL
-> (N=3, cavidades TE101 en línea, vías de 0.8 mm / paso 1.5 mm). El proyecto
-> evolucionó desde entonces: el diseño que finalmente funcionó es un filtro
-> **N=2 de cavidad única en modo dual** con **vías de 1.5 mm y paso de 3.0 mm**
-> (el sustrato RO4350B de 0.76 mm sí se mantiene). Las dimensiones y el número
-> de cavidades de este documento son contexto histórico, no la configuración
-> vigente. Ver `CLAUDE.md` (sec. 1 y 10) y
-> `docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md` para el
-> estado actual, incluida la investigación (cerrada, con resultados negativos
-> documentados) sobre variantes compactas de orden 4.
+> **Cómo leer este informe (actualizado 2026-09-29).** Las Secciones II a VIII
+> documentan la **primera iteración** (junio de 2026): diseño analítico con vías
+> de 0.8 mm y paso de 1.5 mm, openEMS, CST y una primera optimización con
+> Palace. Se conservan porque explican las decisiones posteriores. Desde la
+> Sección IX se describe la evolución hasta el **diseño fabricado**: vías de
+> 1.5 mm con paso de 3.0 mm, conector SMA real, calibración e inversión, y
+> verificación final.
 
 
 ```{=latex}
 \begin{IEEEkeywords}
 banda S, filtro pasabanda, guía de onda integrada en sustrato, SIW,
-cavidades resonantes, síntesis de Chebyshev, simulación electromagnética
+cavidades resonantes, síntesis de Chebyshev, simulación electromagnética,
+Palace, agentes de IA, optimización bayesiana
 \end{IEEEkeywords}
 ```
 
@@ -110,8 +107,8 @@ Sustrato & Rogers RO4350B \\
 Espesor $h$ & 0.76 mm \\
 Permitividad $\varepsilon_r$ & 3.66 \\
 Tangente de pérdidas $\tan\delta$ & 0.0037 \\
-Diámetro de vía $d$ & 0.8 mm \\
-Paso de vía $p$ & 1.5 mm \\
+Diámetro de vía $d$ & 0.8 mm (1ª iter.) / 1.5 mm (final) \\
+Paso de vía $p$ & 1.5 mm (1ª iter.) / 3.0 mm (final) \\
 \hline
 \end{tabular}
 \end{table}
@@ -451,6 +448,16 @@ $w_{\text{ext}} = 16.0$ mm, $W_{\text{ms}} = 2.26$ mm).}
 
 ## Discusión de la respuesta final
 
+> **Corrección posterior (agosto de 2026).** Este resultado se obtuvo con un
+> puerto modal colocado directamente sobre la microstrip, que se normaliza a la
+> impedancia de la propia pista. Al reemplazarlo por un modelo 3D del conector
+> SMA real (Sección X) se comprobó que el ancho optimizado $W_{	ext{ms}} =
+> 2.26$ mm corresponde a una línea de $\approx 41~\Omega$, no de 50 $\Omega$: el
+> optimizador había aprovechado un defecto del puerto. El ancho correcto de
+> 50 $\Omega$ es 1.664 mm, y con el conector real este diseño mide
+> $\approx -4.6$ dB. Los valores de esta sección son válidos solo para ese
+> modelo de puerto.
+
 El diseño final centra la banda en 2.87 GHz y consigue $|S_{11}| < -16$ dB. Su
 ancho de banda de $-3$ dB es de $\approx 277$ MHz (FBW $\approx 9.7\%$), algo
 mayor que el valor nominal de síntesis de 143 MHz (5\%). El ancho de banda **no
@@ -510,25 +517,392 @@ CST: centro $-3$ dB en 2.858 GHz, $|S_{11}|=-20.9$ dB y $|S_{21}|=-1.19$ dB en b
 \end{figure*}
 ```
 
+# Evolución del proyecto: herramientas y método
+
+La Fig. \ref{fig:timeline} resume la historia del proyecto, reconstruida a
+partir del repositorio git (211 commits entre junio y septiembre de 2026).
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_timeline.png}
+\caption{Commits por día y por tipo. P1: primera iteración (Secciones II--VIII).
+P2--P6: trabajo dirigido por el agente de programación, desde el conector real
+hasta la verificación final y el pedido a JLCPCB.}
+\label{fig:timeline}
+\end{figure*}
+```
+
+## De openEMS a Palace
+
+openEMS se abandonó por tres motivos:
+
+- **Puertos.** Sus puertos no entregan un $S_{11}$ confiable para esta
+  estructura (Sección VII), y la adaptación era justamente lo que faltaba
+  ajustar.
+- **Costo de cómputo.** El método FDTD representa las vías cilíndricas con una
+  grilla escalonada que exige al menos tres celdas por diámetro en toda la
+  placa. Además, el filtro resonante de alto $Q$ tarda en decaer. Cada
+  corrida completa llevaba de minutos a decenas de minutos.
+- **Sin solver de autovalores.** No tiene solver de modos propios para calibrar
+  acoplamientos, que debían estimarse leyendo picos en barridos excitados.
+
+Palace [@palace2023], basado en MFEM [@anderson2021mfem] y con mallas de gmsh
+[@geuzaine2009gmsh], resolvió los tres problemas:
+
+- la malla tetraédrica se ajusta a las vías;
+- los puertos modales son pasivos por construcción;
+- incluye un solver de autovalores;
+- se controla íntegramente con archivos JSON.
+
+## Un agente de IA como operador de la cadena de diseño
+
+Desde agosto, el código de diseño fue escrito y ejecutado por un agente de
+programación basado en un modelo de lenguaje (Claude Code [@claudecode]), bajo
+la supervisión de los autores. El agente unificó tres scripts de optimización
+duplicados en un paquete de Python con una única herramienta de línea de
+comandos (`siw`). Esa herramienta cubre síntesis, layout, simulaciones de
+autovalores y excitadas, optimización bayesiana, barridos, calibraciones y
+exportación a KiCad y CST. Los diseños validados se guardan en una carpeta
+`golden/` junto con sus parámetros S y el comando que los reproduce. De los
+211 commits, 119 fueron coescritos por el agente.
+
+La capa de aprendizaje automático es un optimizador bayesiano con proceso
+gaussiano (scikit-optimize [@skopt; @jones1998efficient]). Evalúa con malla
+gruesa, confirma con malla fina y descarta candidatos no resonantes antes de
+cada simulación completa. Su función objetivo pasó por diez versiones.
+
+## GPU, control remoto y CPU
+
+Para acelerar la búsqueda, el trabajo se trasladó a una estación con una GPU
+NVIDIA GTX 1660 SUPER de 6 GB, con Palace compilado con soporte de GPU. Las
+sesiones largas del agente se supervisaron a distancia mediante *Remote
+Control* de Claude Code.
+
+La GPU fue 1.24 veces más rápida que 4 procesos de CPU en el filtro de modo
+dual, con parámetros S idénticos. Sin embargo, 6 GB limitan el modelo a unos
+176 mil tetraedros. La cascada de 166 mm excede ese límite con cualquier malla
+adecuada, y la verificación final (315 mil incógnitas, $\approx$5.5 GB) tampoco
+entra en la GPU. Todas las corridas de producción terminaron ejecutándose en
+CPU con 4 procesos MPI, en una máquina de 16 GB. Una máquina de 3.7 GB fue
+insuficiente: cuatro intentos terminaron por falta de memoria. La memoria, y
+no la velocidad de cálculo, fue siempre la restricción dominante.
+
+# Conector SMA real y lanzador CPWG
+
+Hasta este punto los puertos se ubicaban directamente sobre la microstrip. Al
+modelar en 3D el conector de borde Taoglas EMPCB.SMAFSTJ.B.HT
+[@taoglas_sma], con pin, dieléctrico de PTFE y blindaje, aparecieron dos
+problemas:
+
+1. El ancho de microstrip optimizado en junio (2.26 mm) resultó ser una línea
+   de $\approx 41~\Omega$. El ancho correcto de 50 $\Omega$ es 1.664 mm
+   [@hammerstad1980accurate].
+2. Un pin de tamaño de cable (0.82 mm) es más grueso que la placa (0.76 mm) y
+   cortocircuita el lanzador ($|S_{11}| \approx -0.2$ dB), como muestra la
+   Fig. \ref{fig:sma}.
+
+Se usó el pin real del conector (0.38 mm de radio). En el borde de la placa
+se sintetizó un lanzador CPWG de 50 $\Omega$ dentro de la huella del conector
+[@wadell1991transmission; @simons2001coplanar]: pista de 1.2 mm, ranura de
+0.2512 mm y vías de costura a masa.
+
+```{=latex}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_sma_v1.png}
+\caption{Primer modelo con conector real: el puerto ideal ocultaba una
+alimentación de 41\,$\Omega$, y un pin de tamaño de cable cortocircuita el
+lanzador.}
+\label{fig:sma}
+\end{figure}
+```
+
+# Exploración de topologías y longitudes
+
+Con el objetivo de reducir el tamaño de la placa se exploraron varias
+topologías (Figs. \ref{fig:layouts} y \ref{fig:designs}). Las vías pasaron a
+1.5 mm de diámetro con paso de 3.0 mm. Tres búsquedas independientes, con tres
+funciones objetivo distintas, confirmaron esa elección frente a vías de
+0.8 mm.
+
+**Longitudes de cavidad ensayadas.** La evolución de las longitudes fue la
+siguiente:
+
+- 38.23 mm: valor analítico.
+- 35.93 y 33.64 mm: barrido en openEMS, con una pendiente de
+  $\approx -37$ MHz/mm.
+- $\approx$34.4 mm: primera optimización con Palace, que incluye la carga de
+  los tapers.
+- 34.24/35.50/34.24 mm: cavidades desiguales obtenidas por calibración e
+  inversión.
+- 33.94/35.50/33.94 mm: recorte final de las cavidades extremas. También se
+  probó $-0.6$ mm, que ganó solo 0.07 dB y agregó 0.4 dB de pérdida en el
+  borde de banda.
+
+La sensibilidad medida en las cavidades extremas fue de $\approx$27 MHz/mm.
+
+**Longitudes de placa.** Los candidatos y sus largos fueron:
+
+- modo dual N=2: 119 mm;
+- cascada N=3: 166 mm;
+- cascada N=4: 211 mm;
+- cascada de cuatro cavidades monomodo: 180--206 mm.
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_layouts.png}
+\caption{(a) Filtro de modo dual N=2 de una sola cavidad. (b) Cascada N=3
+fabricada, con aperturas externas en rojo y las huellas CPWG/SMA en los
+bordes.}
+\label{fig:layouts}
+\end{figure*}
+```
+
+## Filtro de modo dual N=2
+
+Una única cavidad cuadrada ($a = 57.16$ mm) soporta el par degenerado
+TE$_{102}$/TE$_{201}$. Una fila flotante de vías interna separa y acopla ese
+par [@shen2009dualmode; @xu2014hexagonal], de modo que se obtienen dos polos
+con una sola cavidad y la placa se reduce a 119 mm.
+
+Con el lanzador CPWG real, su mejor respuesta es $f_c = 2.904$ GHz, 316.6 MHz
+de ancho de banda, $-10.76$ dB de adaptación y 1.45 dB de pérdida de
+inserción. Los barridos sobre el filtro ensamblado muestran que en esta
+topología el ancho de banda y la adaptación se oponen en todos los
+parámetros. Con $w_{\text{iris}} = 11$ mm la banda mide 145.6 MHz, pero la
+adaptación cae a $-1.75$ dB. Un acoplamiento interno y uno externo no alcanzan
+para ubicar dos polos y adaptarlos a la vez.
+
+La cascada N=3 agrega un grado de libertad, a costa de 1.4 veces el largo, y
+ganó la comparación directa. Otras tres cavidades únicas (esquina recortada,
+circular con cruz y rómbica) no superaron al modo dual: su mejor $S_{11}$
+estuvo entre $-6$ y $-9$ dB. La variante compacta N=4 con dos cavidades de modo
+dual quedó cerrada: cinco mecanismos distintos más una búsqueda conjunta se
+detuvieron en 2 de 4 polos.
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_designs.png}
+\caption{Mejor diseño de cada topología con el mismo lanzador CPWG + SMA
+(Palace).}
+\label{fig:designs}
+\end{figure*}
+```
+
+# Calibración e inversión en lugar de búsqueda global
+
+Aplicada al filtro ensamblado, la optimización bayesiana global nunca superó
+$-5$ dB de adaptación en más de 60 evaluaciones. La causa es estructural. El
+ancho de banda es **discontinuo** en la apertura externa: por debajo de un
+umbral de acoplamiento solo el polo central supera $-3$ dB, y por encima los
+tres polos se unen. En la cascada N=3 se midieron 16, 22, 36, 65 y luego
+215 MHz, con el objetivo de 143.5 MHz dentro del salto. Un proceso gaussiano
+supone una función suave, así que no puede modelar ese salto.
+
+El método que funcionó mide cada acoplamiento en la estructura más pequeña que
+lo contiene (Fig. \ref{fig:calib}):
+
+- **Acoplamiento interno.** Dos cavidades cerradas, resueltas como problema de
+  autovalores, dan $k = (f_2^2 - f_1^2)/(f_2^2 + f_1^2)$ en función de
+  $w_{\text{iris}}$ [@hong2001microstrip].
+- **Acoplamiento externo.** Una cavidad excitada por dos aperturas da el $Q$
+  cargado, y de él se obtiene $Q_e = 2/(1/Q_L - 1/Q_u)$ con
+  $Q_u = 1/\tan\delta = 270$.
+
+Ambas curvas son suaves y se invierten en los valores de síntesis. Cada curva
+convergió en unas tres simulaciones, y el acoplamiento interno quedó dentro
+del 2 % del objetivo. La optimización bayesiana se conservó solo como pulido
+local alrededor de ese resultado.
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_calib.png}
+\caption{(a), (b) Las magnitudes de calibración son suaves e invertibles.
+(c) El ancho de banda del filtro ensamblado, que es lo que evalúa un
+optimizador de caja negra, salta cuando los polos se unen.}
+\label{fig:calib}
+\end{figure*}
+```
+
+**Errores silenciosos.** Se registraron 47 commits de corrección. En la mayoría
+de los casos el defecto no generaba ningún error: la simulación convergía y el
+gráfico parecía razonable, pero el número era incorrecto. Algunos ejemplos:
+
+- anchos de iris cuantizados por la construcción de las vías
+  (Fig. \ref{fig:quant});
+- selección del par de modos equivocado, que daba $k$ 21 veces menor;
+- caras de la malla sin condición de borde, que producían pérdidas menores que
+  las de un modelo sin pérdidas;
+- una macro de CST que dibujaba el lanzador 1000 veces más grande.
+
+Cada caso dejó una verificación automática en el código. La regla más útil
+fue comparar cada resultado con lo que la física permite.
+
+```{=latex}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_quantization.png}
+\caption{Cuantización de las vías: filtrar una grilla fija hacía que distintos
+anchos de iris produjeran la misma malla.}
+\label{fig:quant}
+\end{figure}
+```
+
+# Diseño fabricado y verificación
+
+El diseño elegido es
+$l_{\text{cav1}} = 33.939$, $l_{\text{cav2}} = 35.503$,
+$w_{\text{iris}} = 14.416$, $w_{\text{ext}} = 13.96$,
+$l_{\text{taper}} = 15.738$ y $W_{\text{ms}} = 1.6636$ mm, sobre una placa de
+165.78 $\times$ 45.79 mm. La Tabla \ref{tab:fab} resume la simulación con
+malla fina (2.5/0.45 mm, puertos coaxiales de 0.15 mm, 61 puntos).
+
+```{=latex}
+\begin{table}[t]
+\centering
+\caption{Diseño fabricado: simulación con malla fina frente a la especificación}
+\label{tab:fab}
+\begin{tabular}{lcc}
+\hline
+ & \textbf{Objetivo} & \textbf{Simulado}\\
+\hline
+Frecuencia central & 2.870 GHz & 2.876 GHz\\
+Ancho de banda ($-3$ dB) & 143.5 MHz & 182.3 MHz\\
+Peor $|S_{11}|$ en banda & $-16$ dB & $-11.15$ dB\\
+Pérdida de inserción (pico / peor) & --- & 1.70 / 2.58 dB\\
+Medido & \multicolumn{2}{c}{\emph{pendiente}}\\
+\hline
+\end{tabular}
+\end{table}
+```
+
+```{=latex}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_final_trim.png}
+\caption{Verificación final con malla fina: el recorte de $-0.3$ mm de las
+cavidades extremas mejora el rizado interior de $-11.2$ a $-14.5$ dB.}
+\label{fig:trim}
+\end{figure}
+```
+
+**Por qué no alcanza $-16$ dB.** Un ajuste de matriz de acoplamiento con
+pérdidas [@cameron2018microwave] indica lo siguiente:
+
+- el acoplamiento externo está en el objetivo (+0.4 %);
+- el acoplamiento interno está 4.8 % débil;
+- las cavidades extremas resuenan 17 MHz por debajo.
+
+El recorte corrige la mitad de ese desvío. El peor punto queda en el borde
+superior de la banda (2.94 GHz). Terminar de corregirlo requiere mover
+$w_{\text{ext}}$, $l_{\text{cav1}}$ y $w_{\text{iris}}$ de forma coordinada.
+
+**Por qué la pérdida de inserción es alta.** En un filtro angosto,
+$\text{IL} \approx 4.343\sum g_i/(\text{FBW}\,Q_u)$ [@hong2001microstrip]. Las
+contribuciones son las siguientes:
+
+- El RO4350B limita el $Q$ dieléctrico a $Q_d = 1/\tan\delta = 270$.
+- Con 0.76 mm de espesor, el $Q$ de conductor es $Q_c \approx 540$
+  [@pozar2012microwave].
+- En conjunto, $Q_u \approx 180$, lo que da 1.2--1.55 dB de disipación al 5 %
+  de ancho de banda.
+- La desadaptación de $-11$ dB agrega 0.35 dB.
+
+El valor simulado de 1.70 dB está, por lo tanto, cerca del piso físico de este
+laminado, este espesor y este ancho de banda. Un sustrato de menor pérdida,
+como RT/duroid 5880 de 1.52 mm, lo reduciría a $\approx$0.5 dB.
+
+**Verificación cruzada con CST.** Con la macro generada automáticamente, el
+solver de frecuencia de CST coincide con Palace en la frecuencia central
+(2.876 frente a 2.875 GHz) y en la pérdida (1.80 frente a 1.85 dB). Llegar a
+ese resultado requirió diez correcciones de la macro y de la configuración, y
+un modelo de control con un tramo de coaxial recto. El solver temporal de CST
+nunca quedó del todo estable.
+
+**Efecto del conector.** Las Figs. \ref{fig:launch} y \ref{fig:renders} comparan tres alimentaciones
+sobre la misma geometría:
+
+- microstrip sin conector: $-6.3$ dB;
+- CPWG sin conector: $-5.1$ dB;
+- CPWG con SMA, la versión fabricada: $-11.2$ dB.
+
+El filtro fue sintonizado con la reactancia del conector incluida, de modo que
+el conector forma parte del diseño.
+
+```{=latex}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_launch_sparams.png}
+\caption{Misma geometría con tres alimentaciones distintas. Quitar el SMA
+empeora la adaptación en unos 5 dB.}
+\label{fig:launch}
+\end{figure}
+```
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.9\textwidth]{figures/fig_launch_renders.png}
+\caption{Modelos 3D (Palace) de las tres alimentaciones: placa completa y
+detalle del lanzador de entrada. Verde: cobre; marrón: RO4350B; amarillo:
+conector SMA.}
+\label{fig:renders}
+\end{figure*}
+```
+
+# Fabricación
+
+La herramienta `siw kicad` genera la placa de KiCad, los gerbers, los archivos
+de taladrado, un sólido STEP y 34 verificaciones automáticas. Entre ellas se
+comparan la geometría dibujada con la mallada y las posiciones de las vías de
+la macro de CST con las de la malla.
+
+JLCPCB dispone de RO4350B de 0.76 mm, pero solo ofrece cobre exterior de
+1 oz [@jlcpcb_caps]. El espesor terminado en las pistas del conector queda en
+$\approx$0.84 mm, frente a una ranura de 0.81 $\pm$ 0.1 mm en el conector.
+Es un ajuste marginal, que se resuelve raspando 15--20 $\mu$m de cobre bajo las
+patas del conector. La ausencia de máscara antisoldante queda definida por los
+gerbers y se aclara en las notas del pedido. La placa fue enviada a fabricar.
+
+# Mediciones
+
+*[Pendiente: las placas están en fabricación. Se medirán $|S_{11}|$, $|S_{21}|$
+y el retardo de grupo con un analizador vectorial de redes, entre 2.5 y
+3.3 GHz y entre 0.1 y 8 GHz. Se superpondrán con la simulación de Palace y con
+la de CST, y se ajustará la matriz de acoplamiento a la medición.]*
+
 # Conclusiones y trabajo futuro
 
-Se completó la síntesis de Chebyshev y la calibración electromagnética del
-acoplamiento de los iris en openEMS. Se identificó que los puertos de openEMS no
-permiten ajustar la adaptación ($S_{11}$ poco confiable), por lo que se introdujo
-un iris de entrada/salida ($w_{\text{ext}}$) para fijar $Q_e$ y se trasladó la
-optimización a Palace (FEM con puertos modales), previamente validado contra CST.
-La optimización de seis variables produjo un diseño final con la banda centrada
-en 2.87 GHz, $S_{11} < -16$ dB en banda y pérdida de inserción $\approx 1.5$ dB,
-acorde con la especificación. Un hallazgo de diseño es que las cavidades reales
-deben acortarse respecto del valor analítico ($\approx 34.4$ mm) por la carga de
-los tapers y los iris externos.
+La primera iteración (openEMS y CST) validó la síntesis y el centro de la
+banda, pero no la adaptación. El paso a Palace, junto con el modelado del
+conector real, corrigió un error que el puerto ideal ocultaba: la alimentación
+de 41 $\Omega$.
 
-Como trabajo futuro queda la fabricación y caracterización experimental del
-prototipo con un analizador vectorial de redes; opcionalmente, estrechar el ancho
-de banda de los $\approx 277$ MHz actuales hacia el valor nominal de 143 MHz
-(reduciendo en conjunto los iris interno y externo, sin comprometer el centrado ni
-la adaptación) si la aplicación lo exigiera; y, de requerirse, la supresión de la
-banda espuria mediante perturbaciones en las cavidades.
+Los cambios que más influyeron en el resultado fueron dos. El primero,
+reemplazar la optimización bayesiana global por la calibración de los
+acoplamientos en estructuras pequeñas seguida de inversión. El segundo,
+verificar sistemáticamente cada resultado contra lo que la física permite.
+
+El agente de programación automatizó la escritura y la operación de toda la
+cadena de diseño y el diagnóstico de errores. Las decisiones de diseño y las
+verificaciones en CST quedaron a cargo de los autores.
+
+El filtro N=3 fabricado centra la banda a 6 MHz del objetivo, con 1.7 dB de
+pérdida, cerca del límite del laminado. No alcanza la especificación de
+adaptación ni de ancho de banda, por causas que identifica el ajuste de
+matriz de acoplamiento.
+
+Como trabajo futuro quedan:
+
+- medir las placas y comparar la medición con la simulación;
+- aplicar la corrección coordinada de $w_{\text{ext}}$, $l_{\text{cav1}}$ y
+  $w_{\text{iris}}$;
+- evaluar un laminado de menor pérdida;
+- suprimir la banda espuria de 5.8--6.8 GHz con un filtro pasabajos.
 
 ```{=latex}
 \FloatBarrier

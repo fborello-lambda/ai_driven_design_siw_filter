@@ -542,7 +542,7 @@ if __name__ == "__main__":
                     help="add connector ground pads + stitching vias (Taoglas footprint)")
     ap.add_argument("--cpwg", action="store_true",
                     help="real impedance-matched CPWG launch (solved values, "
-                         "docs/TUNING_PLAN_2026-08-29.md sec 2); implies --gnd-stitch")
+                         "docs/TUNING_PLAN_2026-08-29.md (tag docs-archive-2026-09-29) sec 2); implies --gnd-stitch")
     ap.add_argument("--preview", action="store_true",
                     help="open the Gmsh GUI (color-coded groups) instead of meshing")
     args = ap.parse_args()

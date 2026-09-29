@@ -72,8 +72,8 @@ HEAVY = [
 ]
 STAGES = dict(LIGHT + HEAVY)
 
-# Landed baseline designs (see docs/dualmode_cavity/README.md,
-# docs/sma_connector/README.md) -- used by `siw compare-baselines`.
+# Landed baseline designs (see docs/dualmode_cavity/README.md (tag docs-archive-2026-09-29),
+# docs/sma_connector/README.md (tag docs-archive-2026-09-29)) -- used by `siw compare-baselines`.
 BASELINES = {
     # No cascade entry: no N=3/N=4 cascade design here meets spec under the
     # current CPWG launch (see golden/cascade_N3|N4/ instead).
@@ -263,7 +263,7 @@ def cmd_design(args) -> int:
     if getattr(args, "real_metal", False) or getattr(args, "enig", False):
         # ENIG/soldermask/silkscreen are meshed layers, unresolvable at this
         # mesh density; ENIG is also shielded behind ~14 skin depths of
-        # ground-plane copper either way. See docs/STATE.md.
+        # ground-plane copper either way. See docs/STATE.md (tag docs-archive-2026-09-29).
         if args.topology == "cascade" and getattr(args, "enig", False):
             print("--enig is not available for cascade (and is an RF no-op: the "
                   "plating sits on the shielded side of the ground plane). Use "
@@ -781,7 +781,7 @@ def cmd_sweep(args) -> int:
     if getattr(args, "enig", False) or getattr(args, "real_metal", False):
         # ENIG/soldermask/silkscreen are meshed layers, unresolvable at this
         # mesh density; ENIG is also shielded behind ~14 skin depths of
-        # ground-plane copper either way. See docs/STATE.md.
+        # ground-plane copper either way. See docs/STATE.md (tag docs-archive-2026-09-29).
         if args.topology == "cascade" and getattr(args, "enig", False):
             print("--enig is not available for cascade (and is an RF no-op: the "
                   "plating sits on the shielded side of the ground plane). Use "
@@ -849,7 +849,7 @@ def _fab_variant_specs():
         # No combined copper+ENIG cell: ENIG plates the ground planes' OUTER
         # face, shielded behind ~14 skin depths of copper from the RF
         # current on the inner face, so it is an RF no-op here regardless of
-        # mesh resolution. See docs/STATE.md, "what the fabrication stack
+        # mesh resolution. See docs/STATE.md (tag docs-archive-2026-09-29), "what the fabrication stack
         # costs", for the full argument.
     ]
 

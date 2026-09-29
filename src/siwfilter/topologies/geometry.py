@@ -66,7 +66,7 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
     },
     # -------------------------------------------------------------------
     # Structural variants (2026-08-25). Coupling boxes re-centred on each
-    # PARENT's coupling-only sweep winner (docs/geometry_exploration/
+    # PARENT's coupling-only sweep winner (docs/geometry_exploration/ (tag docs-archive-2026-09-29)
     # coupling_sweep_*_2026-08-24.md), not the original joint-search box --
     # that sweep is the better-founded estimate of where the good region is.
     # The new structural knob (n_perturb/ring2_frac/n_corners/w_iris2) is
@@ -133,7 +133,7 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
     # GP search all hit the same ceiling). Box narrowed to the best known
     # point rather than left wide, since wide search already failed here
     # (40 evals, zero survivors). Full history:
-    # docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md.
+    # docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md. (tag docs-archive-2026-09-29)
     "dualmode_cascade": {
         "a":      (61.123, 61.122, 61.124),
         "w_iris": (10.716, 10.715, 10.717),
@@ -151,7 +151,7 @@ _SPACES: dict[str, dict[str, ParamRange]] = {
         "iris_defect_frac":   (0.105, 0.104, 0.106),
         "iris2_defect_frac":  (0.711, 0.710, 0.712),
         "w_ext2_mm":          (14.063, 11.0, 17.0),
-        # v8 (see dualmode_cascade_v6_handoff_2026-08-28.md sec 9): the
+        # v8 (see dualmode_cascade_v6_handoff_2026-08-28.md (tag docs-archive-2026-09-29) sec 9): the
         # top-copper electric coupling slot at the inter-cavity boundary.
         # slot_x_mm pinned to `a` (the real inter-cavity wall location) --
         # do NOT widen this independently of `a` above, or the slot drifts

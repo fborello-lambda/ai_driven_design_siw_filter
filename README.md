@@ -6,9 +6,9 @@ RO4350B. This repository designs it in Python, simulates it with Palace
 
 ## Where things stand
 
-The board is designed and ready to order as a **prototype**. It does not fully
-meet the spec: the passband is wider and the matching is weaker than the
-targets.
+The board has been **sent to JLCPCB** as a prototype; measurements will be
+added when it arrives. The simulated design does not fully meet the spec: the
+passband is wider and the matching is weaker than the targets.
 
 |                        | Target    | Simulated |
 |------------------------|-----------|-----------|
@@ -24,10 +24,11 @@ targets.
   holds the gerbers, drill files and fab notes.
 - **Is it ready?** [`docs/final_check/REPORT.md`](docs/final_check/REPORT.md)
   gives the verdict and what to write in the JLCPCB order notes.
-- **Full project status:** [`docs/STATE.md`](docs/STATE.md) and
-  [`docs/PLAN.md`](docs/PLAN.md).
+- **The paper (English, the whole project):**
+  [`docs/paper/ai_driven_rf_design.md`](docs/paper/ai_driven_rf_design.md).
 - **Simulate in CST:** [`docs/cst_guide/`](docs/cst_guide/) (in Spanish).
-- **Thesis proposal:** [`docs/paper/`](docs/paper/).
+- **University report (Spanish):**
+  [`docs/paper/Anteproyecto_Filtro_SIW_287GHz.md`](docs/paper/Anteproyecto_Filtro_SIW_287GHz.md).
 
 ## Does the connector matter?
 

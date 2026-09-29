@@ -35,7 +35,7 @@ import skrf as rf
 
 from .config import OUTPUT_DIR, data_path, out_s2p, out_img
 
-REPORT_DIR = data_path("docs")               # STATE.md figures
+REPORT_DIR = data_path("docs")               # STATE.md (tag docs-archive-2026-09-29) figures
 PAPER_DIR = os.path.join(REPORT_DIR, "paper")  # Anteproyecto + its figures
 REPORT_MD = "Anteproyecto_Filtro_SIW_287GHz.md"
 IMG_DIR = os.path.join(OUTPUT_DIR, "imgs")
@@ -272,7 +272,7 @@ def build_design_comparison(golden_paths: list[str], f0_ghz: float = 2.87,
 #
 # No via-fill/tented-vs-open dimension: volumetric via conductivity needs the
 # 1.21um copper skin depth resolved against a 200um finest cell, 165x too
-# coarse to be meaningful (see docs/STATE.md, "what the fabrication stack
+# coarse to be meaningful (see docs/STATE.md (tag docs-archive-2026-09-29), "what the fabrication stack
 # costs"). Vias stay PEC; real copper is only applied to the exterior ground
 # planes, where Palace's surface-impedance BC is valid.
 FAB_VARIANTS = [

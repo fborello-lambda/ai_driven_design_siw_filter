@@ -146,10 +146,15 @@ def plot_layout(g: Geometry, path: str = "layout.png", launch: dict | None = Non
 
     # Dimension annotations
     L_inner = g.L_inner * MM
-    _dim_h(ax, 0, g.L_cav * MM, -half - 4, f"L_cav={g.L_cav*MM:.1f}")
+    L_cavs = g.L_cavs or [g.L_cav] * g.spec.N     # per-cavity when set
+    walls = np.cumsum(L_cavs) * MM                 # internal wall x positions
+    x0 = 0.0
+    for i, Lc in enumerate(L_cavs[:(len(L_cavs) + 1) // 2], start=1):
+        _dim_h(ax, x0, x0 + Lc * MM, -half - 4, f"L_cav{i}={Lc*MM:.2f}")
+        x0 += Lc * MM
     _dim_v(ax, L_inner + 2, -half, half, f"a_siw={g.a_siw*MM:.1f}")
     for i, w in enumerate(g.iris_widths, start=1):
-        x_wall = i * g.L_cav * MM
+        x_wall = walls[i - 1]
         _dim_v(ax, x_wall, -w / 2 * MM, w / 2 * MM,
                f"w{i}{i+1}={w*MM:.1f}", color="#b00", off=0)
     # external iris gap (input/output) -> Qe -> bandwidth

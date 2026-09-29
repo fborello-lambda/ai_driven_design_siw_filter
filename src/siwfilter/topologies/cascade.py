@@ -136,7 +136,7 @@ class CascadeTopology:
         w_ext = p.pop("w_ext", None)
         l_taper = p.pop("l_taper", None)
         w_ms = p.pop("w_ms", None)
-        p.setdefault("with_sma", True)  # real connector by default (see HANDOFF)
+        p.setdefault("with_sma", True)  # real connector by default (see HANDOFF (tag docs-archive-2026-09-29))
         for k, v in TAOGLAS_SMA.items():   # caller can still override any of these
             p.setdefault(k, v)
         res = _build_mesh(spec=spec, out_name=out_name, l_cavs_mm=l_cavs_mm,
@@ -203,7 +203,7 @@ class CascadeTopology:
         This existed for dualmode but was a `return None` stub here, which is
         the direct cause of the cascade searches failing: with no calibrated
         design region, the box stayed centred on `_L_INIT = 34.4` (documented
-        in docs/sma_connector/README.md as the "old (mismatch-blind)" design
+        in docs/sma_connector/README.md (tag docs-archive-2026-09-29) as the "old (mismatch-blind)" design
         that measures -4.6 dB against a real connector), and the GP was left
         doing blind global search in 5-6D. Measured screen-out rates tell the
         story: dualmode 34-37% (19 informative points, converges) versus

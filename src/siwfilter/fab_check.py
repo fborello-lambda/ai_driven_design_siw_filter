@@ -236,7 +236,7 @@ def run_checks(outdir: str, g: Geometry, spec: FilterSpec = SPEC,
             section="rules")
 
     # ---- 6b. the connector physically fits ----------------------------
-    # From the datasheet (docs/sma_connector/, Taoglas SPE-12-8-134/C/WY) --
+    # From the datasheet (docs/sma_connector/ (tag docs-archive-2026-09-29), Taoglas SPE-12-8-134/C/WY) --
     # whether the part can be soldered on at all, which no gerber check sees.
     if launch.get("cpwg_gap_mm") is not None:
         from .topologies.launch import (TAOGLAS_MAX_BOARD_MM,

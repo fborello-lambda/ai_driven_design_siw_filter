@@ -1,7 +1,7 @@
 """Topology protocol: the one interface every physical filter structure
 implements so ``optimize.py``/``cli.py`` can drive any of them identically.
 
-See HANDOFF.md's "Architecture: unified AI-driven design CLI" section for
+See HANDOFF.md (tag docs-archive-2026-09-29)'s "Architecture: unified AI-driven design CLI" section for
 the rationale. This is a thin adapter layer only -- no mesh-construction
 logic lives here; each concrete Topology wraps an existing, validated
 builder module (``palace_driven.py`` / ``palace_dualmode_driven.py``)

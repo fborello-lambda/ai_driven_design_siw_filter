@@ -38,7 +38,7 @@ def _near(a: float, b: float, tol: float = 1e-3) -> bool:
 
 def _dims(a_mm, w_ms_mm, l_taper_mm, l_feed_mm):
     # Recompute the true 50-ohm width directly rather than reading it off a
-    # cached Geometry -- see docs/sma_connector/README.md for why that cache
+    # cached Geometry -- see docs/sma_connector/README.md (tag docs-archive-2026-09-29) for why that cache
     # can be stale (tuned against a self-normalizing port, not real 50 ohm).
     sub = SPEC.substrate
     W = w_ms_mm if w_ms_mm is not None else microstrip_width_50ohm(sub.eps_r, sub.h) * MM
@@ -461,7 +461,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
     # from a via-fence gap (magnetic coupling only) -- cascaded dual-mode
     # SIW filters need both a magnetic coupling window and a separate
     # electric coupling slot to reach the other mode independently (see
-    # docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md
+    # docs/geometry_exploration/dualmode_cascade_v6_handoff_2026-08-28.md (tag docs-archive-2026-09-29)
     # sec 8/v8 for why widening a single via-fence aperture cannot do both).
     # slot_x_mm=None (default) adds no geometry.
     #
@@ -761,7 +761,7 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
             # bottom pulls the annulus end-face's centroid toward the pin
             # axis, misclassifying it as the pin cap (and tagging the coax
             # dielectric PEC, shorting the launch) once sma_rin_mm exceeds
-            # ~0.3773mm -- see docs/sma_connector/README.md. Disambiguate by
+            # ~0.3773mm -- see docs/sma_connector/README.md. (tag docs-archive-2026-09-29) Disambiguate by
             # EXTENT instead: the real cap disk spans ~rin, the annulus ~rout.
             if ((_near(cx, X0) or _near(cx, X1)) and rad < sma_rin_mm * 1.05
                     and yext <= sma_rin_mm * 1.5):

@@ -72,7 +72,7 @@ Domain ya reproduce la transmisión de Palace de forma independiente.
 ## Hallazgo colateral, no menor
 
 La auditoría (`docs/audit_cst_palace/`) encontró que el S11=−13.37dB usado para
-elegir cascade N=3 sobre dual-mode (`docs/PLAN.md`, `docs/STATE.md`) **no está
+elegir cascade N=3 sobre dual-mode (`docs/PLAN.md` (tag docs-archive-2026-09-29), `docs/STATE.md` (tag docs-archive-2026-09-29)) **no está
 convergido en malla**: refinar la malla de Palace ya en el repo
 (`output/data/mesh_convergence_cascade_N3.json`) lo empeora a −9.34dB. El S11
 real de cascade N=3 probablemente ronda el −10.5/−17dB, no el −13.37dB citado.

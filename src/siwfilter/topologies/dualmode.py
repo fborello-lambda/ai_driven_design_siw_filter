@@ -1,10 +1,10 @@
 """Dual-mode topology: N/2 dual-mode square SIW cavities (2 filter poles per
 physical cavity, via a TE102/TE201 degenerate-mode pair split by an internal
 floating iris row). Thin adapter over ``palace_dualmode_driven.py`` --
-see docs/dualmode_cavity/README.md for the physics/validation history.
+see docs/dualmode_cavity/README.md (tag docs-archive-2026-09-29) for the physics/validation history.
 
 Only N=2 (a single dual-mode cavity) is wired up here, matching what's
-actually been validated -- see HANDOFF.md, "no equivalent gap" note (unlike
+actually been validated -- see HANDOFF.md (tag docs-archive-2026-09-29), "no equivalent gap" note (unlike
 cascade.py, palace_dualmode_driven.build_mesh() already takes all geometry
 as explicit arguments, no module-global spec dependency to fix).
 """
@@ -24,7 +24,7 @@ from .base import MeshResult, ParamRange
 from .launch import TAOGLAS_CPWG as TAOGLAS_SMA
 
 # Default search box, centred on the validated design region
-# (docs/dualmode_cavity/README.md) rather than a blind wide box. Lower
+# (docs/dualmode_cavity/README.md (tag docs-archive-2026-09-29)) rather than a blind wide box. Lower
 # bounds on w_iris/w_ext extend below the landed design: bandwidth scales
 # with both couplings, and narrowing the band requires weaker coupling
 # (smaller w_iris -> k12, smaller w_ext -> Qe) than the landed point sits at.
@@ -256,7 +256,7 @@ class DualModeTopology:
                  a_mm: float = A_SIW_MM, mesh_max: float = 1.5, mesh_min: float = 0.4,
                  n_modes: int = 6, window: float = 0.5, device: str = "GPU") -> dict:
         """Cheap closed-cavity eigenmode k12(w_iris) sweep, folded in from
-        scripts/dualmode_calibrate_v2.py per HANDOFF.md's cleanup plan.
+        scripts/dualmode_calibrate_v2.py per HANDOFF.md (tag docs-archive-2026-09-29)'s cleanup plan.
 
         Runs each point at GPU/np=1 by default -- a single-rank eigenmode
         solve on this small a closed-cavity mesh fits comfortably in a 6GB

@@ -1,6 +1,6 @@
 """Physical filter topologies, each implementing the ``Topology`` protocol
 (see ``base.py``) so ``optimize.py``/``cli.py`` can drive any of them the
-same way. See HANDOFF.md's "Architecture: unified AI-driven design CLI"
+same way. See HANDOFF.md (tag docs-archive-2026-09-29)'s "Architecture: unified AI-driven design CLI"
 section for the design rationale.
 """
 from .base import Topology, ParamRange, MeshResult
