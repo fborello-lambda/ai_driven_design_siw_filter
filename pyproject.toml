@@ -1,6 +1,7 @@
 [project]
 name = "siw-filter"
 version = "0.1.0"
+license = "MIT"
 description = "Parametric SIW bandpass filter: synthesis, geometry, CST/KiCad/Palace, report."
 readme = "README.md"
 requires-python = ">=3.12"

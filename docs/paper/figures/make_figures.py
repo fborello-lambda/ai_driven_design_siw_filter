@@ -67,7 +67,7 @@ def _save(fig, name):
 
 
 def fig_timeline():
-    log = subprocess.run(["git", "log", "--format=%ad|%s", "--date=short"],
+    log = subprocess.run(["git", "log", "b06bf63", "--format=%ad|%s", "--date=short"],
                          cwd=ROOT, capture_output=True, text=True).stdout.splitlines()
     kinds = {"feat": "feature", "fix": "fix", "revert": "fix", "docs": "docs / results",
              "data": "docs / results", "results": "docs / results"}
@@ -157,7 +157,7 @@ def fig_designs():
         d = json.loads(path.read_text())
         f, s11, s21 = (np.asarray(d[k]) for k in ("f_ghz", "s11_db", "s21_db"))
         band = (f >= BAND[0]) & (f <= BAND[1])
-        lab = f"{name}: S11w {s11[band].max():.1f} dB, board {BOARD_MM[name]:.0f} mm"
+        lab = f"{name}: worst in-band |S11| {s11[band].max():.1f} dB, board {BOARD_MM[name]:.0f} mm"
         axes[0].plot(f, s21, color=c, lw=1.8, label=lab)
         axes[1].plot(f, s11, color=c, lw=1.8)
     for ax, t in zip(axes, ("|S21| (dB)", "|S11| (dB)")):

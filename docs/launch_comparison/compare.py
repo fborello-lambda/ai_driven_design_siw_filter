@@ -64,7 +64,7 @@ def plot_sparams(data: dict, spec: FilterSpec, summary: dict) -> Path:
             color='0.4', fontsize=8)
     for v, r in data.items():
         m = summary[v]
-        lab = (f"{LABELS[v]}  —  S11w {m['s11w_db']:.1f} dB, "
+        lab = (f"{LABELS[v]}  —  worst in-band |S11| {m['s11w_db']:.1f} dB, "
                f"BW {m['bw_mhz']:.0f} MHz, IL {m['il_db']:.2f} dB")
         ax.plot(r['f_ghz'], r['s21_db'], color=COLORS[v], lw=2, label=lab)
         ax.plot(r['f_ghz'], r['s11_db'], color=COLORS[v], lw=1.6, ls='--')

@@ -781,19 +781,22 @@ superior de la banda (2.94 GHz). Terminar de corregirlo requiere mover
 $w_{\text{ext}}$, $l_{\text{cav1}}$ y $w_{\text{iris}}$ de forma coordinada.
 
 **Por qué la pérdida de inserción es alta.** En un filtro angosto,
-$\text{IL} \approx 4.343\sum g_i/(\text{FBW}\,Q_u)$ [@hong2001microstrip]. Las
-contribuciones son las siguientes:
+$\text{IL} \approx 4.343\sum g_i/(\text{FBW}\,Q_u)$ [@hong2001microstrip], de
+modo que la pérdida la fija el $Q$ descargado. Las simulaciones de Palace
+tratan el metal como conductor perfecto, así que su $Q$ está limitado por el
+dieléctrico: $Q_d = 1/\tan\delta = 270$. Los ajustes de matriz de
+acoplamiento dieron entre 229 y 320, valores que rodean ese límite.
 
-- El RO4350B limita el $Q$ dieléctrico a $Q_d = 1/\tan\delta = 270$.
-- Con 0.76 mm de espesor, el $Q$ de conductor es $Q_c \approx 540$
-  [@pozar2012microwave].
-- En conjunto, $Q_u \approx 180$, lo que da 1.2--1.55 dB de disipación al 5 %
-  de ancho de banda.
-- La desadaptación de $-11$ dB agrega 0.35 dB.
+Con el ancho de banda simulado (6.3 %), $Q_u = 270$ predice 0.8 dB de
+disipación, y la desadaptación de $-11$ dB agrega 0.35 dB. El resto, unos
+0.5 dB, se atribuye a radiación en las secciones abiertas de microstrip, taper
+y lanzador.
 
-El valor simulado de 1.70 dB está, por lo tanto, cerca del piso físico de este
-laminado, este espesor y este ancho de banda. Un sustrato de menor pérdida,
-como RT/duroid 5880 de 1.52 mm, lo reduciría a $\approx$0.5 dB.
+En la placa real el cobre reduce el $Q$: con 0.76 mm de espesor,
+$Q_c \approx 540$ [@pozar2012microwave] y $Q_u \approx 180$, lo que suma unos
+0.4 dB. Se espera entonces medir entre 2.2 y 2.3 dB, cerca del piso físico de
+este laminado, este espesor y este ancho de banda. Un sustrato de menor
+pérdida, como RT/duroid 5880 de 1.52 mm, lo reduciría a $\approx$0.5 dB.
 
 **Verificación cruzada con CST.** Con la macro generada automáticamente, el
 solver de frecuencia de CST coincide con Palace en la frecuencia central

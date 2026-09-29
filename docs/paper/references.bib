@@ -1,5 +1,6 @@
 % Shared bibliography for both papers in docs/paper/.
-% Entries marked "verified 2026-09-29" were checked online while drafting.
+% All DOIs resolved against Crossref on 2026-09-29; the 2026 arXiv entries
+% were checked on arxiv.org the same day.
 % Classic SIW / filter references are standard textbook citations; confirm
 % page numbers against IEEE Xplore before submission.
 
@@ -60,14 +61,6 @@
   doi     = {10.1049/iet-map.2010.0463}
 }
 
-@article{chen2008cross,
-  author  = {Chen, Xiao-Ping and Wu, Ke},
-  title   = {Substrate integrated waveguide cross-coupled filter with negative coupling structure},
-  journal = {IEEE Transactions on Microwave Theory and Techniques},
-  volume  = {56}, number = {1}, pages = {142--149}, year = {2008},
-  doi     = {10.1109/TMTT.2007.912222}
-}
-
 @article{chen2014siwfilter,
   author  = {Chen, Xiao-Ping and Wu, Ke},
   title   = {Substrate integrated waveguide filter: basic design rules and fundamental structure features},
@@ -82,8 +75,7 @@
   title   = {A novel single-cavity dual mode substrate integrated waveguide filter with non-resonating node},
   journal = {IEEE Microwave and Wireless Components Letters},
   volume  = {19}, number = {6}, pages = {368--370}, year = {2009},
-  doi     = {10.1109/LMWC.2009.2020017},
-  note    = {verified 2026-09-29}
+  doi     = {10.1109/LMWC.2009.2020017}
 }
 
 @article{xu2014hexagonal,
@@ -91,15 +83,7 @@
   title   = {Novel hexagonal dual-mode substrate integrated waveguide filter with source-load coupling},
   journal = {The Scientific World Journal},
   volume  = {2014}, pages = {915740}, year = {2014},
-  doi     = {10.1155/2014/915740},
-  note    = {verified 2026-09-29}
-}
-
-@article{chen2007dualband,
-  author  = {Chen, Xiao-Ping and Wu, Ke and Li, Zhao-Long},
-  title   = {Dual-band and triple-band substrate integrated waveguide filters with {Chebyshev} and quasi-elliptic responses},
-  journal = {IEEE Transactions on Microwave Theory and Techniques},
-  volume  = {55}, number = {12}, pages = {2569--2578}, year = {2007}
+  doi     = {10.1155/2014/915740}
 }
 
 % ------------------------------------------------------- filter theory ----
@@ -207,25 +191,21 @@
   note         = {Models used: Claude Sonnet 5, Opus 5, Opus 5.5, Fable 5}
 }
 
-@misc{touchstone,
-  author       = {{IBIS Open Forum}},
-  title        = {Touchstone File Format Specification, Version 2.1},
-  howpublished = {\url{https://ibis.org/touchstone_ver2.1/touchstone_ver2_1.pdf}},
-  year         = {2024}
-}
-
 % --------------------------------------------- datasheets & fab -----------
 @misc{rogers4350b,
   author       = {{Rogers Corporation}},
   title        = {{RO4000} Series High Frequency Circuit Materials ({RO4003C}, {RO4350B}) Data Sheet},
   howpublished = {\url{https://www.rogerscorp.com}},
-  note         = {Design Dk 3.66, Df 0.0037 at 10 GHz}
+  year         = {2026},
+  note         = {Design Dk 3.66, Df 0.0037 at 10 GHz; accessed 2026-09-04}
 }
 
 @misc{taoglas_sma,
   author       = {{Taoglas}},
   title        = {{EMPCB.SMAFSTJ.B.HT} Edge-Mount {SMA} Female Jack, Specification {SPE-12-8-134/C/WY}},
-  howpublished = {Datasheet}
+  howpublished = {Datasheet},
+  year         = {2026},
+  note         = {Accessed 2026-09-04}
 }
 
 @misc{jlcpcb_caps,
@@ -272,35 +252,40 @@
 }
 
 % ---------------------------------------------- LLM agents for design -----
+@article{sallam2026pidnn,
+  author  = {Sallam, Tarek and Attiya, Ahmed M.},
+  title   = {Fast and accurate extraction of microwave filter coupling matrix via physics-informed deep learning},
+  journal = {Scientific Reports},
+  volume  = {16}, pages = {17192}, year = {2026},
+  doi     = {10.1038/s41598-026-46255-w}
+}
+
+@misc{zhang2026agenticbugs,
+  author       = {Zhang, Xiaowen and Zhang, Hannuo and Tan, Shin Hwei},
+  title        = {Understanding Bugs in Modern Agentic Frameworks: A Study of Symptoms, Root Causes, and Triggering Conditions},
+  howpublished = {arXiv:2604.08906},
+  year         = {2026}
+}
+
 @misc{heinrichs2026prompt,
   author       = {Heinrichs, Markus and Moschner, Oscar and Tewes, Simon and Wienstroer, Volker and Sezgin, Aydin and Kronberger, Rainer},
   title        = {From Prompt to Prototype: Towards a Frontier {LLM} Driven {RF} Engineering Workflow},
   howpublished = {arXiv:2608.31006},
-  year         = {2026},
-  note         = {verified 2026-09-29}
+  year         = {2026}
 }
 
 @misc{xing2026rfagent,
   author       = {Xing, Yueqi and He, Houbo and Wang, Jolie and Ni, Erin and Wang, Shikai and Li, Qiufeng and Cao, Weidong and Chi, Taiyun},
   title        = {{RF-Agent}: A Practical Framework for Building Language Agents for {RFIC} Design},
   howpublished = {arXiv:2607.18772},
-  year         = {2026},
-  note         = {verified 2026-09-29}
+  year         = {2026}
 }
 
 @misc{lu2026rfampdesigner,
   author       = {Lu, Hang and Li, Guochang and Chen, Qianyu and Gao, Huiyan and Wang, Shaogang and He, Xuanyu and Liu, Yiwei and Chen, Gaopeng and Li, Nayu and Qi, Xiaokang and Song, Chunyi and Xu, Zhiwei},
   title        = {{RFAmpDesigner}: A Self-Evolving Multi-Agent {LLM} Framework for Automated Radio Frequency Amplifier Design},
   howpublished = {arXiv:2605.10093},
-  year         = {2026},
-  note         = {verified 2026-09-29}
-}
-
-@misc{liu2023chipnemo,
-  author       = {Liu, Mingjie and others},
-  title        = {{ChipNeMo}: Domain-Adapted {LLMs} for Chip Design},
-  howpublished = {arXiv:2311.00176},
-  year         = {2023}
+  year         = {2026}
 }
 
 @inproceedings{yao2023react,
