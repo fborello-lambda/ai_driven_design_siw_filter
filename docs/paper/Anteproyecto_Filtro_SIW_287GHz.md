@@ -677,9 +677,14 @@ Aplicada al filtro ensamblado, la optimización bayesiana global nunca superó
 $-5$ dB de adaptación en más de 60 evaluaciones. La causa es estructural. El
 ancho de banda es **discontinuo** en la apertura externa: por debajo de un
 umbral de acoplamiento solo el polo central supera $-3$ dB, y por encima los
-tres polos se unen. En la cascada N=3 se midieron 16, 22, 36, 65 y luego
-215 MHz, con el objetivo de 143.5 MHz dentro del salto. Un proceso gaussiano
-supone una función suave, así que no puede modelar ese salto.
+tres polos se unen. Sobre la geometría fabricada (Fig. \ref{fig:calib}c), el
+ancho de banda sube de 96 a 123 MHz entre $w_{\text{ext}} = 10$ y 12 mm, salta
+a 195 MHz en 13 mm y luego vuelve a bajar, porque las cavidades extremas quedan
+sobreacopladas y los ceros de reflexión pasan de tres a uno. El objetivo de
+143.5 MHz se cruza dos veces; el segundo cruce, en 16 mm, tiene un solo cero
+de reflexión y $-4$ dB de adaptación. Un proceso gaussiano supone una función
+suave, así que no puede modelar ese salto y además converge a la solución
+falsa.
 
 El método que funcionó mide cada acoplamiento en la estructura más pequeña que
 lo contiene (Fig. \ref{fig:calib}):
@@ -691,7 +696,8 @@ lo contiene (Fig. \ref{fig:calib}):
   cargado, y de él se obtiene $Q_e = 2/(1/Q_L - 1/Q_u)$ con
   $Q_u = 1/\tan\delta = 270$.
 
-Ambas curvas son suaves y se invierten en los valores de síntesis. Cada curva
+Ambas curvas son monótonas y se invierten en los valores de síntesis:
+$w_{\text{iris}} = 13.85$ mm y $w_{\text{ext}} = 13.53$ mm. Cada curva
 convergió en unas tres simulaciones, y el acoplamiento interno quedó dentro
 del 2 % del objetivo. La optimización bayesiana se conservó solo como pulido
 local alrededor de ese resultado.
@@ -700,9 +706,10 @@ local alrededor de ese resultado.
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.95\textwidth]{figures/fig_calib.png}
-\caption{(a), (b) Las magnitudes de calibración son suaves e invertibles.
-(c) El ancho de banda del filtro ensamblado, que es lo que evalúa un
-optimizador de caja negra, salta cuando los polos se unen.}
+\caption{(a), (b) Las magnitudes de calibración son monótonas e invertibles
+(punteado: objetivo de síntesis y ancho invertido). (c) Ancho de banda a
+$-3$\,dB del filtro ensamblado: salta entre 12 y 13\,mm y luego baja.
+Etiquetas: número de ceros de reflexión. Malla gruesa.}
 \label{fig:calib}
 \end{figure*}
 ```

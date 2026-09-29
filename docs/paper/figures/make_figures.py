@@ -192,38 +192,49 @@ def fig_layouts():
 
 def fig_calib():
     """Smooth calibration observables vs the discontinuous assembled-filter
-    bandwidth -- the reason calibrate-and-invert replaced global GP search."""
-    cal = ROOT / "output/data/calibration_cascade_N3.json"
-    scan = sorted((ROOT / "output/data").glob("scan_cascade_N3*w_ext*.json"))
-    if not cal.exists() or not scan:
+    bandwidth -- the reason calibrate-and-invert replaced global GP search.
+    Data: docs/paper/data/ (copied from `siw calibrate` / `siw scan` outputs)."""
+    data = OUT.parent / "data"
+    for name in ("calibration_cascade_N3.json", "scan_cascade_N3_w_ext.json"):
+        src = ROOT / "output/data" / name
+        if src.exists():
+            data.mkdir(exist_ok=True)
+            shutil.copy2(src, data / name)
+    cal, scan = data / "calibration_cascade_N3.json", data / "scan_cascade_N3_w_ext.json"
+    if not (cal.exists() and scan.exists()):
         print("skip fig_calib: needs siw calibrate + siw scan outputs")
         return
     c = json.loads(cal.read_text())
-    s = json.loads(scan[-1].read_text())
+    s = json.loads(scan.read_text())
     fig, axes = plt.subplots(1, 3, figsize=(13, 3.6))
-    k = c["k"]["points"]; q = c["qe"]["points"]
-    axes[0].plot([p["w_iris"] for p in k], [p["k"] for p in k], "o-")
-    axes[0].axhline(c["k"].get("target", 0.0461), color="0.5", ls=":")
-    axes[0].set_xlabel("w_iris (mm)"); axes[0].set_ylabel("k")
+    kp = sorted((float(w), v["k"]) for w, v in c["k"]["points"].items() if v.get("ok"))
+    qp = sorted((float(w), v["Qe"]) for w, v in c["qe"]["points"].items() if v.get("ok"))
+    inv = c.get("inverted_geometry", {})
+    axes[0].plot(*zip(*kp), "o-")
+    axes[0].axhline(c["targets"]["k"], color="0.5", ls=":")
+    if "w_iris" in inv:
+        axes[0].axvline(inv["w_iris"], color="0.5", ls=":")
+    axes[0].set_xlabel(r"$w_{\mathrm{iris}}$ (mm)"); axes[0].set_ylabel("k")
     axes[0].set_title("(a) internal coupling, 2-cavity eigenmode", fontsize=9)
-    axes[1].plot([p["w_ext"] for p in q], [p["Qe"] for p in q], "o-", color="#ff7f0e")
-    axes[1].axhline(c["qe"].get("target", 20.63), color="0.5", ls=":")
+    axes[1].plot(*zip(*qp), "o-", color="#ff7f0e")
+    axes[1].axhline(c["targets"]["Qe"], color="0.5", ls=":")
+    if "w_ext" in inv:
+        axes[1].axvline(inv["w_ext"], color="0.5", ls=":")
     axes[1].set_yscale("log")
-    axes[1].set_xlabel("w_ext (mm)"); axes[1].set_ylabel("Qe")
+    axes[1].set_xlabel(r"$w_{\mathrm{ext}}$ (mm)"); axes[1].set_ylabel(r"$Q_e$")
     axes[1].set_title("(b) external Q, one driven cavity", fontsize=9)
-    pts = s["points"]
-    x = [p["value"] for p in pts]; bw = [p["bw"] for p in pts]
-    lobes = [p.get("n_lobes", 1) for p in pts]
+    pts = sorted((float(w), v) for w, v in s["points"].items() if v.get("ok"))
+    x = [w for w, _ in pts]; bw = [v["bw"] for _, v in pts]
     axes[2].plot(x, bw, "o-", color="#d62728")
-    for xi, yi, n in zip(x, bw, lobes):
-        if n > 1:
-            axes[2].annotate("split", (xi, yi), fontsize=7, xytext=(3, 3),
-                             textcoords="offset points")
+    for xi, (_, v) in zip(x, pts):
+        axes[2].annotate(f"{v['poles']}", (xi, v["bw"]), fontsize=7,
+                         xytext=(0, 5), textcoords="offset points", ha="center")
     axes[2].axhline(143.5, color="0.5", ls=":")
-    axes[2].set_xlabel("w_ext (mm)"); axes[2].set_ylabel("−3 dB bandwidth (MHz)")
-    axes[2].set_title("(c) assembled N=3 filter", fontsize=9)
+    axes[2].set_xlabel(r"$w_{\mathrm{ext}}$ (mm)"); axes[2].set_ylabel("−3 dB bandwidth (MHz)")
+    axes[2].set_title("(c) assembled N=3 filter (labels: reflection zeros)", fontsize=9)
     for ax in axes:
         ax.grid(alpha=0.3)
+    fig.tight_layout()
     _save(fig, "fig_calib.png")
 
 

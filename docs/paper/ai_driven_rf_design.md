@@ -246,9 +246,17 @@ cause is structural. The objective scores the passband width, and that width
 is discontinuous in the external aperture $w_{\text{ext}}$. Below a coupling threshold
 only the centre pole clears the −3 dB line, so the band measures one
 resonance. Above the threshold all N poles merge and the width jumps. On the
-N = 3 cascade the measured widths were 16, 22, 36, 65 and then 215 MHz, with
-the 143.5 MHz target inside the jump. A GP assumes a smooth objective, so it
-inherits the discontinuity. The search-health data showed the same thing:
+N = 3 cascade the widths recorded during the search were 16, 22, 36, 65 and
+then 215 MHz, with the 143.5 MHz target inside the jump. We re-measured this
+for the paper on the fabricated geometry (Fig. \ref{fig:calib}c, data in the
+repository). The width rises 96, 106, 123 MHz for $w_{\text{ext}}$ = 10–12 mm,
+jumps to 195 MHz at 13 mm, and then *falls* again as the end cavities are
+over-coupled and the reflection zeros drop from three to one. The target
+width is crossed twice. The second crossing, at 16 mm, has one reflection
+zero and −4 dB of return loss; a bandwidth-driven search, or the scan's own
+inversion (15.2 mm), lands there. A GP assumes a smooth objective, so it
+inherits both the jump and the false solution. The search-health data showed
+the same thing:
 57–83 % of cascade candidates were screened out, leaving 2–9 informative
 points per run, against 34–37 % and about 19 informative points on the
 dual-mode filter, where the search converged.
@@ -266,6 +274,9 @@ it (Fig. \ref{fig:calib}):
 
 Inverting the fitted curves at the synthesis targets, assembling the filter
 and making a final driven fc trim converged in about three solves per curve.
+The re-run calibration for this paper inverts to $w_{\text{iris}}$ = 13.85 mm
+and $w_{\text{ext}}$ = 13.53 mm, against 14.42 and 13.96 mm on the fabricated
+board, whose end cavities were subsequently trimmed.
 The resulting internal coupling was within 2 % of target. At that checkpoint
 the N = 4 centre frequency also landed at 2.870 GHz, although the N = 4 design
 was later abandoned for its return loss (Sec. VI). The GP was kept only as a local polish
@@ -278,9 +289,10 @@ failed.
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.95\textwidth]{figures/fig_calib.png}
-\caption{(a), (b) The calibration observables are smooth and invertible.
-(c) The bandwidth of the assembled filter, the quantity a black-box objective
-scores, jumps as the poles merge.}
+\caption{(a), (b) The calibration observables are monotonic and invertible
+(dotted: synthesis target and inverted width). (c) The $-3$\,dB bandwidth of the
+assembled filter, the quantity a black-box objective scores, jumps between 12
+and 13\,mm and then falls. Labels: number of reflection zeros. Coarse mesh.}
 \label{fig:calib}
 \end{figure*}
 ```
