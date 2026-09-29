@@ -224,7 +224,7 @@ def run(refresh: bool = False, add_run: str | None = None,
         print("no cases available")
         return {}
 
-    path = plot_comparison(designs, FilterSpec(N=2), out_img(out_name))
+    plot_comparison(designs, FilterSpec(N=2), out_img(out_name))
     hdr = (f"{'design':<34}{'fc GHz':>9}{'IL dB':>8}{'BW MHz':>8}{'S11 dB':>9}"
            f"{'board mm':>10}{'area cm2':>10}")
     print("\n" + hdr); print("-" * len(hdr))

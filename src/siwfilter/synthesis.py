@@ -104,7 +104,6 @@ def sparams_from_matrix(M: np.ndarray, FBW: float, f0: float,
     S11 = 1 + 2j [A^-1]_{S,S},  S21 = -2j [A^-1]_{L,S}.
     """
     size = M.shape[0]
-    N = size - 2
 
     W = np.eye(size)
     W[0, 0] = 0.0
@@ -189,7 +188,7 @@ if __name__ == "__main__":
         print(f"  k{i}{i+1} = {ki:.4f}")
     print("  (CLAUDE.md check: k12=k23 ~ 0.046)\n")
 
-    print(f"External Q:")
+    print("External Q:")
     print(f"  Qe_in  = {res.qe_in:.4f}")
     print(f"  Qe_out = {res.qe_out:.4f}")
     print("  (CLAUDE.md check: Qe ~ 20.6)\n")

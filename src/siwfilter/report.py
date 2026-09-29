@@ -35,7 +35,8 @@ import skrf as rf
 
 from .config import OUTPUT_DIR, data_path, out_s2p, out_img
 
-REPORT_DIR = data_path("docs")
+REPORT_DIR = data_path("docs")               # STATE.md figures
+PAPER_DIR = os.path.join(REPORT_DIR, "paper")  # Anteproyecto + its figures
 REPORT_MD = "Anteproyecto_Filtro_SIW_287GHz.md"
 IMG_DIR = os.path.join(OUTPUT_DIR, "imgs")
 
@@ -122,14 +123,14 @@ def build_compare_final() -> bool:
     ax[1].axvline(2.87, color="k", ls=":", lw=.8); ax[1].legend(fontsize=8, loc="lower center")
     out = out_img("compare_final.png")
     fig.tight_layout(); fig.savefig(out, dpi=140)
-    shutil.copy2(out, os.path.join(REPORT_DIR, "compare_final.png"))
-    print(f"  compare_final.png -> {REPORT_DIR}")
+    shutil.copy2(out, os.path.join(PAPER_DIR, "compare_final.png"))
+    print(f"  compare_final.png -> {PAPER_DIR}")
     return True
 
 
 def build_cst_v2_compare() -> bool:
     """Overlay the returned CST run (final design) vs Palace + target."""
-    cst_txt = os.path.join(REPORT_DIR, "swi_CST_data.txt")
+    cst_txt = os.path.join(PAPER_DIR, "swi_CST_data.txt")
     if not all(os.path.exists(p) for p in (cst_txt, out_s2p("palace.s2p"), out_s2p("target.s2p"))):
         print("  (skip compare_cst_v2.png — missing CST V2 data / palace / target)")
         return False
@@ -137,7 +138,7 @@ def build_cst_v2_compare() -> bool:
     tgt = rf.Network(out_s2p("target.s2p"))
     pal = rf.Network(out_s2p("palace.s2p"))
 
-    f, s11, s21 = cst_s11[:, 0], cst_s11[:, 1], cst_s21[:, 1]
+    f, s21 = cst_s11[:, 0], cst_s21[:, 1]
     peak = s21.max(); above = f[s21 >= peak - 3]
     fc = 0.5 * (above.min() + above.max()); bw3 = (above.max() - above.min()) * 1e3
     print(f"  CST V2: center(-3dB)={fc:.4f} GHz, BW(-3dB)={bw3:.0f} MHz, peak S21={peak:.2f} dB")
@@ -156,9 +157,9 @@ def build_cst_v2_compare() -> bool:
     ax[1].set_ylabel("|S21| (dB)"); ax[1].set_xlabel("Frecuencia (GHz)")
     ax[1].set_xlim(2.0, 3.6); ax[1].set_ylim(-60, 3); ax[1].grid(alpha=.3)
     ax[1].axvline(2.87, color="k", ls=":", lw=.8); ax[1].legend(fontsize=8, loc="lower center")
-    out = os.path.join(REPORT_DIR, "compare_cst_v2.png")
+    out = os.path.join(PAPER_DIR, "compare_cst_v2.png")
     fig.tight_layout(); fig.savefig(out, dpi=140)
-    print(f"  compare_cst_v2.png -> {REPORT_DIR}")
+    print(f"  compare_cst_v2.png -> {PAPER_DIR}")
     return True
 
 
@@ -453,7 +454,7 @@ def build_stackup_topview(spec=None, out_name: str = "stackup_topview",
     # THE launch (topologies/launch.py) -- the single definition every
     # topology and every drawing reads, so the picture cannot depict a
     # launch that is not simulated.
-    from .topologies.dualmode import (A_SIW_MM, JLCPCB_SOLDERMASK,
+    from .topologies.dualmode import (JLCPCB_SOLDERMASK,
                                       JLCPCB_SILKSCREEN, JLCPCB_ENIG)
     from .topologies.launch import TAOGLAS_CPWG as CPWG
     spec = spec or FilterSpec(N=2)
@@ -608,7 +609,7 @@ def verify_drawing_matches_mesh(spec=None, params: dict | None = None) -> bool:
     centres the mesher placed against the ones the drawing helpers compute.
     """
     import numpy as _np
-    from .config import FilterSpec, out_data
+    from .config import FilterSpec
     from .palace_dualmode_driven import (_dims, _via_layout, gnd_stitch_layout,
                                          feed_trace_poly)
     from .topologies.dualmode import DualModeTopology
@@ -944,7 +945,7 @@ def sync_figs() -> list[str]:
     for name in REPORT_FIGS:
         src = os.path.join(IMG_DIR, name)
         if os.path.exists(src):
-            shutil.copy2(src, os.path.join(REPORT_DIR, name))
+            shutil.copy2(src, os.path.join(PAPER_DIR, name))
             copied.append(name)
             print(f"  copied {name}")
         else:
@@ -955,7 +956,8 @@ def sync_figs() -> list[str]:
 def build_pdf() -> int:
     """Compile the report Markdown to PDF via the folder's gen_pdfs.py."""
     print(f"\nCompiling {REPORT_MD} ...")
-    proc = subprocess.run(["uv", "run", "gen_pdfs.py", "--force", REPORT_MD], cwd=REPORT_DIR)
+    proc = subprocess.run(["uv", "run", "gen_pdfs.py", "--force", os.path.join("paper", REPORT_MD)],
+                          cwd=REPORT_DIR)
     return proc.returncode
 
 

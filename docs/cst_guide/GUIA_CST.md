@@ -11,6 +11,8 @@ toc: true
 toc-depth: 2
 ---
 
+> **Nota (2026-09-29):** esta guía y los archivos de esta carpeta (`.bas`, `FAB_NOTES.md`, `.s2p`) corresponden a la placa **antes** del recorte de −0,3 mm en las cavidades extremas (166,38 mm). La placa que se fabrica mide 165,78 mm; su macro y paquete de fabricación están en `docs/final_check/fab/`. Los pasos en CST son los mismos.
+
 \newpage
 
 # Qué es esto

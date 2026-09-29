@@ -13,6 +13,12 @@ toc-depth: 2
 
 \newpage
 
+> **Update 2026-09-23:** the fabricated board is the cascade N=3 with the end
+> cavities trimmed −0.3 mm (`l_cav1` = 33.939 mm; fine-mesh S11w −11.15 dB,
+> BW 182 MHz, board 165.78 mm). The verdict, JLCPCB order notes and fab package
+> are in `final_check/REPORT.md` and `final_check/fab/`; numbers below that
+> quote `l_cav1` = 34.239 describe the pre-trim golden.
+
 # The goal
 
 A Substrate Integrated Waveguide (SIW) bandpass filter:
@@ -289,7 +295,7 @@ siw layout --topology dualmode --N 2 \
 # fabrication outputs for the topology actually being sent to fab (see the
 # 2026-09-04 update above) -- cascade N=3, not this dual-mode design
 siw kicad --topology cascade --N 3 \
-    --params l_cav1=34.239,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 \
+    --params l_cav1=33.939,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 \
     --launch cpwg
 ```
 

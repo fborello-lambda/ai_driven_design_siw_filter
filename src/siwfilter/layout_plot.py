@@ -18,7 +18,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Polygon, Rectangle
 
-from .config import SPEC, FilterSpec, out_img, out_data
+from .config import SPEC, out_img, out_data
 from .siw_geometry import Geometry, build_geometry
 from .palace_dualmode_driven import gnd_stitch_layout
 
@@ -164,7 +164,7 @@ def plot_layout(g: Geometry, path: str = "layout.png", launch: dict | None = Non
     ax.set_xlabel("x [mm]")
     ax.set_ylabel("y [mm]")
     iris_src = "EM-calibrated iris widths" if g.iris_calibrated \
-        else "PLACEHOLDER iris widths (run calibrate.py --sweep)"
+        else "PLACEHOLDER iris widths (run `siw calibrate`)"
     ax.set_title(
         f"SIW BPF top view — N={spec.N}, f0={spec.f0/1e9:.3f} GHz, "
         f"{sub.name}  (vias d={spec.d_via*MM:.2f} mm, p={spec.p_via*MM:.2f} mm)\n"

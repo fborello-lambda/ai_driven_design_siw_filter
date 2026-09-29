@@ -130,7 +130,7 @@ AddToHistory "define frequency range", "Solver.FrequencyRange ""2.0"", ""3.6"""
     ]
     # One L_cav per cavity -- they generally differ, and a single "L_cav"
     # StoreParameter would mislabel every cavity but one.
-    for i, Lc in enumerate(g.L_cavs, start=1):
+    for i, Lc in enumerate(g.L_cavs or [g.L_cav] * g.spec.N, start=1):
         params.append((f"L_cav{i}", _f(Lc), f"cavity {i} length [mm] "
                                             f"(read-only: vias are baked)"))
     for i, w in enumerate(g.iris_widths, start=1):

@@ -155,5 +155,5 @@ neither double-publishes the same claims as new.
 ## Building this document
 
 ```bash
-cd docs && pandoc --pdf-engine=xelatex PUBLICATION_VENUES.md -o PUBLICATION_VENUES.pdf
+cd docs/paper && pandoc --pdf-engine=xelatex PUBLICATION_VENUES.md -o PUBLICATION_VENUES.pdf
 ```

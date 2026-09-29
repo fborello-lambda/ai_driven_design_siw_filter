@@ -37,7 +37,7 @@ import subprocess
 
 import numpy as np
 
-from .config import FilterSpec, find_palace, has_gpu, out_data, out_img
+from .config import FilterSpec, find_palace, has_gpu, out_data
 from .synthesis import chebyshev_g, coupling_matrix, sparams_from_matrix
 from .topologies.base import Topology
 

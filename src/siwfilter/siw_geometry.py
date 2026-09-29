@@ -10,7 +10,7 @@ N+1 coupling structures total.
 
 IMPORTANT: the iris-width <-> k and taper <-> Qe maps here are ANALYTICAL
 PLACEHOLDERS to get the layout drawing going. The authoritative numbers come
-from calibrate.py (CLAUDE.md sec. 6). Anything marked PLACEHOLDER is expected
+from `siw calibrate` (CLAUDE.md sec. 6). Anything marked PLACEHOLDER is expected
 to be overwritten by EM calibration.
 
 Run:  uv run python siw_geometry.py
@@ -33,7 +33,7 @@ _CACHE = out_data("calibration.json")
 ETA0 = math.sqrt(MU0 / EPS0)        # free-space wave impedance ~376.73 ohm
 
 # Placeholder coupling: w_iris = a_eff * IRIS_C * k**(1/3). Monotonic in k and
-# gives ~0.2-0.3*a_eff windows for k~0.05. REPLACED by calibrate.py fit w(k).
+# gives ~0.2-0.3*a_eff windows for k~0.05. REPLACED by `siw calibrate` fit w(k).
 IRIS_C = 0.60
 
 
@@ -212,13 +212,13 @@ def cpwg_gap_50ohm(eps_r: float, h: float, W: float, Z0: float = 50.0,
 
 
 # ---------------------------------------------------------------------------
-# Placeholder coupling maps (REPLACED by calibrate.py)
+# Placeholder coupling maps (REPLACED by `siw calibrate`)
 # ---------------------------------------------------------------------------
 def iris_width_from_k(k: float, a_eff: float) -> float:
     """PLACEHOLDER analytical estimate of internal iris window width from k.
 
     Monotonic increasing in k. Real values come from the EM-fit w(k) in
-    calibrate.py (CLAUDE.md sec. 6); this only seeds the layout drawing.
+    `siw calibrate` (CLAUDE.md sec. 6); this only seeds the layout drawing.
     """
     return a_eff * IRIS_C * (k ** (1.0 / 3.0))
 
@@ -231,7 +231,7 @@ def _cache_key(spec: FilterSpec) -> str:
 def calibrated_iris_width(spec: FilterSpec, k: float) -> float | None:
     """Iris width [m] for coupling k from the cached EM fit, or None if absent.
 
-    Reads calibration.json directly (no import of calibrate.py -> no import
+    Reads calibration.json directly (no import of the calibration code -> no import
     cycle). The fit is only valid inside the swept k-range; extrapolation
     returns None so the caller falls back to the placeholder.
     """
@@ -314,7 +314,7 @@ def build_geometry(spec: FilterSpec = SPEC,
     fc_actual = te10_cutoff(a_eff, sub.eps_r)
     L_eff = te101_length(spec.f0, a_eff, sub.eps_r)
     L_cav = L_eff                              # analytical TE101 length; matched-feed openEMS + CST confirm ~38mm is correct
-    # prefer EM-calibrated iris widths (calibrate.py); fall back to placeholder
+    # prefer EM-calibrated iris widths (`siw calibrate`); fall back to placeholder
     iris_widths = []
     iris_calibrated = True
     for k in syn.k:
@@ -385,10 +385,6 @@ def _build_primitives(g: Geometry) -> None:
 
     vias: list[tuple[float, float]] = []
 
-    # y grid across the width at pitch p, symmetric about 0 (for transverse walls)
-    n_trans = int(round(g.a_siw / p))
-    y_grid = np.linspace(-half, half, n_trans + 1)
-
     if g.L_cavs:
         # --- per-cavity lengths: place side columns segment-by-segment so every
         # internal wall lands exactly on a side column (no clashing corners). ---
@@ -419,7 +415,7 @@ def _build_primitives(g: Geometry) -> None:
     # Endpoint vias at y = +/-half coincide with the side wall -> deduped below.
     #
     # 2026-08-30: the arm vias SPAN [w/2, half] instead of being filtered out
-    # of the fixed y_grid. Filtering made w_iris QUANTIZED: a via only appears
+    # of a fixed y grid. Filtering made w_iris QUANTIZED: a via only appears
     # or disappears when w/2 crosses a grid point, i.e. in ~p-sized steps of w.
     # Measured here (a_siw=39.79, p=3.0 -> grid step 3.06mm), six calibration
     # irises collapsed onto three distinct geometries:
@@ -532,7 +528,7 @@ if __name__ == "__main__":
     g = build_geometry(SPEC)
     spec, sub = g.spec, g.spec.substrate
 
-    print(f"=== SIW geometry (analytical first pass) ===")
+    print("=== SIW geometry (analytical first pass) ===")
     print(f"substrate     : {sub.name} (eps_r={sub.eps_r}, h={_mm(sub.h)})")
     print(f"f0            : {spec.f0/1e9:.3f} GHz   target fc: {spec.fc_target/1e9:.3f} GHz")
     print()
@@ -543,18 +539,18 @@ if __name__ == "__main__":
     print(f"cavity        : {_mm(g.a_eff)} x {_mm(g.L_cav)} (near-square)")
     print(f"L_inner       : {_mm(g.L_inner)}  ({spec.N} cavities)")
     print()
-    src = "EM-CALIBRATED (calibrate.py)" if g.iris_calibrated \
-        else "PLACEHOLDER w(k) -> run calibrate.py --sweep"
+    src = "EM-CALIBRATED (`siw calibrate`)" if g.iris_calibrated \
+        else "PLACEHOLDER w(k) -> run `siw calibrate`"
     print(f"internal irises [{src}]:")
     for i, (k, w) in enumerate(zip(g.syn.k, g.iris_widths), start=1):
         print(f"  iris {i}{i+1}: k={k:.4f} -> w = {_mm(w)}")
     print()
-    print(f"feed / taper:")
+    print("feed / taper:")
     print(f"  50-ohm microstrip W_ms : {_mm(g.W_ms)} (eps_eff={g.eps_eff_ms:.3f})")
     print(f"  taper length L_taper   : {_mm(g.L_taper)} (~lambda_g_ms/4)")
     print(f"  SIW Z_PI @ f0          : {g.Z_PI:.2f} ohm")
     print()
-    print(f"diagnostics:")
+    print("diagnostics:")
     print(f"  lambda_g (SIW) : {_mm(g.lambda_g_siw)}")
     print(f"  lambda_g (MS)  : {_mm(g.lambda_g_ms)}")
     print(f"  lambda0        : {_mm(g.lambda0)}")

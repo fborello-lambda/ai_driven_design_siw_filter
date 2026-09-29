@@ -1,17 +1,13 @@
 [project]
 name = "siw-filter"
 version = "0.1.0"
-description = "Parametric SIW bandpass filter: synthesis, geometry, CST/openEMS/Palace, report."
+description = "Parametric SIW bandpass filter: synthesis, geometry, CST/KiCad/Palace, report."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "cython>=3.2.5",
     "gmsh>=4.15.2",
-    "h5py>=3.16.0",
     "matplotlib>=3.10.9",
-    "meshio>=5.3.5",
     "numpy>=2.4.6",
-    "python-docx>=1.2.0",
     "scikit-optimize>=0.10.2",
     "scikit-rf>=1.12.0",
     "scipy>=1.17.1",

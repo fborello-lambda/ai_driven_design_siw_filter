@@ -749,7 +749,6 @@ def cmd_layout(args) -> int:
     # (e.g. cascade N=3 vs N=4) are different geometries and must not share
     # a filename, or the second overwrites the first's baseline picture.
     prefix = f"layout_{args.topology}_N{spec.N}"
-    r = None
     if args.render is not None:
         _artifacts(topo, spec, params, prefix)
     else:

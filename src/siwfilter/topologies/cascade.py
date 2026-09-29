@@ -334,7 +334,7 @@ class CascadeTopology:
         fit = k_fit = None
         if len(ok) >= 3:
             ws, ks = zip(*ok)
-            fit = np.polyfit(ks, ws, 2).tolist()     # w(k), same convention as calibrate.py
+            fit = np.polyfit(ks, ws, 2).tolist()     # w(k), same convention as siw_geometry.calibrated_iris_width
             k_fit = np.polyfit(ws, ks, 3).tolist()   # k(w), for reporting/plots
         return {"points": results, "w_of_k": fit, "k_of_w": k_fit,
                 "l_cav_mm": l_cav, "a_siw_mm": g.a_siw * 1e3,

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # Output layout: single source of truth for where every module writes/reads,
 # so e.g. siw_geometry's calibration cache path can't drift from whoever wrote it.

@@ -18,10 +18,9 @@ import time
 
 import numpy as np
 
-from .config import out_data, out_img
+from .config import find_palace, out_data, out_img
 from .palace_driven import build_mesh
 
-PALACE = "/home/fd/opt/palace/bin/palace"
 F0 = 2.87
 BW_TGT = 145.0           # MHz
 RL_TGT = -16.0           # dB in-band return loss goal
@@ -93,8 +92,9 @@ def evaluate(p: dict, fine: bool = False) -> dict:
     cfgp = out_data(f"{tag}.json")
     json.dump(cfg, open(cfgp, "w"), indent=2)
     _wait_for_free_palace()
-    env = dict(os.environ, PATH=f"/home/fd/opt/palace/bin:{os.environ['PATH']}")
-    subprocess.run([PALACE, "-np", "4", os.path.basename(cfgp)], cwd=out_data(""),
+    palace = find_palace()
+    env = dict(os.environ, PATH=f"{os.path.dirname(palace)}:{os.environ['PATH']}")
+    subprocess.run([palace, "-np", "4", os.path.basename(cfgp)], cwd=out_data(""),
                    env=env, stdout=open(out_data(f"{tag}.log"), "w"),
                    stderr=subprocess.STDOUT, check=False)
     csv = out_data(f"postpro/{tag}/port-S.csv")

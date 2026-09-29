@@ -464,7 +464,7 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
             "voltage_path_out": [[Xc1, sma_rin_mm, h], [Xc1, sma_rout_mm, h]],
         }
     if show:
-        print(f"\n--- full-filter driven mesh ---")
+        print("\n--- full-filter driven mesh ---")
         print(f"  box x[{X0:.1f},{X1:.1f}] y[{-ym:.1f},{ym:.1f}] z[0,{h:.2f}] "
               f"+ air {Hair:.1f} over feeds")
         print(f"  vias={len(via_xy)}  gnd_stitch_vias={len(gnd_via_centres)} "

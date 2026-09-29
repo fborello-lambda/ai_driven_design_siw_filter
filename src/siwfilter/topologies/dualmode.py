@@ -18,7 +18,7 @@ import numpy as np
 
 from ..config import FilterSpec, find_palace, out_data
 from ..palace_dualmode_driven import build_mesh as _build_mesh, _dims, plot_layout_2d as _plot_layout_2d
-from ..palace_dualmode import build_mesh as _build_eig_mesh, A_SIW_MM, D_VIA_MM, P_VIA_MM
+from ..palace_dualmode import build_mesh as _build_eig_mesh, A_SIW_MM
 from .base import MeshResult, ParamRange
 # THE launch -- one definition for the whole project (see launch.py).
 from .launch import TAOGLAS_CPWG as TAOGLAS_SMA
@@ -180,7 +180,6 @@ class DualModeTopology:
         w_exts = w_exts if w_exts is not None else [8.0, 10.0, 12.0, 14.0,
                                                     16.0, 18.0, 20.0, 22.0]
         mmax, mmin, hair = _mesh_preset(self.name, "CPU")
-        f0 = spec.f0 / 1e9
 
         points: dict[float, dict] = {}
         for we in w_exts:
@@ -327,6 +326,6 @@ class DualModeTopology:
         fit = None
         if len(ok) >= 3:
             ws, ks = zip(*ok)
-            fit = np.polyfit(ks, ws, 2).tolist()   # w(k), same convention as calibrate.py
+            fit = np.polyfit(ks, ws, 2).tolist()   # w(k), same convention as siw_geometry.calibrated_iris_width
         return {"points": results, "w_of_k": fit,
                 "x_iris_mm": x_iris, "y_wall_mm": y_wall_mm, "a_mm": a_mm}

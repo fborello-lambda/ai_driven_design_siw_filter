@@ -34,12 +34,11 @@ here is exactly the kind of bug this project already hit once):
   pads and stitching vias (`gnd_stitch=True`), but **pad-only**: no
   impedance-matched gap (`cpwg_gap_mm=None`).
 - `cpwg_taoglas` — the above **plus** the real gap-matched CPWG launch
-  (`cpwg_gap_mm=0.2512` etc, solved 50Ω — `docs/TUNING_PLAN_2026-08-29.md`
+  (`cpwg_gap_mm=0.2512` etc, solved 50Ω — `docs/archive/TUNING_PLAN_2026-08-29.md`
   sec 2). Only use this tag when the run actually passed those `cpwg_*`
-  kwargs. Cascade (`topologies/cascade.py`) defaults to this. Dual-mode's
-  own `build_mesh` default is still `sma_taoglas` (see its golden entry's
-  `known_open_item`) — its `cpwg_taoglas` entry here is a separate,
-  explicitly-run broadband check, not what produced its headline numbers.
+  kwargs. Both topologies default to this since 2026-09-02; dual-mode runs
+  from before then used the pad-only launch and are kept in
+  `dualmode_N2/archive_padonly_launch/`.
 
 Append a free-text suffix before the extension for a variant of the same
 geometry (e.g. `..._cpwg_taoglas_broadband.json` for a 0–8GHz sweep instead
@@ -54,3 +53,13 @@ of the narrowband confirm).
 3. Update the `provenance` block (`git_commit_when_saved`, `saved` date,
    `reproduce_with` command) and, if the design itself changed, `CLAUDE.md`'s
    "Golden designs" pointer.
+
+## Current entries
+
+| Folder | What |
+|---|---|
+| `cascade_N3/l_cav133.94_…_cpwg_taoglas` | **the fabricated board** (end cavities trimmed −0.3 mm, 2026-09-23) |
+| `cascade_N3/l_cav134.24_…` | the pre-trim golden it supersedes (+ 0–8 GHz broadband check) |
+| `cascade_N4/` | N=4 cascade, parked comparison point |
+| `dualmode_N2/a57.16_…_cpwg_taoglas` | dual-mode N=2 under the CPWG launch — documented negative result |
+| `dualmode_N2/archive_padonly_launch/` | dual-mode runs under the old pad-only launch (fab-stack studies) |

@@ -364,7 +364,7 @@ def driven_fc_trim(spec: FilterSpec, topo, params: dict,
         if best_err is None or abs(d_mhz) < best_err:
             best_p, best_err = dict(p), abs(d_mhz)
         if abs(d_mhz) < fc_tol_mhz:
-            print(f"[fc-trim] centred", flush=True)
+            print("[fc-trim] centred", flush=True)
             return best_p
         hist.append((p[len_keys[0]], fc))
         factor = fc / f0

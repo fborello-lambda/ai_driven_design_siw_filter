@@ -390,10 +390,6 @@ def build_mesh(a_mm: float = A_SIW_MM, w_iris_mm: float = 6.0, x_iris_mm: float 
 
     ty_in_lo, ty_in_hi = _face_ty(0.0)
     ty_out_lo, ty_out_hi = _face_ty(Li)
-    # kept for the top-metal window and any caller reading a single extent
-    ty_lo = min(ty_in_lo, ty_out_lo)
-    ty_hi = max(ty_in_hi, ty_out_hi)
-
     # Top-metal window: for a fractional-mode (half/quarter) cavity, metal
     # must NOT extend past the open edge -- substrate with PEC top AND
     # bottom running into the Absorbing face is a parallel-plate stub, and

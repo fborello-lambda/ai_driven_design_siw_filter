@@ -10,7 +10,7 @@ La cabecera es `# GHz S MA R 50`: magnitud **lineal** y fase en grados, referenc
 
 Los parámetros nominales coinciden con el N=3 guardado: cavidades 34.239/35.503/34.239 mm, iris 14.416 mm, apertura externa 13.96 mm, pista 1.6636 mm y taper 15.738 mm. `Lsub=166.382` es compatible con el redondeo del valor anterior. La cabecera no identifica la revisión de la macro, la geometría efectiva de los SMA, la malla ni los modos; por tanto, no demuestra que se haya ejecutado exactamente la macro actual.
 
-Las otras dos curvas pegadas en la conversación se conservaron completas en `cst_chat_export.txt`: 1001 S11 y 1001 S21, sin volver a aplicar logaritmos a esos valores ya expresados en dB. Los valores S se transcribieron con su precisión original; la frecuencia se reconstruyó con la misma rejilla float32 del texto y se verificaron puntos de control. `docs/swi_CST_data.txt` es una corrida anterior con otras dimensiones y vías; no se utilizó como si fuera este diseño.
+Las otras dos curvas pegadas en la conversación se conservaron completas en `cst_chat_export.txt`: 1001 S11 y 1001 S21, sin volver a aplicar logaritmos a esos valores ya expresados en dB. Los valores S se transcribieron con su precisión original; la frecuencia se reconstruyó con la misma rejilla float32 del texto y se verificaron puntos de control. `docs/paper/swi_CST_data.txt` es una corrida anterior con otras dimensiones y vías; no se utilizó como si fuera este diseño.
 
 ## 2. Qué dice la nueva corrida de frecuencia
 

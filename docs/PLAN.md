@@ -2,6 +2,11 @@
 
 Current state: `STATE.md`. Superseded plans: `docs/archive/`.
 
+> **Update 2026-09-23:** the decision below was made — the fabricated board is
+> the cascade N=3 with the end cavities trimmed −0.3 mm (`l_cav1` = 33.939 mm).
+> Verdict, JLCPCB order notes and the fab package: `final_check/REPORT.md`,
+> `final_check/fab/`.
+
 The design work is **done**, in the sense that the design space has been
 mapped and the remaining gap is understood rather than mysterious. What is
 left is a decision, then fabrication outputs.
@@ -114,7 +119,7 @@ density and destroy the response.
 
 ```bash
 siw kicad --topology cascade --N 3 \
-    --params l_cav1=34.239,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 \
+    --params l_cav1=33.939,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636 \
     --launch cpwg
 ```
 
