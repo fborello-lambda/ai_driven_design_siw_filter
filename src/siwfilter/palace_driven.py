@@ -73,6 +73,7 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
                cpwg_len_mm: float = 5.0,
                cpwg_taper_mm: float = 4.0,
                preview: bool = False, render_png: str | None = None,
+               render_view: dict | None = None,
                spec: FilterSpec | None = None,
                port_mesh_size: float | None = None,
                audit_path: str | None = None) -> dict:
@@ -408,6 +409,22 @@ def build_mesh(mesh_max: float = 3.0, mesh_min: float = 0.5,
         gmsh.option.setNumber("General.RotationY", 0)
         gmsh.option.setNumber("General.RotationZ", 20)
         gmsh.option.setNumber("General.Axes", 0)
+        # optional camera/size overrides, e.g. {"ScaleX": 6, "TranslationX": 70,
+        # "GraphicsWidth": 1600} -- any General.* number option
+        view = dict(render_view or {})
+        if view.pop("hide_air", False):
+            # show only the board: dielectric + metal (+ SMA PTFE), not the
+            # air boxes that otherwise hide the launch
+            air = gmsh.model.getEntitiesForPhysicalGroup(3, 2)
+            gmsh.model.setVisibility([(3, t) for t in air], 0, recursive=True)
+            solids = [(3, t) for g in (1, 3) for t in
+                      (gmsh.model.getEntitiesForPhysicalGroup(3, g)
+                       if (3, g) in gmsh.model.getPhysicalGroups(3) else [])]
+            keep = [b for b in gmsh.model.getBoundary(solids, oriented=False)]
+            keep += [(2, t) for t in gmsh.model.getEntitiesForPhysicalGroup(2, 10)]
+            gmsh.model.setVisibility(keep, 1)
+        for k, v in view.items():
+            gmsh.option.setNumber(f"General.{k}", v)
         gmsh.fltk.initialize()
         gmsh.fltk.wait(0.5)
         gmsh.write(render_png)

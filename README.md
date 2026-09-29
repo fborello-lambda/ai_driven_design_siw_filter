@@ -1,113 +1,85 @@
 # SIW Bandpass Filter — 2.87 GHz
 
-A parametric **substrate integrated waveguide** (SIW) bandpass filter, from
-Chebyshev synthesis through EM calibration (Palace FEM) to fabrication files
-(KiCad/JLCPCB gerbers and a CST Studio macro).
+A 3-cavity substrate integrated waveguide (SIW) bandpass filter on Rogers
+RO4350B. This repository designs it in Python, simulates it with Palace
+(FEM), and exports the files needed to manufacture it.
 
-| | |
-|---|---|
-| Centre frequency | 2.87 GHz |
-| Target | 5 % FBW (143.5 MHz), 0.1 dB Chebyshev ripple, S11 ≤ −16 dB in band |
-| Substrate | Rogers RO4350B, 0.76 mm (εr 3.66, tanδ 0.0037) |
-| Vias | Ø 1.5 mm, 3.0 mm pitch |
-| Connector | Taoglas EMPCB.SMAFSTJ.B.HT, CPWG launch |
+## Where things stand
 
-## Status (2026-09-23)
+The board is designed and ready to order as a **prototype**. It does not fully
+meet the spec: the passband is wider and the matching is weaker than the
+targets.
 
-**The board being fabricated is an inline 3-cavity cascade** with its end
-cavities trimmed by −0.3 mm. It is a prototype and misses the return-loss and
-bandwidth spec. The deviation is documented:
+|                        | Target    | Simulated |
+|------------------------|-----------|-----------|
+| Centre frequency       | 2.87 GHz  | 2.876 GHz |
+| Bandwidth              | 143.5 MHz | 182 MHz   |
+| Worst in-band S11      | −16 dB    | −11.2 dB  |
+| Insertion loss (peak)  | —         | −1.7 dB   |
+| Board size             | —         | 165.8 × 45.8 mm |
 
-| | fine-mesh Palace | spec |
-|---|---|---|
-| fc | 2.876 GHz | 2.87 GHz |
-| −3 dB bandwidth | 182 MHz | 143.5 MHz |
-| worst in-band S11 | −11.15 dB | −16 dB |
-| insertion loss (peak / worst in band) | −1.70 / −2.58 dB | — |
-| board | 165.78 × 45.79 mm | — |
+## Key files
 
-`l_cav1=33.939, l_cav2=35.503, w_iris=14.416, w_ext=13.96, l_taper=15.738, w_ms=1.6636` (mm)
+- **Order the board:** [`docs/final_check/fab/`](docs/final_check/fab/)
+  holds the gerbers, drill files and fab notes.
+- **Is it ready?** [`docs/final_check/REPORT.md`](docs/final_check/REPORT.md)
+  gives the verdict and what to write in the JLCPCB order notes.
+- **Full project status:** [`docs/STATE.md`](docs/STATE.md) and
+  [`docs/PLAN.md`](docs/PLAN.md).
+- **Simulate in CST:** [`docs/cst_guide/`](docs/cst_guide/) (in Spanish).
+- **Thesis proposal:** [`docs/paper/`](docs/paper/).
 
-- **Fab package:** [`docs/final_check/fab/`](docs/final_check/fab/): JLCPCB
-  gerber/drill zip, `FAB_CHECKLIST.md` (34/34), `FAB_NOTES.md`, and CST
-  macros (time and frequency domain).
-- **Verdict and JLCPCB check:** [`docs/final_check/REPORT.md`](docs/final_check/REPORT.md).
-  The board can be ordered with order notes: RO4350B 0.76 mm (not FR-4), no
-  soldermask, and copper/stitching vias at the board edge. JLCPCB offers only
-  1 oz copper, which is marginal for the SMA fork fit.
-- **Measured provenance:** [`golden/cascade_N3/`](golden/cascade_N3/).
-- A dual-mode single-cavity N=2 design was explored first. It lost the
-  head-to-head comparison and is kept as a documented negative result.
+## Does the connector matter?
 
-The full project state and history are in [`docs/STATE.md`](docs/STATE.md)
-and [`docs/PLAN.md`](docs/PLAN.md).
+Yes. The filter was tuned with the SMA connector in place. Removing it and
+feeding the board directly by microstrip or CPWG costs about 5 dB of return
+loss. See [`docs/launch_comparison/`](docs/launch_comparison/) for 3D views
+and S-parameters.
 
-## Setup
+![Launch comparison](docs/launch_comparison/sparams.png)
 
-Needs [uv](https://docs.astral.sh/uv/). The EM stages also need
-[Palace](https://awslabs.github.io/palace/), found via `$PALACE_BIN`, `palace`
-on `$PATH`, or `~/opt/palace/bin/palace`.
+## Specs
 
-```bash
-uv sync
-```
+- **Substrate:** Rogers RO4350B, 0.76 mm thick, εr 3.66
+- **Vias:** 1.5 mm diameter, 3.0 mm pitch
+- **Connector:** Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA
+- **Response:** Chebyshev, 3rd order, 0.1 dB ripple
 
-## Usage
+## Quick start
 
 ```bash
-siw                      # light pipeline: synth → geometry → layout → cst → report
-siw --list               # all stages (light + heavy EM) and subcommands
-siw --only synth layout  # just these stages, in order
-siw --stage palace-opt   # one heavy (EM) stage
+uv sync      # install
+siw          # fast pipeline: synthesis → geometry → layout → CST macro
+siw --list   # show every stage and subcommand
 ```
 
-Light stages take seconds. Heavy ones run Palace solves and are opt-in. Every
-module also runs standalone: `uv run python -m siwfilter.<module>`.
+The EM simulations need [Palace](https://awslabs.github.io/palace/). It is
+found through `$PALACE_BIN`, your `$PATH`, or `~/opt/palace/bin/palace`.
 
-### Regenerating the fabricated board
+## Rebuilding the fabricated board
 
 ```bash
 P=l_cav1=33.939,l_cav2=35.503,w_iris=14.416,w_ext=13.96,l_taper=15.738,w_ms=1.6636
-siw kicad --topology cascade --N 3 --params $P --launch cpwg   # → output/kicad/ (+ FAB_CHECKLIST.md)
-siw cst   --topology cascade --N 3 --params $P --launch cpwg   # → output/bas/
+
+siw kicad --topology cascade --N 3 --params $P --launch cpwg   # KiCad + gerbers → output/kicad/
+siw cst   --topology cascade --N 3 --params $P --launch cpwg   # CST macro → output/bas/
 ```
 
-### Designing a filter
+## Designing a new filter
 
 ```bash
-siw calibrate --what both --N 3   # k(w_iris) eigenmode + Qe(w_ext) driven, cached
-siw synth-design --N 3            # invert the calibrations → assemble → confirm
-siw design --topology cascade --N 3 --seed <params> --span 2 --patience 14  # local GP polish
+siw calibrate --what both --N 3   # measure the coupling curves (cached)
+siw synth-design --N 3            # turn them into a design and check it
 ```
 
-For the cascade, use calibrate-and-invert. A global Bayesian search over the
-assembled filter does not converge because its bandwidth objective jumps
-discontinuously with the external coupling. Use the GP only for local
-refinement with `--seed`. `docs/STATE.md` gives the measured reasoning.
-
-| Command | Does |
-|---|---|
-| `siw calibrate` / `siw synth-design` | EM calibrations; calibrated design pipeline |
-| `siw design` | Bayesian search, global or local (`--seed`) |
-| `siw layout` / `siw sweep` / `siw scan` | layout check, wideband sweep, 1-D parameter scan |
-| `siw compare` / `siw compare-designs` / `siw compare-fab-variants` | comparison figures |
-| `siw cst` / `siw kicad` | CST `.bas` macro, KiCad board + gerbers + drill + STEP |
-
-`--topology` also accepts `corner_cut`, `circular_cross` and `rhombic`. These
-are parked experimental geometries from closed exploration work
-(`docs/geometry_exploration/`).
+`siw --help` lists the other commands: optimisation, sweeps, scans and
+comparison plots.
 
 ## Repository layout
 
-| Path | What |
-|---|---|
-| `src/siwfilter/` | the package and the `siw` CLI (`cli.py`) |
-| `  config.py` | spec, substrate/via presets, fab rules, output paths — single source of truth |
-| `  synthesis.py` → `siw_geometry.py` → `layout_plot.py` | design chain |
-| `  topologies/` | per-topology adapters with `calibrate()` / `calibrate_qe()` |
-| `  palace_*.py` | Palace FEM meshers (eigenmode + driven) |
-| `  synth_design.py`, `optimize.py` | calibrate→invert pipeline; GP search |
-| `  cst_export.py`, `kicad_export.py`, `fab_check.py` | fabrication outputs |
-| `golden/` | curated designs and their measured S-parameters ([README](golden/README.md)) |
-| `docs/` | `STATE.md`, `PLAN.md`, `final_check/` (fab verdict), `cst_guide/`, `paper/` (thesis proposal), historical studies |
-| `output/` | generated artifacts (gitignored except the calibration cache) |
+```
+src/siwfilter/   Python package and the `siw` command
+golden/          validated designs and their simulated S-parameters
+docs/            status, fab package, reports, figures
+output/          generated files (not committed)
+```

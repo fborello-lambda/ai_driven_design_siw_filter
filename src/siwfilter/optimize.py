@@ -305,10 +305,15 @@ FINE_TOL = 1e-8
 
 def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
                    fmin: float, fmax: float, step: float, device: str,
-                   tol: float = FINE_TOL) -> dict:
+                   tol: float = FINE_TOL, port_mode: int = 1) -> dict:
     """Build the Palace Driven-problem config for any topology's build_mesh()
     result -- generic over with_sma True/False (3rd material + WavePort
-    voltage paths only appear when res['sma'] is set)."""
+    voltage paths only appear when res['sma'] is set).
+
+    `port_mode` picks the wave-port eigenmode (Palace orders them by
+    propagation constant). A connector-less CPWG port face has four
+    conductors, and modes 1-2 are the wide ground pours against the bottom
+    plane, not the signal trace -- the CPWG mode there is 3."""
     sma = res.get("sma")
     materials = [
         {"Attributes": [1], "Permeability": 1.0,
@@ -316,9 +321,9 @@ def _driven_config(mesh: str, res: dict, spec: FilterSpec, tag: str,
          "LossTan": res.get("tand", spec.substrate.tan_d)},
         {"Attributes": [2], "Permeability": 1.0, "Permittivity": 1.0, "LossTan": 0.0},
     ]
-    port_in = {"Index": 1, "Attributes": [11], "Mode": 1, "Excitation": 1,
+    port_in = {"Index": 1, "Attributes": [11], "Mode": port_mode, "Excitation": 1,
                "Offset": 0.0, "MaxIts": 40, "KSPTol": tol, "EigenTol": 1e-6}
-    port_out = {"Index": 2, "Attributes": [12], "Mode": 1,
+    port_out = {"Index": 2, "Attributes": [12], "Mode": port_mode,
                 "Offset": 0.0, "MaxIts": 40, "KSPTol": tol, "EigenTol": 1e-6}
     if sma:
         materials.append({"Attributes": [3], "Permeability": 1.0,
@@ -415,7 +420,8 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
                fmin: float, fmax: float, step: float,
                mesh_max: float, mesh_min: float, h_air_factor: float,
                device: str = "auto", np_ranks: int = CPU_NP,
-               serialize: bool = True, tol: float = FINE_TOL) -> dict:
+               serialize: bool = True, tol: float = FINE_TOL,
+               port_mode: int = 1) -> dict:
     """Build the mesh + run one Palace Driven solve, return {ok, f, s11_db,
     s21_db, fc, il, bw, s11w, il_band, tag} (dB arrays over the swept band)."""
     device = resolve_device(device, topology.name)
@@ -456,7 +462,8 @@ def run_driven(topology: Topology, spec: FilterSpec, params: dict, tag: str,
 
     def _solve(dev: str, ranks: int):
         """One Palace invocation. Returns (arrays | None, err | None)."""
-        cfg = _driven_config(mesh, res, spec, tag, fmin, fmax, step, dev, tol)
+        cfg = _driven_config(mesh, res, spec, tag, fmin, fmax, step, dev, tol,
+                             port_mode)
         cfgp = out_data(f"{tag}.json")
         json.dump(cfg, open(cfgp, "w"), indent=2)
         env = dict(os.environ, PATH=f"{os.path.dirname(palace)}:{os.environ['PATH']}")
