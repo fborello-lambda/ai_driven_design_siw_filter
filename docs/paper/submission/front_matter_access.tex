@@ -7,6 +7,18 @@
 \usepackage{placeins}
 \usepackage[hidelinks]{hyperref}
 \usepackage{xurl}
+\usepackage{bm}
+\makeatletter
+\AtBeginDocument{\DeclareMathVersion{bold}
+\SetSymbolFont{operators}{bold}{T1}{times}{b}{n}
+\SetSymbolFont{NewLetters}{bold}{T1}{times}{b}{it}
+\SetMathAlphabet{\mathrm}{bold}{T1}{times}{b}{n}
+\SetMathAlphabet{\mathit}{bold}{T1}{times}{b}{it}
+\SetMathAlphabet{\mathbf}{bold}{T1}{times}{b}{n}
+\SetMathAlphabet{\mathtt}{bold}{OT1}{pcr}{b}{n}
+\SetSymbolFont{symbols}{bold}{OMS}{cmsy}{b}{n}
+\renewcommand\boldmath{\@nomath\boldmath\mathversion{bold}}}
+\makeatother
 \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
 \providecommand{\passthrough}[1]{#1}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
@@ -45,7 +57,9 @@ Buenos Aires, Argentina (e-mail: fborello.contact@gmail.com)}
 \section*{Data and Code Availability}
 All design code, simulation inputs, curated results and fabrication files are
 openly available under the MIT license at
-\url{https://github.com/fborello-lambda/siw_filter}.
+\url{https://github.com/fborello-lambda/siw_filter}, including the raw and calibrated
+VNA measurements (\texttt{measurements/2026-10-14\_vna}) and \texttt{siw measure}, which reproduces
+Table~\ref{tab:comparison}.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}

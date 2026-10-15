@@ -8,6 +8,7 @@ title: >-
   de Guía de Onda Integrada en Sustrato (SIW) a 2.87 GHz
 author: "\\vspace{-2em}"
 date: 2026
+numbersections: true
 abstract: |
   Se presenta el diseño, la simulación electromagnética y la preparación para
   fabricación de un filtro pasabanda de tercer orden en tecnología de guía de
@@ -16,19 +17,19 @@ abstract: |
   sobre Rogers RO4350B de 0.76 mm. Una primera iteración analítica, verificada
   con openEMS y CST, reprodujo la banda pero no la adaptación: los puertos de
   openEMS no entregan un $S_{11}$ confiable. El trabajo pasó entonces a Palace,
-  un solver de elementos finitos de código abierto con puertos modales,
-  controlado desde una cadena de herramientas propia en Python. Se modeló el
+  un solver de elementos finitos de código abierto con puertos modales. Se modeló el
   conector SMA real con un lanzador CPWG adaptado, se exploraron varias
-  topologías (cavidad de modo dual N=2, geometrías alternativas y variantes
-  N=4) y se reemplazó la optimización bayesiana global, que falla porque el
-  ancho de banda del filtro ensamblado es discontinuo, por calibración de
+  topologías y se reemplazó la optimización bayesiana global, que falla porque
+  el ancho de banda del filtro ensamblado es discontinuo, por calibración de
   acoplamientos sobre estructuras pequeñas e inversión. El diseño fabricado
-  (N=3, vías de 1.5 mm con paso de 3.0 mm) centra la banda en 2.876 GHz, con
+  (N=3) centra la banda en 2.876 GHz, con
   182 MHz de ancho de banda, pérdida de inserción de 1.70 dB y
   $|S_{11}| = -11.2$ dB en el peor punto de la banda. No alcanza la
   especificación de $-16$ dB, y un ajuste de matriz de acoplamiento explica por
-  qué. La placa fue enviada a fabricar a JLCPCB; las mediciones se agregarán
-  al recibirla.
+  qué. La placa fabricada por JLCPCB se midió con un analizador vectorial de
+  redes: centro en 2.894 GHz, ancho de banda de 171 MHz, pérdida de inserción
+  de 2.0 a 2.4 dB y un único cero de reflexión de $-17$ dB; no se alcanza la
+  especificación de $-16$ dB.
 bibliography: references.bib
 csl: ieee-jestpe.csl
 header-includes:
@@ -36,6 +37,10 @@ header-includes:
   - \usepackage{graphicx}
   - \usepackage{amsmath}
   - \usepackage{placeins}
+  - \usepackage{etoolbox}
+  - \usepackage{adjustbox}
+  - \BeforeBeginEnvironment{tabular}{\begin{adjustbox}{max width=\linewidth}}
+  - \AfterEndEnvironment{tabular}{\end{adjustbox}}
   - \IEEEoverridecommandlockouts
   - \IEEEspecialpapernotice{\includegraphics[width=2.8cm]{logo_UTN.pdf}}
   - |
@@ -450,7 +455,7 @@ $w_{\text{ext}} = 16.0$ mm, $W_{\text{ms}} = 2.26$ mm).}
 > **Corrección posterior (agosto de 2026).** Este resultado se obtuvo con un
 > puerto modal colocado directamente sobre la microstrip, que se normaliza a la
 > impedancia de la propia pista. Al reemplazarlo por un modelo 3D del conector
-> SMA real (Sección X) se comprobó que el ancho optimizado $W_{	ext{ms}} =
+> SMA real (Sección X) se comprobó que el ancho optimizado $W_{\text{ms}} =
 > 2.26$ mm corresponde a una línea de $\approx 41~\Omega$, no de 50 $\Omega$: el
 > optimizador había aprovechado un defecto del puerto. El ancho correcto de
 > 50 $\Omega$ es 1.664 mm, y con el conector real este diseño mide
@@ -738,33 +743,18 @@ anchos de iris produjeran la misma malla.}
 \end{figure}
 ```
 
-# Diseño fabricado y verificación
+# Diseño fabricado y verificación {#sec:fab}
 
 El diseño elegido es
 $l_{\text{cav1}} = 33.939$, $l_{\text{cav2}} = 35.503$,
 $w_{\text{iris}} = 14.416$, $w_{\text{ext}} = 13.96$,
 $l_{\text{taper}} = 15.738$ y $W_{\text{ms}} = 1.6636$ mm, sobre una placa de
-165.78 $\times$ 45.79 mm. La Tabla \ref{tab:fab} resume la simulación con
-malla fina (2.5/0.45 mm, puertos coaxiales de 0.15 mm, 61 puntos).
-
-```{=latex}
-\begin{table}[t]
-\centering
-\caption{Diseño fabricado: simulación con malla fina frente a la especificación}
-\label{tab:fab}
-\begin{tabular}{lcc}
-\hline
- & \textbf{Objetivo} & \textbf{Simulado}\\
-\hline
-Frecuencia central & 2.870 GHz & 2.876 GHz\\
-Ancho de banda ($-3$ dB) & 143.5 MHz & 182.3 MHz\\
-Peor $|S_{11}|$ en banda & $-16$ dB & $-11.15$ dB\\
-Pérdida de inserción (pico / peor) & --- & 1.70 / 2.58 dB\\
-Medido & \multicolumn{2}{c}{\emph{pendiente}}\\
-\hline
-\end{tabular}
-\end{table}
-```
+165.78 $\times$ 45.79 mm. La simulación con malla fina (2.5/0.45 mm, puertos coaxiales de 0.15 mm, 61
+puntos) da una frecuencia central de 2.876 GHz, un ancho de banda de $-3$ dB de
+182.3 MHz, un peor $|S_{11}|$ en banda de $-11.15$ dB (objetivo: 143.5 MHz y
+$-16$ dB) y una pérdida de inserción de 1.70 dB en el pico y 2.58 dB en el peor
+punto de la banda. La Tabla \ref{tab:comparison} (Sección \ref{sec:vna})
+compara estos valores con la especificación y con la medición.
 
 ```{=latex}
 \begin{figure}[t]
@@ -801,9 +791,10 @@ y lanzador.
 
 En la placa real el cobre reduce el $Q$: con 0.76 mm de espesor,
 $Q_c \approx 540$ [@pozar2012microwave] y $Q_u \approx 180$, lo que suma unos
-0.4 dB. Se espera entonces medir entre 2.2 y 2.3 dB, cerca del piso físico de
-este laminado, este espesor y este ancho de banda. Un sustrato de menor
-pérdida, como RT/duroid 5880 de 1.52 mm, lo reduciría a $\approx$0.5 dB.
+0.4 dB. Antes de medir, esto llevaba a predecir entre 2.2 y 2.3 dB, cerca del
+piso físico de este laminado, este espesor y este ancho de banda; la Sección
+\ref{sec:vna} informa 2.0 a 2.4 dB medidos. Un sustrato de menor pérdida, como
+RT/duroid 5880 de 1.52 mm, lo reduciría a $\approx$0.5 dB.
 
 **Verificación cruzada con CST.** Con la macro generada automáticamente, el
 solver de frecuencia de CST coincide con Palace en la frecuencia central
@@ -843,7 +834,7 @@ conector SMA.}
 \end{figure*}
 ```
 
-# Fabricación
+# Fabricación {#sec:fabricacion}
 
 La herramienta `siw kicad` genera la placa de KiCad, los gerbers, los archivos
 de taladrado, un sólido STEP y 34 verificaciones automáticas. Entre ellas se
@@ -855,14 +846,203 @@ JLCPCB dispone de RO4350B de 0.76 mm, pero solo ofrece cobre exterior de
 $\approx$0.84 mm, frente a una ranura de 0.81 $\pm$ 0.1 mm en el conector.
 Es un ajuste marginal, que se resuelve raspando 15--20 $\mu$m de cobre bajo las
 patas del conector. La ausencia de máscara antisoldante queda definida por los
-gerbers y se aclara en las notas del pedido. La placa fue enviada a fabricar.
+gerbers y se aclara en las notas del pedido.
 
-# Mediciones
+Las placas se compraron a JLCPCB sobre Rogers RO4350B, con acabado ENIG,
+sin máscara antisoldante. El pedido costó unos USD 120, incluido el recargo por
+el laminado. El recubrimiento ENIG se ubica sobre la cara de cobre en contacto
+con el aire, por lo que se supuso que no afecta los campos de las cavidades;
+la medición no permite descartar un efecto sobre las líneas de alimentación.
+Las placas fueron recibidas y medidas (Sección \ref{sec:vna}).
 
-*[Pendiente: las placas están en fabricación. Se medirán $|S_{11}|$, $|S_{21}|$
-y el retardo de grupo con un analizador vectorial de redes, entre 2.5 y
-3.3 GHz y entre 0.1 y 8 GHz. Se superpondrán con la simulación de Palace y con
-la de CST, y se ajustará la matriz de acoplamiento a la medición.]*
+# Mediciones {#sec:vna}
+
+## Configuración y calibración
+
+La placa (Fig. \ref{fig:setup}) se midió con un analizador vectorial de redes
+portátil Keysight FieldFox N9917A (18 GHz), entre 100 MHz y 5 GHz con 10 001
+puntos, 10 kHz de ancho de banda de FI y $-15$ dBm de potencia de la fuente. El
+instrumento se calibró en los extremos de los dos cables de prueba con un kit
+mecánico de 3.5 mm (85033D/E), en modo SOLR completo de dos puertos: corto,
+abierto y carga adaptada en cada puerto, más un thru recíproco de longitud
+desconocida, con el aislamiento omitido. Los cables terminan en conectores SMA
+que acoplan directamente con los de la placa, de modo que el plano de referencia
+es la cara del conector, como en las simulaciones. Se guardaron cuatro estados
+de la misma placa: conectores soldados, o apoyados contra la placa sin soldar,
+cada uno con la calibración del instrumento aplicada y sin ella. También se
+guardaron el abierto, el corto, la carga y el thru crudos, en el mismo plano.
+
+```{=latex}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig_setup.jpg}
+\caption{Montaje de medición. Arriba: la placa fabricada con sus conectores y
+los cables de prueba (sin máscara antisoldante, acabado ENIG). Abajo a la
+izquierda: banco de medición con el analizador. Abajo a la derecha: pantalla de
+calibración del instrumento (kit de 3.5 mm, SOLR completo de dos puertos con
+thru desconocido).}
+\label{fig:setup}
+\end{figure}
+```
+
+## Recalibración por software
+
+Los estándares crudos permiten una segunda corrección, independiente. Se
+resolvió por software el modelo de error de ocho términos, con una calibración
+de un puerto corto-abierto-carga (SOL) en cada puerto y el paso del thru
+desconocido para los términos de transmisión [@ferrero1992unknownthru], con
+scikit-rf [@arsenovic2022scikitrf], y se aplicó a las dos placas sin calibrar.
+El abierto y el corto siguen un modelo nominal del kit de 3.5 mm (unos 30 ps de
+retardo de desplazamiento y 49 fF de capacidad de borde; valores típicos, no
+leídos del instrumento). El resultado coincide con los archivos corregidos por
+el instrumento con un $|\Delta\Gamma|$ medio de 0.03 en $S_{11}$ y 0.04 en
+$S_{22}$, y de 0.17 dB en $S_{21}$, entre 2.6 y 3.2 GHz (Fig.
+\ref{fig:calcheck}). Reemplazar el modelo del kit por estándares ideales
+$+1/-1/0$ cambia las magnitudes en menos de 0.03 dB ($S_{21}$) y 0.09 dB
+($S_{11}$), y solo desplaza el plano de referencia. Un thru medido después de
+la calibración del instrumento da +0.18 dB, y la calibración por software
+aplicada al thru crudo da +0.26 dB. Un thru pasivo no puede tener ganancia, de
+modo que ambas correcciones son optimistas en $S_{21}$, y se toma su
+incertidumbre como unos 0.3 dB.
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_calibration_check.png}
+\caption{Placa soldada: medición cruda, calibración del instrumento y
+calibración por software. El resultado por software usa solo los archivos
+crudos de abierto, corto, carga y thru.}
+\label{fig:calcheck}
+\end{figure*}
+```
+
+## Comparación con la simulación
+
+La Tabla \ref{tab:comparison} procesa con el mismo código la especificación,
+ambos simuladores y las cuatro mediciones corregidas. La Fig.
+\ref{fig:measvsim} muestra las curvas.
+
+<!-- BEGIN siw-table:comparison -->
+```{=latex}
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{Filtro N=3 en cascada fabricado: especificación, simulación y medición. Todas las columnas se procesan con el mismo código. La banda es $2.870\pm1.4\%$\,GHz (la banda especificada del 5\,\%). CST corresponde a la geometría previa al recorte. Las cifras de Palace en banda son de la geometría fabricada; su $S_{21}$ en 2.45/3.5\,GHz y la espuria provienen del barrido de 0--8\,GHz previo al recorte. La espuria es el mayor $S_{21}$ entre 3.6 y 5.0\,GHz. Columnas medidas: VNA = calibración del instrumento, SW = recalibración por software de los archivos sin calibrar (Sec.~\ref{sec:vna}); S = conectores soldados, U = sin soldar (\emph{unsoldered}), C = calibrado.}
+\label{tab:comparison}
+\begin{tabular}{lccccccc}
+\hline
+ & \textbf{Espec.} & \textbf{CST} & \textbf{Palace} & \textbf{VNA SC} & \textbf{VNA UC} & \textbf{SW S} & \textbf{SW U} \\
+\hline
+Frecuencia central (GHz) & 2.870 & 2.878 & 2.876 & 2.894 & 2.898 & 2.895 & 2.898 \\
+Ancho de banda a $-3$\,dB (MHz) & 143.5 & 180 & 182 & 171 & 172 & 172 & 174 \\
+Ancho de banda fraccional (\%) & 5.0 & 6.2 & 6.3 & 5.9 & 5.9 & 6.0 & 6.0 \\
+$S_{21}$ pico (dB) & -- & $-$1.80 & $-$1.70 & $-$2.38 & $-$2.41 & $-$2.04 & $-$2.08 \\
+Peor $S_{21}$ en banda (dB) & -- & $-$3.76 & $-$2.58 & $-$7.14 & $-$7.62 & $-$6.79 & $-$7.26 \\
+Peor $S_{11}$ en banda (dB) & $\le -16$ & $-$6.9 & $-$11.1 & $-$5.3 & $-$4.8 & $-$4.6 & $-$4.1 \\
+Peor $S_{22}$ en banda (dB) & -- & $-$6.9 & -- & $-$5.2 & $-$4.5 & $-$5.0 & $-$4.3 \\
+Mejor $S_{11}$ (dB @ GHz) & -- & $-$17.3 @ 2.877 & $-$35.4 @ 2.850 & $-$16.8 @ 2.899 & $-$17.1 @ 2.884 & $-$18.8 @ 2.881 & $-$20.1 @ 2.873 \\
+Ceros de $S_{11}<-10$\,dB & -- & 1 & 3 & 1 & 1 & 1 & 1 \\
+$S_{21}$ en 2.45\,GHz (dB) & -- & $-$60.7 & $-$60.9 & $-$45.6 & $-$45.8 & $-$44.9 & $-$45.0 \\
+$S_{21}$ en 3.5\,GHz (dB) & -- & $-$39.3 & $-$39.5 & $-$43.3 & $-$43.5 & $-$41.6 & $-$42.3 \\
+Mayor espuria (dB @ GHz) & -- & $-$2.5 @ 4.63 & $-$3.8 @ 4.61 & $-$4.4 @ 4.68 & $-$4.2 @ 4.68 & $-$4.5 @ 4.68 & $-$4.4 @ 4.68 \\
+\hline
+\end{tabular}
+\end{table*}
+```
+<!-- END siw-table:comparison -->
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_measured_vs_sim.png}
+\caption{Respuesta medida y simulada. (a, b) La placa fabricada (calibración
+del instrumento y por software, soldada y sin soldar) frente a Palace y CST. (c)
+Transmisión de banda ancha: las bandas pasantes espurias de 4.4 a 4.9 GHz
+aparecen en la medición en las frecuencias simuladas.}
+\label{fig:measvsim}
+\end{figure*}
+```
+
+*Frecuencia central y ancho de banda.* La banda medida está centrada en
+2.894 GHz (soldada) y 2.898 GHz (sin soldar), frente a 2.876 GHz en Palace y
+2.870 GHz en la especificación. El desvío de +18 MHz (0.6 %) respecto de la
+simulación corresponde a una permitividad efectiva alrededor de 1.2 % menor que
+el 3.66 usado en el diseño, bien dentro de la dispersión entre los valores de
+diseño y de proceso de un laminado; no se verificó. El ancho de banda de
+$-3$ dB es de 171 a 173 MHz, 6 % menor que en Palace.
+
+*Pérdida de inserción.* El pico de $S_{21}$ es $-2.38$ y $-2.41$ dB con la
+calibración del instrumento y $-2.04$ y $-2.08$ dB con la de software, es
+decir, de 2.0 a 2.4 dB dentro de la incertidumbre de 0.3 dB indicada. Palace da
+1.70 dB. Antes de medir se había predicho entre 2.2 y 2.3 dB (Sección
+\ref{sec:fab}), de modo que la medición abarca la predicción. Esa sección
+estimó la pérdida a partir del dieléctrico y de una cavidad de cobre liso. El
+modelo directo de la matriz de acoplamiento ajustada permite leer la pérdida
+medida como un factor de calidad descargado efectivo: manteniendo los
+acoplamientos ajustados en Palace y variando solo $Q_u$, da 1.1 dB y tres ceros
+de reflexión con $Q_u$ = 270, 1.7 dB y dos ceros con 180, y 2.3 dB y un cero
+con 130 (la Fig. \ref{fig:measvsim}b muestra uno). La pérdida medida
+corresponde entonces a un $Q_u$ de aproximadamente 130 a 185, frente a 229 en
+la simulación solo con dieléctrico y unos 180 esperados con cobre liso. No se
+separan la rugosidad del cobre, la fuga de la hilera de vías, las soldaduras, el
+conector ni el acabado ENIG en las líneas de alimentación.
+
+*Pérdida de retorno.* Los tres ceros de reflexión simulados aparecen como un
+único cero ancho, de $-17$ dB en el mejor caso, con un hombro; el peor $S_{11}$
+en banda es $-5$ dB. La pérdida explica la mayor parte de esto, porque fusiona
+los ceros, y el desvío de 24 MHz respecto de la banda especificada se suma a
+ella. Los puertos difieren levemente: el mejor $S_{22}$ es $-21$ dB, frente a
+$-17$ dB de $S_{11}$ en la placa soldada.
+
+*Soldadura.* Soldar los conectores cambia el resultado calibrado en 4 MHz en
+frecuencia central, 0.03 dB en pérdida de inserción y 0.5 dB en el peor $S_{11}$
+en banda. A 2.9 GHz el contacto del conector apoyado es adecuado, y el ajuste
+en la ranura de las patas, tratado en la Sección \ref{sec:fabricacion}, no
+resultó un problema.
+
+*Fuera de banda.* La primera banda pasante espuria aparece en 4.68 GHz y
+$-4.4$ dB, frente a 4.61 GHz y $-3.8$ dB en Palace y 4.63 GHz y $-2.5$ dB en
+CST. El rechazo a 2.45 GHz es de 45.6 dB, frente a 61 dB simulados. Es plano,
+de unos 45 dB, entre 2.4 y 4.2 GHz, muy por encima del piso del instrumento, lo
+que apunta a un acoplamiento alrededor del filtro (zonas de alimentación
+abiertas, cables) que los modelos no contienen. A 3.5 GHz los 43 dB medidos son
+algo mejores que los 39.5 dB simulados.
+
+## Efecto de la alimentación
+
+La Tabla \ref{tab:launch} agrega la placa medida a las simulaciones de
+alimentación de la Sección \ref{sec:fab}.
+
+<!-- BEGIN siw-table:launch -->
+```{=latex}
+\begin{table}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\caption{Efecto de la alimentación sobre la misma geometría de filtro. Las tres primeras filas son simulaciones de Palace (los puertos de las dos variantes sin conector se ubican sobre la línea planar y se normalizan a su propia impedancia, por lo que muestran el filtro detrás de una alimentación idealmente adaptada). Las dos últimas filas son la placa fabricada (calibración del instrumento). $S_{21}$ es el pico y $S_{11}$ el peor valor dentro de la banda especificada.}
+\label{tab:launch}
+\begin{tabular}{lcccc}
+\hline
+\textbf{Alimentación} & $f_c$ (GHz) & \textbf{BW (MHz)} & $S_{21}$ (dB) & $S_{11}$ (dB) \\
+\hline
+Microstrip, sin conect. & 2.897 & 205 & $-$1.87 & $-$6.3 \\
+CPWG, sin conect. & 2.875 & 164 & $-$2.21 & $-$5.1 \\
+CPWG + SMA, sim. & 2.876 & 182 & $-$1.70 & $-$11.2 \\
+CPWG + SMA, sold. & 2.894 & 171 & $-$2.38 & $-$5.3 \\
+CPWG + SMA, sin sold. & 2.898 & 172 & $-$2.41 & $-$4.8 \\
+\hline
+\end{tabular}
+\end{table}
+```
+<!-- END siw-table:launch -->
+
+Las simulaciones sin conector usan puertos que se normalizan a la línea planar y
+no son comparables en valor absoluto con una placa medida, que tiene conector y
+una referencia real de 50 $\Omega$. Muestran que la reactancia del conector
+forma parte de la sintonía. La medición muestra que la placa con su conector
+coincide con la simulación con conector en frecuencia central, ancho de banda y
+bandas espurias, y no en pérdida de retorno.
 
 # Conclusiones y trabajo futuro
 
@@ -876,18 +1056,25 @@ reemplazar la optimización bayesiana global por la calibración de los
 acoplamientos en estructuras pequeñas seguida de inversión. El segundo,
 verificar sistemáticamente cada resultado contra lo que la física permite.
 
-El filtro N=3 fabricado centra la banda a 6 MHz del objetivo, con 1.7 dB de
-pérdida, cerca del límite del laminado. No alcanza la especificación de
-adaptación ni de ancho de banda, por causas que identifica el ajuste de
-matriz de acoplamiento.
+El filtro N=3 fabricado se midió con un analizador vectorial de redes (Sección
+\ref{sec:vna}). La banda medida queda centrada en 2.894 GHz, 18 MHz por encima
+de la simulación y 24 MHz por encima del objetivo, con 171 MHz de ancho de
+banda. La pérdida de inserción es de 2.0 a 2.4 dB, entre 0.3 y 0.7 dB mayor que
+la de Palace, lo que equivale a un factor de calidad descargado efectivo de
+130 a 185. Esa pérdida fusiona los tres ceros de reflexión simulados en uno
+solo, de $-17$ dB, y el peor $|S_{11}|$ en banda es de 5 dB, frente a 11 dB
+simulados y 16 dB especificados: no se alcanza la especificación de adaptación
+ni de ancho de banda. La recalibración por software de los estándares crudos
+coincide con la del instrumento dentro de 0.2 dB en $S_{21}$, y la banda
+espuria a partir de 4.4 GHz ($-4$ dB) quedó confirmada por la medición.
 
 Como trabajo futuro quedan:
 
-- medir las placas y comparar la medición con la simulación;
+- re-centrar la banda, lo que requiere unos 0.7 mm de longitud de cavidad;
 - aplicar la corrección coordinada de $w_{\text{ext}}$, $l_{\text{cav1}}$ y
   $w_{\text{iris}}$;
 - evaluar un laminado de menor pérdida;
-- suprimir la banda espuria de 5.8--6.8 GHz con un filtro pasabajos.
+- suprimir la banda espuria que comienza en 4.4 GHz con un filtro pasabajos.
 
 ```{=latex}
 \FloatBarrier

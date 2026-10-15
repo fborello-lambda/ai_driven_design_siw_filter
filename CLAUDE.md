@@ -6,9 +6,12 @@ results, bug taxonomy, gaps). Where this file disagrees with those or with
 `golden/`, they are right. Historical notes (roadmaps, handoffs, exploration
 logs) were removed from the tree; they live in git tag `docs-archive-2026-09-29`.
 
-**Status (2026-09-29):** board ordered at JLCPCB, measurements pending. The
-paper drafts (`docs/paper/`) have a placeholder "Measured results" section to
-fill when the board arrives.
+**Status (2026-10-15):** board fabricated by JLCPCB (RO4350B, ENIG, ~USD 120)
+and measured on 2026-10-14 (`measurements/2026-10-14_vna/`). Measured: fc
+2.894 GHz, BW 171 MHz, IL 2.0–2.4 dB, one S11 zero (−17 dB best, −5 dB worst
+in band); spec (−16 dB) not met. `siw measure` reproduces every measured
+number; `siw measure --paper` refreshes the tables/figures in `docs/paper/`
+(both papers carry `<!-- BEGIN siw-table:… -->` markers for that).
 
 ## 1. Project
 
@@ -45,7 +48,7 @@ head-to-head (`siw compare-designs`) and is a documented negative result.
 
 ## 3. Working rules
 
-- **Use the CLI, not one-off scripts.** `siw calibrate`, `siw synth-design`,
+- **Use the CLI, not one-off scripts.** `siw measure`, `siw calibrate`, `siw synth-design`,
   `siw design --seed/--span/--patience`, `siw kicad`, `siw cst`, `siw
   compare-*`. Every bug found in the 2026-08-30 session was in throwaway
   orchestration scripts (loop variable collapsing N=3/N=4 onto one tag,

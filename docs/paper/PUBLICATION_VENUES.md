@@ -41,7 +41,8 @@ submit to the next venue.
    **endorsement**: ask a professor who has recent arXiv papers in eess or cs.
 2. **TechRxiv** (IEEE's preprint server) is an alternative or complement with
    the same lenient model.
-3. **After the measurements:**
+3. **The measurements are in the paper (2026-10-14 VNA data), so a journal
+   submission is possible now:**
    - IEEE Access: rolling, and gives a binary accept/reject quickly. Build it
      with `build.py access`.
    - Or IJRFMiCAE (Wiley).

@@ -10,6 +10,8 @@ Two tiers of stages:
     geometry  -> siw_geometry.py  : map spec -> physical SIW dimensions
     layout    -> layout_plot.py   : 2D top-view drawing + via-coordinate CSV
     cst       -> cst_export.py    : parametric CST VBA macro (siw_filter.bas)
+    measure   -> measure.py       : software-calibrate the committed VNA .s2p and
+                                    compare with spec / Palace / CST (siw measure)
     report    -> report.py        : comparison figures + IEEE PDF
 
   Heavy (opt-in — EM solves, minutes to hours):
@@ -32,6 +34,10 @@ Plus AI-driven design subcommands, all Palace/Topology-based:
                                    design (PEC vs copper/ENIG/soldermask/
                                    silkscreen/via options) + the ideal Chebyshev
                                    target; also saves the plot data as JSON
+    measure                     : close the loop -- software calibration of the
+                                   bench VNA data (default: measurements/
+                                   2026-10-14_vna), figures of merit, comparison
+                                   table + figures; --paper refreshes the papers
     compare-designs --golden .. : fabrication-decision comparison across an
                                    arbitrary list of golden/ design entries --
                                    S11/S21 on identical axes + true-to-scale
@@ -63,6 +69,7 @@ LIGHT = [
     ("geometry", "siwfilter.siw_geometry"),
     ("layout", "siwfilter.layout_plot"),
     ("cst", "siwfilter.cst_export"),
+    ("measure", "siwfilter.measure"),
     ("report", "siwfilter.report"),
 ]
 HEAVY = [
@@ -955,6 +962,16 @@ def cmd_compare_designs(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_measure(args) -> int:
+    from . import measure
+    res = measure.run(dataset=args.dataset, kit=args.kit, fit=args.fit, paper=args.paper,
+                      palace=args.palace, cst=args.cst, out_name=args.out_name)
+    print(f"wrote {measure.out_data(args.out_name + '_metrics.json')}")
+    if args.paper:
+        print("papers: tables, figures and docs/paper/data/measurement_metrics.json refreshed")
+    return 0 if res else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="siw", description=__doc__.splitlines()[0],
@@ -1288,6 +1305,29 @@ def main(argv: list[str] | None = None) -> int:
                              "'<topology> N=<N>', since landed-vs-best-known isn't "
                              "reliably inferable from the golden schema)")
     p_cmpd.set_defaults(func=cmd_compare_designs)
+
+    p_mea = sub.add_parser(
+        "measure",
+        help="bench VNA data -> software calibration (SOL + unknown thru) -> figures of "
+             "merit and a comparison with spec / Palace / CST (defaults: the committed "
+             "measurements/2026-10-14_vna dataset and the fabricated golden design)")
+    from . import measure as _m
+    p_mea.add_argument("--dataset", default=_m.DEFAULT_DATASET,
+                       help="directory with dut_*.s2p, raw_standards/ and check_thru_calibrated.s2p")
+    p_mea.add_argument("--kit", choices=["nominal", "ideal"], default="nominal",
+                       help="standard model for the software calibration: nominal 3.5 mm kit "
+                            "(offset delay + open capacitance) or ideal +1/-1/0 (default: nominal; "
+                            "magnitudes are insensitive, phase/reference plane is not)")
+    p_mea.add_argument("--palace", default=_m.DEFAULT_PALACE, help="golden .s11s21.json of the simulation")
+    p_mea.add_argument("--cst", default=_m.DEFAULT_CST, help="CST .s2p for the comparison column")
+    p_mea.add_argument("--fit", action="store_true",
+                       help="also fit a lossy coupling matrix (experimental: ill-conditioned on "
+                            "measured data because the model has no connector/launch)")
+    p_mea.add_argument("--paper", action="store_true",
+                       help="refresh docs/paper: comparison/launch tables (between siw-table "
+                            "markers), figures, data, and measurements/<set>/processed/")
+    p_mea.add_argument("--out-name", default="measure", help="output basename in output/")
+    p_mea.set_defaults(func=cmd_measure)
 
     # Internal only (see _artifacts/_render_worker): isolates one gmsh
     # render_png call per subprocess, not meant to be invoked directly.

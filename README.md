@@ -6,20 +6,26 @@ RO4350B. This repository designs it in Python, simulates it with Palace
 
 ## Where things stand
 
-The board has been **sent to JLCPCB** as a prototype; measurements will be
-added when it arrives. The simulated design does not fully meet the spec: the
-passband is wider and the matching is weaker than the targets.
+The board was made by JLCPCB (Rogers RO4350B, ENIG, about USD 120) and
+**measured on 2026-10-14**. It works as a filter but does not meet the
+specification: the match is worse than simulated and the loss higher.
 
-|                        | Target    | Simulated |
-|------------------------|-----------|-----------|
-| Centre frequency       | 2.87 GHz  | 2.876 GHz |
-| Bandwidth              | 143.5 MHz | 182 MHz   |
-| Worst in-band S11      | −16 dB    | −11.2 dB  |
-| Insertion loss (peak)  | —         | −1.7 dB   |
-| Board size             | —         | 165.8 × 45.8 mm |
+|                          | Target    | Simulated (Palace) | Measured (VNA, soldered) |
+|--------------------------|-----------|--------------------|--------------------------|
+| Centre frequency         | 2.87 GHz  | 2.876 GHz          | 2.894 GHz                |
+| −3 dB bandwidth          | 143.5 MHz | 182 MHz            | 171 MHz                  |
+| Peak insertion loss      | —         | 1.7 dB             | 2.0–2.4 dB               |
+| Worst in-band S11        | −16 dB    | −11.2 dB           | −5 dB (best dip −17 dB)  |
+| First spurious passband  | —         | 4.61 GHz, −3.8 dB  | 4.68 GHz, −4.4 dB        |
+
+The measured range is the instrument calibration (2.4 dB) and an independent
+software recalibration of the raw data (2.0 dB); `siw measure` reproduces both.
+Board size is 165.8 × 45.8 mm.
 
 ## Key files
 
+- **Measurements:** [`measurements/2026-10-14_vna/`](measurements/2026-10-14_vna/)
+  (VNA `.s2p` files, raw standards, photos) and the tables in the papers.
 - **Order the board:** [`docs/final_check/fab/`](docs/final_check/fab/)
   holds the gerbers, drill files and fab notes.
 - **Is it ready?** [`docs/final_check/REPORT.md`](docs/final_check/REPORT.md)
@@ -50,12 +56,24 @@ and S-parameters.
 
 ```bash
 uv sync      # install
-siw          # fast pipeline: synthesis → geometry → layout → CST macro
+siw          # fast pipeline: synthesis → geometry → layout → CST macro → measurement check
 siw --list   # show every stage and subcommand
 ```
 
 The EM simulations need [Palace](https://awslabs.github.io/palace/). It is
 found through `$PALACE_BIN`, your `$PATH`, or `~/opt/palace/bin/palace`.
+
+## Checking a measurement
+
+```bash
+siw measure            # software calibration + comparison with spec, Palace and CST
+siw measure --paper    # also refresh the tables and figures in docs/paper/
+```
+
+`siw measure` recalibrates the raw VNA files (open, short, match and thru
+saved with the measurement), checks the result against the instrument's own
+calibration, and prints the comparison table. Its defaults are the committed
+dataset and the fabricated design, so it runs with no arguments.
 
 ## Rebuilding the fabricated board
 

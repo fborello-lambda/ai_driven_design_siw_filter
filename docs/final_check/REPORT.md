@@ -162,10 +162,12 @@ correction was then simulated on the fine mesh; see sec. 2a for the result.
   does most of this work, which is why the coupling-matrix model, which has no
   cutoff, predicts only −46 dB.
 - **5G n78 at 3.5 GHz**: −39.5 dB (Palace broadband sweep).
-- **Spurious passband: 5.8–6.8 GHz at −1.8 dB.** It covers 5.8 GHz Wi-Fi
-  (UNII-3) and the bottom of Wi-Fi 6E. It is the known second passband, not a
-  fault, but a real application would need a low-pass after the filter. Also
-  expect it on the VNA.
+- **Spurious passbands.** The first one starts at 4.4 GHz (peaks −7.9, −3.8 and
+  −4.5 dB at 4.37, 4.61 and 4.82 GHz in the Palace broadband sweep); the
+  strongest is at 6.0 GHz (−1.8 dB), covering 5.8 GHz Wi-Fi (UNII-3) and the
+  bottom of Wi-Fi 6E. The 4.4–4.9 GHz band was confirmed on the VNA
+  (−4.4 dB at 4.68 GHz, `measurements/2026-10-14_vna/`). A real application
+  needs a low-pass after the filter.
 
 ## Files
 

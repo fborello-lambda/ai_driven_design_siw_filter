@@ -238,6 +238,30 @@ def fig_calib():
     _save(fig, "fig_calib.png")
 
 
+def fig_setup():
+    """Measurement photos (metadata-free JPEGs in measurements/) as one figure."""
+    from PIL import Image
+    ph = ROOT / "measurements/2026-10-14_vna/photos"
+    need = ["dut_connected.jpg", "bench_setup.jpg", "vna_cal_setup.jpg"]
+    if not all((ph / n).exists() for n in need):
+        print("skip fig_setup: photos missing")
+        return
+    a, b, c = (Image.open(ph / n).convert("RGB") for n in need)
+    # bench photo: keep the board, cables and VNA ports; drop the instrument screen (its
+    # markers belong to an earlier sweep, not to the saved files)
+    b = b.crop((0, 0, b.width, round(b.height * 0.60)))
+    W, H, gap = 1500, 600, 12
+    b = b.resize((round(b.width * H / b.height), H), Image.LANCZOS)
+    cw = W - b.width - gap
+    c = c.resize((cw, round(c.height * cw / c.width)), Image.LANCZOS)
+    canvas = Image.new("RGB", (W, a.height + gap + H), "white")
+    canvas.paste(a, (0, 0))
+    canvas.paste(b, (0, a.height + gap))
+    canvas.paste(c, (b.width + gap, a.height + gap + max(0, (H - c.height) // 2)))
+    canvas.save(OUT / "fig_setup.jpg", "JPEG", quality=85, optimize=True)   # fresh image: no EXIF
+    print("wrote", OUT / "fig_setup.jpg")
+
+
 def copies():
     for dst, src in COPIES.items():
         p = ROOT / src
@@ -255,3 +279,4 @@ if __name__ == "__main__":
     fig_designs()
     fig_layouts()
     fig_calib()
+    fig_setup()

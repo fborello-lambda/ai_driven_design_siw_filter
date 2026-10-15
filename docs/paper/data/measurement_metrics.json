@@ -1,0 +1,295 @@
+{
+  "dataset": "measurements/2026-10-14_vna",
+  "software_cal_model": "nominal",
+  "calibration_check": {
+    "model": "nominal",
+    "pairs": {
+      "SU->SC": {
+        "s21_mean_diff_db": 0.1745939229035194,
+        "s21_max_abs_diff_db": 0.8818999415449866,
+        "s11_mean_dgamma": 0.030490828947896762,
+        "s22_mean_dgamma": 0.04374166378660457,
+        "band_ghz": [
+          2.6,
+          3.2
+        ]
+      },
+      "UU->UC": {
+        "s21_mean_diff_db": 0.17380588891360596,
+        "s21_max_abs_diff_db": 1.0023437949861318,
+        "s11_mean_dgamma": 0.03060631746848106,
+        "s22_mean_dgamma": 0.04194128226902423,
+        "band_ghz": [
+          2.6,
+          3.2
+        ]
+      }
+    },
+    "thru_check": {
+      "instrument_s21_db_mean": 0.1816536683983643,
+      "instrument_s11_db_max": -18.3546506209108,
+      "software_s21_db_mean": 0.25898655667160764,
+      "software_s11_db_max": -17.631694225344468
+    }
+  },
+  "metrics": {
+    "palace": {
+      "name": "Palace",
+      "kind": "sim",
+      "note": "fine mesh, trimmed (fabricated) geometry",
+      "fc_ghz": 2.8758306380125944,
+      "bw_mhz": 182.2556166024838,
+      "fbw_pct": 6.337494781279453,
+      "s21_peak_db": -1.70432957322,
+      "f_peak_ghz": 2.86,
+      "s21_inband_worst_db": -2.583331485729,
+      "s11_inband_worst_db": -11.1455895473,
+      "s11_best_db": -35.42081043146,
+      "f_s11_best_ghz": 2.85,
+      "n_s11_zeros": 3,
+      "band_truncated": false,
+      "rej_2.45_db": -60.89793977342,
+      "wideband_from": "Palace 0-8 GHz",
+      "rej_3.5_db": -39.50675195703,
+      "spur_db": -3.774842314679,
+      "f_spur_ghz": 4.61
+    },
+    "cst": {
+      "name": "CST",
+      "kind": "sim",
+      "note": "FD solver, pre-trim geometry",
+      "fc_ghz": 2.8778931184039447,
+      "bw_mhz": 179.60915130830557,
+      "fbw_pct": 6.24099450253091,
+      "s21_peak_db": -1.7966614460583212,
+      "f_peak_ghz": 2.888,
+      "s21_inband_worst_db": -3.7552398999950247,
+      "s11_inband_worst_db": -6.850144055052704,
+      "s11_best_db": -17.290604503621875,
+      "f_s11_best_ghz": 2.8768,
+      "n_s11_zeros": 1,
+      "band_truncated": false,
+      "s22_inband_worst_db": -6.865103042018984,
+      "s22_best_db": -17.508415817009706,
+      "rej_2.45_db": -60.67356012316519,
+      "rej_3.5_db": -39.26306446964148,
+      "spur_db": -2.5464460813798966,
+      "wideband_from": "CST 0-8 GHz",
+      "f_spur_ghz": 4.632
+    },
+    "SC": {
+      "name": "VNA soldered, cal.",
+      "kind": "vna",
+      "note": "instrument calibration",
+      "fc_ghz": 2.894312364362593,
+      "bw_mhz": 171.24076154069456,
+      "fbw_pct": 5.916457520244414,
+      "s21_peak_db": -2.379355277096149,
+      "f_peak_ghz": 2.89349,
+      "s21_inband_worst_db": -7.144916792660089,
+      "s11_inband_worst_db": -5.26679013190269,
+      "s11_best_db": -16.7616234097196,
+      "f_s11_best_ghz": 2.89888,
+      "n_s11_zeros": 1,
+      "band_truncated": false,
+      "s22_inband_worst_db": -5.2013007551159,
+      "s22_best_db": -21.3536138057703,
+      "rej_2.45_db": -45.6160948161695,
+      "rej_3.5_db": -43.330065832942175,
+      "spur_db": -4.402189438737158,
+      "f_spur_ghz": 4.6815
+    },
+    "UC": {
+      "name": "VNA unsoldered, cal.",
+      "kind": "vna",
+      "note": "instrument calibration",
+      "fc_ghz": 2.8977199476179294,
+      "bw_mhz": 171.92073068605885,
+      "fbw_pct": 5.932965703859211,
+      "s21_peak_db": -2.4073380638322996,
+      "f_peak_ghz": 2.90231,
+      "s21_inband_worst_db": -7.62281697838942,
+      "s11_inband_worst_db": -4.804426620074029,
+      "s11_best_db": -17.131948816619403,
+      "f_s11_best_ghz": 2.88369,
+      "n_s11_zeros": 1,
+      "band_truncated": false,
+      "s22_inband_worst_db": -4.458697532234742,
+      "s22_best_db": -17.9300927722782,
+      "rej_2.45_db": -45.773569538257796,
+      "rej_3.5_db": -43.53631928319021,
+      "spur_db": -4.20468124478643,
+      "f_spur_ghz": 4.68346
+    },
+    "SW_S": {
+      "name": "Software cal., soldered",
+      "kind": "swcal",
+      "note": "SOL + unknown thru, nominal standards",
+      "fc_ghz": 2.8945435634440555,
+      "bw_mhz": 172.49618874413076,
+      "fbw_pct": 5.959357147794563,
+      "s21_peak_db": -2.0425257109139534,
+      "f_peak_ghz": 2.89594,
+      "s21_inband_worst_db": -6.785540233542752,
+      "s11_inband_worst_db": -4.575979495691629,
+      "s11_best_db": -18.787978292670942,
+      "f_s11_best_ghz": 2.88075,
+      "n_s11_zeros": 1,
+      "band_truncated": false,
+      "s22_inband_worst_db": -4.960513017708835,
+      "s22_best_db": -26.634236094745308,
+      "rej_2.45_db": -44.94083734010833,
+      "rej_3.5_db": -41.628168563751856,
+      "spur_db": -4.5437584771273185,
+      "f_spur_ghz": 4.68003
+    },
+    "SW_U": {
+      "name": "Software cal., unsoldered",
+      "kind": "swcal",
+      "note": "SOL + unknown thru, nominal standards",
+      "fc_ghz": 2.89768028527686,
+      "bw_mhz": 173.51632224431813,
+      "fbw_pct": 5.988111356727523,
+      "s21_peak_db": -2.0823323168819727,
+      "f_peak_ghz": 2.89545,
+      "s21_inband_worst_db": -7.258687829801068,
+      "s11_inband_worst_db": -4.128736133889181,
+      "s11_best_db": -20.1410610282726,
+      "f_s11_best_ghz": 2.8734,
+      "n_s11_zeros": 1,
+      "band_truncated": false,
+      "s22_inband_worst_db": -4.304625139153083,
+      "s22_best_db": -20.86361656941792,
+      "rej_2.45_db": -44.97637079091117,
+      "rej_3.5_db": -42.34841541145293,
+      "spur_db": -4.359544650371211,
+      "f_spur_ghz": 4.68101
+    }
+  },
+  "standard_model_sensitivity": {
+    "compared": "nominal vs ideal",
+    "max_abs_dS21_db": 0.027266034224886937,
+    "max_abs_dS11_db": 0.08387818310852069,
+    "mean_dGamma_S11": 0.6905261495032438
+  },
+  "coupling_fit": {
+    "palace": {
+      "source": "Palace",
+      "fit_rms_db": 1.6084278482349972,
+      "params": [
+        0.9402377443892385,
+        0.8447456059441282,
+        0.15290972030127636,
+        0.0701270963187721,
+        0.004360958020532235
+      ],
+      "M_ext_err_pct": -4.502891826120214,
+      "M_int_err_pct": -8.095671567213014,
+      "Qe_fitted": 22.623231161479897,
+      "Qe_target": 20.631702850157527,
+      "k12_fitted": 0.042237280297206414,
+      "k12_target": 0.04595787926147144,
+      "end_cavity_detune_mhz": -10.97127243161658,
+      "mid_cavity_detune_mhz": -5.031619160871899,
+      "Qu": 229.30741256664393
+    },
+    "SC": {
+      "source": "VNA soldered, cal.",
+      "fit_rms_db": 1.5161767004518014,
+      "params": [
+        1.1851896675864533,
+        0.8782290264079694,
+        -0.643384883057558,
+        -0.2926204458114639,
+        0.011787091946115727
+      ],
+      "M_ext_err_pct": 20.3761352567156,
+      "M_int_err_pct": -4.4528337119954635,
+      "Qe_fitted": 14.23817355150922,
+      "Qe_target": 20.631702850157527,
+      "k12_fitted": 0.043911451320398476,
+      "k12_target": 0.04595787926147144,
+      "end_cavity_detune_mhz": 46.16286535937979,
+      "mid_cavity_detune_mhz": 20.995516986972536,
+      "Qu": 84.83856786486986
+    },
+    "UC": {
+      "source": "VNA unsoldered, cal.",
+      "fit_rms_db": 1.3828206521357145,
+      "params": [
+        0.8794454483073749,
+        1.0546259943103937,
+        -0.6011260681478297,
+        -1.2168924358614714,
+        0.017627122950004577
+      ],
+      "M_ext_err_pct": -10.677381746049342,
+      "M_int_err_pct": 14.738322487666888,
+      "Qe_fitted": 25.85902730138022,
+      "Qe_target": 20.631702850157527,
+      "k12_fitted": 0.05273129971551969,
+      "k12_target": 0.04595787926147144,
+      "end_cavity_detune_mhz": 43.13079538960678,
+      "mid_cavity_detune_mhz": 87.31203227306058,
+      "Qu": 56.73075537263104
+    }
+  },
+  "loss_sweep_palace_couplings": [
+    {
+      "Qu": 1000000.0,
+      "il_db": 0.0003115796600393336,
+      "bw_mhz": 182.83800049132236,
+      "s11_inband_worst_db": -7.772243941204886,
+      "s11_best_db": -58.607288343287465,
+      "n_s11_zeros": 3
+    },
+    {
+      "Qu": 270.0,
+      "il_db": 1.1260907275862966,
+      "bw_mhz": 178.6503021629233,
+      "s11_inband_worst_db": -9.10760766296833,
+      "s11_best_db": -30.158903578684576,
+      "n_s11_zeros": 3
+    },
+    {
+      "Qu": 229.0,
+      "il_db": 1.3264417372159802,
+      "bw_mhz": 177.91077650818866,
+      "s11_inband_worst_db": -9.250968446703768,
+      "s11_best_db": -28.89552098607907,
+      "n_s11_zeros": 3
+    },
+    {
+      "Qu": 180.0,
+      "il_db": 1.6845981420599654,
+      "bw_mhz": 176.60970979387747,
+      "s11_inband_worst_db": -9.449041199509587,
+      "s11_best_db": -27.098201309220396,
+      "n_s11_zeros": 2
+    },
+    {
+      "Qu": 150.0,
+      "il_db": 2.0181642331632417,
+      "bw_mhz": 175.42589479424154,
+      "s11_inband_worst_db": -9.575311146980397,
+      "s11_best_db": -25.770964972226352,
+      "n_s11_zeros": 2
+    },
+    {
+      "Qu": 130.0,
+      "il_db": 2.3250311272224975,
+      "bw_mhz": 174.3677994711681,
+      "s11_inband_worst_db": -9.650237741008212,
+      "s11_best_db": -24.75303580806426,
+      "n_s11_zeros": 1
+    },
+    {
+      "Qu": 100.0,
+      "il_db": 3.011749229468536,
+      "bw_mhz": 172.13662862167968,
+      "s11_inband_worst_db": -9.709339152363334,
+      "s11_best_db": -22.93410205493217,
+      "n_s11_zeros": 1
+    }
+  ]
+}
