@@ -342,7 +342,7 @@ therefore ran on CPUs with 4 MPI ranks. Four attempts on a 3.7 GB host failed,
 three of them explicitly out of memory; the final runs used a 16 GB host at
 about 8 s per frequency point. Memory, not arithmetic, was the binding
 constraint, and a card with more memory, or the half-model and adaptive sweeps
-of Sec. IX, would bring the cascade onto the GPU.
+of Sec. X, would bring the cascade onto the GPU.
 
 # Why global Bayesian search failed
 
@@ -623,7 +623,7 @@ Launch and radiation (remainder of the Palace result) & $\approx$0.5 \\
 \textbf{Palace, perfect-conductor walls} & \textbf{1.70} \\
 Copper ($Q_c \approx 540$) & $+0.4$ \\
 \textbf{Predicted, before the measurement} & \textbf{2.1--2.3} \\
-\textbf{Measured (Sec.~\ref{sec:vna})} & \textbf{2.0--2.4} \\
+\textbf{Measured (Sec.~VIII)} & \textbf{2.0--2.4} \\
 \hline
 \end{tabular}
 \end{table}
@@ -779,7 +779,7 @@ four corrected measurements through the same code (`siw measure`). Fig.
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\caption{Fabricated cascade N=3 filter: specification, simulation and measurement. Every column is processed with the same code. In-band is $2.870\pm1.4\%$\,GHz (the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. Measured columns: VNA = instrument calibration, SW = software recalibration of the raw files (Sec.~\ref{sec:vna}); S = connectors soldered, U = unsoldered, C = calibrated. $Q_L$ and the effective $Q_u$ are defined in Sec.~\ref{sec:q}. The specified bandwidth is the 0.1\,dB ripple bandwidth; the specification $Q_L$ is that of the ideal prototype at $-3$\,dB (199\,MHz), not $1/\mathrm{FBW} = 20$.}
+\caption{Fabricated cascade N=3 filter: specification, simulation and measurement. Every column is processed with the same code. In-band is $2.870\pm1.4\%$\,GHz (the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. Measured columns: VNA = instrument calibration, SW = software recalibration of the raw files (Sec.~VIII); S = connectors soldered, U = unsoldered, C = calibrated. $Q_L$ and the effective $Q_u$ are defined in Sec.~IX. The specified bandwidth is the 0.1\,dB ripple bandwidth; the specification $Q_L$ is that of the ideal prototype at $-3$\,dB (199\,MHz), not $1/\mathrm{FBW} = 20$.}
 \label{tab:comparison}
 \begin{tabular}{lccccccc}
 \hline
@@ -905,6 +905,25 @@ All figures in this section are regenerated from the files in
 
 # Quality factor: loaded and unloaded Q {#sec:q}
 
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_q_zoom.png}
+\caption{Loaded Q read from $|S_{21}|$. The dotted line is 3\,dB below each
+curve's peak and runs edge to edge; the arrow marks the bandwidth and the box
+gives $Q_L = f_c/\mathrm{BW}$.}
+\label{fig:qzoom}
+\vspace{0.6em}
+\includegraphics[width=0.85\textwidth]{figures/fig_q_comparison.png}
+\caption{Quality factors of the four sources against theory (hatched bars).
+(a) Loaded Q: the comparable value is the ideal prototype at $-3$\,dB (14.4),
+not $1/\mathrm{FBW}$ (20, ripple band). (b) Effective $Q_u$ solved from the
+insertion loss, against the dielectric limit (270) and dielectric plus smooth
+copper (180).}
+\label{fig:qcomp}
+\end{figure*}
+```
+
 Two quality factors summarise the response. The **loaded Q** of the filter,
 $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$, says how narrow the passband is with
 the ports attached. We read it straight off $|S_{21}|$: the dotted line in Fig.
@@ -914,16 +933,16 @@ insertion loss (Eq. \ref{eq:il}). The two $Q$ rows of Table
 \ref{tab:comparison} and Fig. \ref{fig:qcomp} come from the same code
 (`siw measure`) for all four sources.
 
-```{=latex}
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.95\textwidth]{figures/fig_q_zoom.png}
-\caption{Loaded Q read from $|S_{21}|$. The dotted line is 3\,dB below each
-curve's peak and runs edge to edge; the arrow marks the bandwidth and the box
-gives $Q_L = f_c/\mathrm{BW}$.}
-\label{fig:qzoom}
-\end{figure*}
-```
+In the full filter the two play different roles:
+
+- $Q_L$ is set by the couplings ($k$ and $Q_e$). It defines the bandwidth and
+  barely depends on $Q_u$ as long as $Q_u \gg Q_L$.
+- $Q_u$ does not change the bandwidth, but it sets the insertion loss.
+  Writing Eq. \ref{eq:il} in terms of the loaded Q of the ripple band,
+  $Q_{L,\text{ripple}} = 1/\mathrm{FBW}$,
+  $$ \mathrm{IL}_0 \approx 4.343 \sum_i g_i \, \frac{Q_{L,\text{ripple}}}{Q_u}\ \text{dB}. $$
+  The narrower the filter (higher $Q_L$) or the lossier each resonator
+  (lower $Q_u$), the higher the loss.
 
 *Theoretical loaded Q.* The specified 5 % is the 0.1 dB *ripple* bandwidth,
 143.5 MHz, whose $Q$ is $1/\mathrm{FBW} = 20$. At $-3$ dB the ideal third-order
@@ -948,23 +967,14 @@ simulations have perfectly conducting walls, whose ceiling is the dielectric,
 $Q_d = 270$; the gap is the mismatch and launch terms of the loss budget
 (Table \ref{tab:lossbudget}). The board gives 138 with the instrument
 calibration and 159 with the software one, inside the 130–185 range the
-coupling-matrix forward model gave in Sec. \ref{sec:vna}. The board sits at
+coupling-matrix forward model gave in Sec. VIII. The board sits at
 0.77–0.89 of Palace; that is what copper, the ENIG finish and the real
 connector add, none of which the simulations contain. The smooth-copper
 reference, $1/Q_u = 1/Q_d + 1/Q_c$ with $Q_c \approx 540$, gives 180 for the
 resonator alone.
 
 ```{=latex}
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.85\textwidth]{figures/fig_q_comparison.png}
-\caption{Quality factors of the four sources against theory (hatched bars).
-(a) Loaded Q: the comparable value is the ideal prototype at $-3$\,dB (14.4),
-not $1/\mathrm{FBW}$ (20, ripple band). (b) Effective $Q_u$ solved from the
-insertion loss, against the dielectric limit (270) and dielectric plus smooth
-copper (180).}
-\label{fig:qcomp}
-\end{figure*}
+\FloatBarrier
 ```
 
 # Discussion: gaps and room to improve

@@ -1353,6 +1353,25 @@ bandas espurias, y no en pérdida de retorno.
 
 # Factor de calidad: Q cargado y Q descargado {#sec:q}
 
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_q_zoom_es.png}
+\caption{Q cargado leído de $|S_{21}|$. La línea punteada está 3\,dB por
+debajo del pico de cada curva y va de borde a borde de la banda; la flecha
+marca el ancho de banda y el recuadro, $Q_L = f_c/\mathrm{BW}$.}
+\label{fig:qzoom}
+\vspace{0.6em}
+\includegraphics[width=0.85\textwidth]{figures/fig_q_comparison_es.png}
+\caption{Factores de calidad de las cuatro fuentes frente a la teoría
+(barras rayadas). (a) Q cargado: el valor comparable es el del prototipo ideal
+a $-3$\,dB (14.4), no $1/\mathrm{FBW}$ (20, banda de rizado). (b) $Q_u$
+efectivo despejado de la pérdida de inserción, frente al límite del dieléctrico
+(270) y al de dieléctrico más cobre liso (180).}
+\label{fig:qcomp}
+\end{figure*}
+```
+
 La respuesta se puede resumir con dos factores de calidad. El **Q cargado** del
 filtro, $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$, dice qué tan angosta es la
 banda pasante con los puertos conectados. Lo leímos directamente de $|S_{21}|$:
@@ -1373,17 +1392,6 @@ En el filtro completo los dos cumplen papeles distintos:
   $$ \mathrm{IL}_0 \approx 4.343 \sum_i g_i \, \frac{Q_{L,\text{rizado}}}{Q_u}\ \text{dB}. $$
   Cuanto más angosto es el filtro ($Q_L$ mayor) o más pérdida tiene cada
   resonador ($Q_u$ menor), mayor es la pérdida.
-
-```{=latex}
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.95\textwidth]{figures/fig_q_zoom_es.png}
-\caption{Q cargado leído de $|S_{21}|$. La línea punteada está 3\,dB por
-debajo del pico de cada curva y va de borde a borde de la banda; la flecha
-marca el ancho de banda y el recuadro, $Q_L = f_c/\mathrm{BW}$.}
-\label{fig:qzoom}
-\end{figure*}
-```
 
 **Referencia teórica del Q cargado.** El 5 % de la especificación es el ancho
 de banda de *rizado* de 0.1 dB, 143.5 MHz, y su $Q$ es
@@ -1417,16 +1425,7 @@ con cobre liso, $1/Q_u = 1/Q_d + 1/Q_c$ con $Q_c \approx 540$, da 180 para el
 resonador solo.
 
 ```{=latex}
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.85\textwidth]{figures/fig_q_comparison_es.png}
-\caption{Factores de calidad de las cuatro fuentes frente a la teoría
-(barras rayadas). (a) Q cargado: el valor comparable es el del prototipo ideal
-a $-3$\,dB (14.4), no $1/\mathrm{FBW}$ (20, banda de rizado). (b) $Q_u$
-efectivo despejado de la pérdida de inserción, frente al límite del dieléctrico
-(270) y al de dieléctrico más cobre liso (180).}
-\label{fig:qcomp}
-\end{figure*}
+\FloatBarrier
 ```
 
 # Conclusiones y próximos pasos {#sec:concl}

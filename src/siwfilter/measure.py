@@ -374,14 +374,16 @@ LABELS = {
             "s11_best_db": r"Best $S_{11}$ (dB @ GHz)", "n_s11_zeros": r"$S_{11}$ zeros $<-10$\,dB",
             "rej_2.45_db": r"$S_{21}$ at 2.45\,GHz (dB)", "rej_3.5_db": r"$S_{21}$ at 3.5\,GHz (dB)",
             "spur_db": r"Strongest spur (dB @ GHz)"},
+        # the English paper's sections are unnumbered (\ref prints nothing), so
+        # it cites them by hand-written numeral: VIII = measured results, IX = Q
         "caption": (r"Fabricated cascade N=3 filter: specification, simulation and measurement. "
                     r"Every column is processed with the same code. In-band is $2.870\pm1.4\%$\,GHz "
                     r"(the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures "
                     r"are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from "
                     r"the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. "
                     r"Measured columns: VNA = instrument calibration, SW = software recalibration of the "
-                    r"raw files (Sec.~\ref{sec:vna}); S = connectors soldered, U = unsoldered, C = calibrated. "
-                    r"$Q_L$ and the effective $Q_u$ are defined in Sec.~\ref{sec:q}. The specified bandwidth "
+                    r"raw files (Sec.~VIII); S = connectors soldered, U = unsoldered, C = calibrated. "
+                    r"$Q_L$ and the effective $Q_u$ are defined in Sec.~IX. The specified bandwidth "
                     r"is the 0.1\,dB ripple bandwidth; the specification $Q_L$ is that of the ideal prototype "
                     r"at $-3$\,dB (199\,MHz), not $1/\mathrm{FBW} = 20$."),
         "label": "tab:comparison"},
