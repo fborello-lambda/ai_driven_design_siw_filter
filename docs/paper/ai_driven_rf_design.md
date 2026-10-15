@@ -26,7 +26,7 @@ abstract: |
   Rogers RO4350B with ENIG finish for about USD 120, was measured with a vector
   network analyzer and recalibrated independently in software. It is centred at
   2.894 GHz with 171 MHz bandwidth, 2.0 to 2.4 dB insertion loss and a
-  single reflection zero of -17 dB. The simulation predicted 2.876 GHz, 182 MHz,
+  single reflection zero (-17 to -20 dB). The simulation predicted 2.876 GHz, 182 MHz,
   1.7 dB and three zeros, and the measured loss fits an effective unloaded Q of
   about 130 to 185. The -16 dB specification is not met.
 bibliography: references.bib
@@ -279,7 +279,7 @@ and $w_{\text{ext}}$ = 13.53 mm, against 14.42 and 13.96 mm on the fabricated
 board, whose end cavities were subsequently trimmed.
 The resulting internal coupling was within 2 % of target. At that checkpoint
 the N = 4 centre frequency also landed at 2.870 GHz, although the N = 4 design
-was later abandoned for its return loss (Sec. VI). The GP was kept only as a local polish
+was later abandoned, its best return loss being −6.1 dB (Sec. VI). The GP was kept only as a local polish
 seeded with the result (`--seed`). The physics that worked is textbook
 [@hong2001microstrip; @cameron2018microwave]. What the agent contributed was
 running the calibrations quickly, and diagnosing why the black-box route had
@@ -454,10 +454,12 @@ interior ripple from $-11.2$ to $-14.5$\,dB. The worst point stays at the
 ```
 
 **Why it misses the specification.** A lossy N = 3 coupling-matrix fit to the
-refined sweep (Fig. \ref{fig:cmfit}) puts the external coupling on target
-(+0.4 %), which exonerates the launch. It finds the internal coupling 4.8 %
-weak and the end cavities 17 MHz low. The trim halves the detuning, but the
-worst in-band point sits at the upper band edge, where the equiripple region
+refined sweep of the untrimmed board (Fig. \ref{fig:cmfit}) puts the external
+coupling on target (+0.4 %), which exonerates the launch. It finds the internal
+coupling 4.8 % weak and the end cavities 17 MHz low. The trim halves the
+detuning: the same fit on the fabricated geometry gives the end cavities 11 MHz
+low, the internal coupling 8 % weak and the external coupling 4.5 % weak
+($Q_e$ 22.6 against 20.6). The worst in-band point sits at the upper band edge, where the equiripple region
 ends near 2.935 GHz against a target edge of 2.942 GHz. Adding
 +0.6 mm of $w_{\text{iris}}$ on top of the trim widened the band without
 helping. Adding +0.4 mm of $w_{\text{ext}}$ on top of both was strongly
@@ -469,7 +471,7 @@ trial was run. A coordinated local move remains open.
 \centering
 \includegraphics[width=\columnwidth]{figures/fig_coupling_fit.png}
 \caption{Lossy coupling-matrix fit used to diagnose the return-loss gap:
-external Q on target, $k$ 4.8\,\% weak, end cavities 17\,MHz low.}
+untrimmed board: external Q on target, $k$ 4.8\,\% weak, end cavities 17\,MHz low.}
 \label{fig:cmfit}
 \end{figure}
 ```
@@ -505,18 +507,20 @@ board only reaches IL $\approx$ 1.3 dB, because Qd still dominates. RT/duroid 58
 ($\tan\delta$ $\approx$ 0.0009) at 1.52 mm would bring it to about 0.5 dB.
 
 **Cross-solver check.** CST Frequency Domain, run from the generated macro,
-agreed with Palace on fc (2.876 vs. 2.875 GHz) and IL (1.80 vs. 1.85 dB).
+agreed with Palace on fc (2.876 vs. 2.875 GHz) and IL (1.80 vs. 1.85 dB) on the
+untrimmed board.
 Getting there took ten debugging steps on the macro and solver setup, seven
 of them actual fixes, and a coax-only
-control model to separate port problems from filter problems. The bandwidth
-agreed less well: 129.6 MHz in CST against 150 MHz in Palace at the reference
-mesh. The time-domain solver was never made fully stable.
+control model to separate port problems from filter problems. In Table \ref{tab:comparison} the CST run gives
+2.878 GHz, 180 MHz and 1.80 dB against 2.876 GHz, 182 MHz and 1.70 dB for Palace
+on the fabricated geometry (CST is the untrimmed one). The time-domain solver
+was never made fully stable.
 
 **The connector is part of the design.** Figs. \ref{fig:launch} and \ref{fig:renders} compare
 three launches on the same geometry: a bare microstrip feed, the CPWG launch
 without a connector, and the CPWG launch with the SMA. Without the connector
 only one reflection zero remains, and the worst in-band S11 is −6.3 dB
-(microstrip) or −5.1 dB (CPWG), against −11.2 dB with it. The filter was
+(microstrip) or −5.1 dB (CPWG), against −11.1 dB with it. The filter was
 tuned with the connector's reactance in place. The bare CPWG port also shows
 a port-modelling trap: its first two Palace modes belong to the ground pours
 (S21 $\approx$ −78 dB), and the signal mode is mode 3.
@@ -662,9 +666,9 @@ appear in the measurement at the simulated frequencies.}
 *Centre frequency and bandwidth.* The measured band is centred at 2.894 GHz
 (soldered) and 2.898 GHz (unsoldered), against 2.876 GHz in Palace and 2.870 GHz
 in the specification. The +18 MHz (0.6 %) offset to the simulation corresponds
-to an effective permittivity about 1.2 % below the 3.66 used for design,
+to an effective permittivity about 1.3 % below the 3.66 used for design,
 well inside the spread between a laminate's design and process values;
-we did not test this. The −3 dB bandwidth is 171–174 MHz, 6 % below Palace.
+we did not test this. The −3 dB bandwidth is 171–174 MHz, 5–6 % below Palace.
 
 *Insertion loss.* The peak $S_{21}$ is −2.38 and −2.41 dB with the instrument
 calibration and −2.04 and −2.08 dB with the software one, so 2.0–2.4 dB within
@@ -683,23 +687,25 @@ about 180 expected with smooth copper. We do not separate copper roughness, via-
 solder joints, the connector and the ENIG finish on the feed lines.
 
 *Return loss.* The three simulated reflection zeros appear as one broad zero,
-$-17$ dB at best, with a shoulder; the worst in-band $S_{11}$ is −5 dB. The
+$-17$ dB at best with the instrument calibration ($-19$ to $-20$ dB with the software
+one), with a shoulder; the worst in-band $S_{11}$ is −5 dB. The
 loss explains most of this, since it merges the zeros, and the 24 MHz offset
 from the specified band adds to it. The ports differ slightly: the best $S_{22}$
 is −21 dB against −17 dB for $S_{11}$ on the soldered board.
 
 *Soldering.* Soldering the connectors changes the calibrated result by
-4 MHz in centre frequency, 0.03 dB in insertion loss and 0.5 dB in worst
+3 MHz in centre frequency, 0.03 dB in insertion loss and 0.5 dB in worst
 in-band $S_{11}$. At 2.9 GHz the contact of the seated connector is adequate,
 and the fork-slot fit discussed in Sec. VII did not become a problem.
 
 *Out of band.* The first spurious passband appears at 4.68 GHz and −4.4 dB,
 against 4.61 GHz and −3.8 dB in Palace and 4.63 GHz and −2.5 dB in CST. Above the
-passband the measurement follows Palace (−45.6 against −44.2 dB at 3.7 GHz,
-−41 against −42 dB at 4.0 GHz). Below it the simulated rejection keeps falling
-(−61 dB at 2.45 GHz, −92 dB at 2.0 GHz), while the measured one levels off at
-−46 to −48 dB between 2.2 and 2.5 GHz and is −55 dB at 2.0 GHz, well above the
-instrument floor (below −70 dB). This points to coupling around the filter
+passband the measurement stays within a few dB of Palace (−45.6 against
+−44.2 dB at 3.7 GHz, −41.2 against −41.7 dB at 4.0 GHz, −43.0 against −39.5 dB at
+3.5 GHz). Below it the simulated rejection keeps falling (−61 dB at 2.45 GHz,
+−92 dB at 2.0 GHz), while the measured one levels off at −44 to −48 dB between
+2.2 and 2.5 GHz and is −55 dB at 2.0 GHz, well above the instrument floor
+(below −70 dB). This points to coupling around the filter
 (open feed regions, cables) or leakage through the via fence, which the models
 do not contain.
 
@@ -722,7 +728,7 @@ Sec. VII.
 \hline
 Microstrip, no conn. & 2.897 & 205 & $-$1.87 & $-$6.3 \\
 CPWG, no conn. & 2.875 & 164 & $-$2.21 & $-$5.1 \\
-CPWG + SMA, sim. & 2.876 & 182 & $-$1.70 & $-$11.2 \\
+CPWG + SMA, sim. & 2.876 & 182 & $-$1.70 & $-$11.1 \\
 CPWG + SMA, sold. & 2.894 & 171 & $-$2.38 & $-$5.3 \\
 CPWG + SMA, unsold. & 2.898 & 172 & $-$2.41 & $-$4.8 \\
 \hline
@@ -769,10 +775,13 @@ argues for keeping those checks in the loop.
 
 * One board and one measurement session: no spread across boards, and the
   S21 scale is uncertain by about 0.3 dB (Sec. VIII).
-* The specification is not met: −11.2 dB against −16 dB, and 182 MHz against
+* The specification is not met: the board measures −5 dB worst in-band return
+  loss against −16 dB (simulated: −11.1 dB), and 171 MHz bandwidth against
   143.5 MHz.
-* S11 varies by about 5 dB across mesh and port models, while fc, bandwidth
-  and IL are robust. The match is therefore inside the model uncertainty.
+* S11 varied by about 5 dB across mesh and port models, while fc, bandwidth
+  and IL moved by less than 10 MHz and 0.3 dB. The measurement then differed
+  from Palace by +18 MHz in fc, 0.3–0.7 dB in IL and 6 dB in S11, so the
+  model uncertainty was not conservative.
 * Qe is calibrated with a dielectric-only Qu and is slightly over-estimated.
 * Conductor loss is modelled only on exterior faces. Thin fabrication layers
   (mask, ENIG) could not be resolved.
@@ -819,12 +828,12 @@ replacing black-box search over a discontinuous objective with calibration of
 smooth observables on small structures. The second was catching a long series
 of silent defects with physics checks. The measurement confirms the
 simulations where the physics is simple: the spurious bands fall at the
-predicted frequencies and the centre frequency is within 0.6 %. It also shows
+predicted frequencies and the centre frequency is within 1 % of the specification. It also shows
 what the simulations did not capture: 0.3 to 0.7 dB more loss than Palace,
 which merges the three reflection zeros into one, so the worst in-band return
 loss is 5 dB, not the simulated 11 dB and not the specified 16 dB. The
-independent software recalibration agrees with the instrument's within 0.2 dB
-in $S_{21}$, so this conclusion does not rest on one calibration. The code,
+independent software recalibration agrees with the instrument's on average
+within 0.2 dB in $S_{21}$ (up to 1 dB on the steep band edges), so this conclusion does not rest on one calibration. The code,
 data and scripts that produced every number are in the repository, and
 `siw measure` reproduces the measured columns of Table \ref{tab:comparison}.
 

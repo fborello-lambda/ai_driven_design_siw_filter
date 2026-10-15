@@ -456,7 +456,10 @@ def launch_table_latex(cm: dict, lang: str = "en", summary: str = LAUNCH_SUMMARY
     rows = []
     for key in ("ms", "cpwg", "cpwg_sma"):
         m = s[key]
-        rows.append((L["rows"][key], m["fc_ghz"], m["bw_mhz"], m["il_db"], m["s11w_db"]))
+        s11 = m["s11w_db"]
+        if key == "cpwg_sma" and "palace" in cm:      # same figure as the comparison table
+            s11 = cm["palace"]["s11_inband_worst_db"]
+        rows.append((L["rows"][key], m["fc_ghz"], m["bw_mhz"], m["il_db"], s11))
     for key, rk in (("SC", "meas"), ("UC", "meas_u")):
         m = cm.get(key)
         if m:
@@ -739,4 +742,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()   # no SystemExit: the pipeline runs this via runpy and must continue to the next stage

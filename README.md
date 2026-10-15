@@ -15,7 +15,7 @@ specification: the match is worse than simulated and the loss higher.
 | Centre frequency         | 2.87 GHz  | 2.876 GHz          | 2.894 GHz                |
 | −3 dB bandwidth          | 143.5 MHz | 182 MHz            | 171 MHz                  |
 | Peak insertion loss      | —         | 1.7 dB             | 2.0–2.4 dB               |
-| Worst in-band S11        | −16 dB    | −11.2 dB           | −5 dB (best dip −17 dB)  |
+| Worst in-band S11        | −16 dB    | −11.1 dB           | −5 dB (best dip −17 dB)  |
 | First spurious passband  | —         | 4.61 GHz, −3.8 dB  | 4.68 GHz, −4.4 dB        |
 
 The measured range is the instrument calibration (2.4 dB) and an independent
@@ -26,9 +26,9 @@ Board size is 165.8 × 45.8 mm.
 
 - **Measurements:** [`measurements/2026-10-14_vna/`](measurements/2026-10-14_vna/)
   (VNA `.s2p` files, raw standards, photos) and the tables in the papers.
-- **Order the board:** [`docs/final_check/fab/`](docs/final_check/fab/)
+- **Fabrication files (as ordered):** [`docs/final_check/fab/`](docs/final_check/fab/)
   holds the gerbers, drill files and fab notes.
-- **Is it ready?** [`docs/final_check/REPORT.md`](docs/final_check/REPORT.md)
+- **Pre-order verdict:** [`docs/final_check/REPORT.md`](docs/final_check/REPORT.md)
   gives the verdict and what to write in the JLCPCB order notes.
 - **The paper (English, the whole project):**
   [`docs/paper/ai_driven_rf_design.md`](docs/paper/ai_driven_rf_design.md).
