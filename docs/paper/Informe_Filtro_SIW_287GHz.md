@@ -16,7 +16,7 @@ abstract: |
   analítico verificado en openEMS y CST reprodujo la banda pero no la
   adaptación: los puertos de openEMS no dan un $S_{11}$ confiable. Pasamos a
   Palace, un solver de elementos finitos de código abierto, y modelamos el
-  conector SMA real con un lanzador CPWG. Comparamos topologías y vimos que la
+  conector SMA real con una alimentación CPWG (la transición entre el conector SMA y la línea del filtro). Comparamos topologías y vimos que la
   optimización bayesiana global fallaba porque el ancho de banda del filtro
   ensamblado es discontinuo; la reemplazamos por calibración de acoplamientos
   sobre estructuras pequeñas e inversión. El diseño fabricado (N=3) simula con
@@ -143,7 +143,7 @@ CST (Sec.~\ref{sec:iter1}) & Modelo 3D paramétrico con macro generada por nuest
 \hline
 Palace (Sec.~\ref{sec:palace}) & Validación contra CST y optimización por coordenadas & Cavidades de 34.4 mm, banda en 2.87 GHz y $S_{11} < -16$ dB, pero con un puerto que ocultaba una línea de 41\,$\Omega$ & Adoptar Palace como solver; desconfiar del puerto ideal \\
 \hline
-Conector SMA y lanzador CPWG (Sec.~\ref{sec:sma}) & Modelo 3D del conector Taoglas y lanzador CPWG de 50\,$\Omega$ & La línea de 2.26 mm era de $\approx 41~\Omega$ (el ancho correcto es 1.664 mm); un pin de 0.82 mm cortocircuita; el diseño de Palace daba $\approx -4.6$ dB con el conector real & Pin real (0.38 mm de radio) y lanzador CPWG en todos los modelos \\
+Conector SMA y alimentación CPWG (Sec.~\ref{sec:sma}) & Modelo 3D del conector Taoglas y alimentación CPWG de 50\,$\Omega$ & La línea de 2.26 mm era de $\approx 41~\Omega$ (el ancho correcto es 1.664 mm); un pin de 0.82 mm cortocircuita; el diseño de Palace daba $\approx -4.6$ dB con el conector real & Pin real (0.38 mm de radio) y alimentación CPWG en todos los modelos \\
 \hline
 Otras topologías (Sec.~\ref{sec:topo}) & Modo dual N=2, tres cavidades únicas, cascadas N=3 y N=4 (Tabla~\ref{tab:topos}) & N=2: 119 mm, $-10.76$ dB y 316.6 MHz; cavidades únicas alternativas entre $-6$ y $-9$ dB; N=4: 211 mm y $-6.1$ dB & Cascada N=3 (166 mm); vías de 1.5 mm con paso de 3.0 mm \\
 \hline
@@ -652,7 +652,7 @@ alrededor de Palace, no es un módulo de una herramienta de diseño. Un candidat
 es un conjunto de parámetros geométricos: los largos de las cavidades (espejados
 respecto del centro), los anchos de los iris, la apertura externa y el largo del
 taper; el ancho de microstrip se queda en su valor de 50 $\Omega$. Para evaluar un
-candidato, el código malla toda la placa con gmsh, con conectores y lanzador
+candidato, el código malla toda la placa con gmsh, con conectores y alimentación
 incluidos, escribe la configuración de Palace, corre un barrido excitado en una
 malla gruesa y lee $|S_{11}|$ y $|S_{21}|$. Antes corre un filtro rápido en
 $f_0$ que descarta candidatos que no resuenan; a los descartados se les da una
@@ -704,10 +704,10 @@ El primero fue que el ancho de microstrip que habíamos optimizado en junio
 (2.26 mm) resultaba ser una línea de $\approx 41~\Omega$. El ancho correcto de
 50 $\Omega$ es 1.664 mm [@hammerstad1980accurate]. El segundo fue que un pin de
 tamaño de cable (0.82 mm) es más grueso que la placa (0.76 mm) y cortocircuita
-el lanzador ($|S_{11}| \approx -0.2$ dB), como muestra la Fig. \ref{fig:sma}.
+la alimentación ($|S_{11}| \approx -0.2$ dB), como muestra la Fig. \ref{fig:sma}.
 
 Decidimos usar el pin real del conector (0.38 mm de radio) y sintetizar en el
-borde de la placa un lanzador CPWG de 50 $\Omega$ dentro de la huella del
+borde de la placa una alimentación CPWG de 50 $\Omega$ (la transición entre el conector y la línea del filtro) dentro de la huella del
 conector [@wadell1991transmission; @simons2001coplanar]: pista de 1.2 mm,
 ranura de 0.2512 mm y vías de costura a masa. Desde ahí todos los modelos
 llevaron el conector real.
@@ -717,8 +717,8 @@ llevaron el conector real.
 \centering
 \includegraphics[width=\columnwidth]{figures/fig_sma_v1.png}
 \caption{Primer modelo con conector real: el puerto ideal ocultaba una
-alimentación de 41\,$\Omega$, y un pin de tamaño de cable cortocircuita el
-lanzador.}
+alimentación de 41\,$\Omega$, y un pin de tamaño de cable cortocircuita la
+alimentación.}
 \label{fig:sma}
 \end{figure}
 ```
@@ -734,24 +734,24 @@ independientes, con tres funciones objetivo distintas, confirmaron esa elección
 frente a vías de 0.8 mm.
 
 La Tabla \ref{tab:topos} junta lo que comparamos. Hay que leerla con cuidado,
-porque no todas las cifras salen de la misma malla ni del mismo lanzador: la
+porque no todas las cifras salen de la misma malla ni de la misma alimentación: la
 nota al pie de la tabla marca de dónde viene cada una. Las comparaciones más
-confiables son las que usan el lanzador CPWG con SMA real (filas de N=2, N=3 y
-N=4); las tres cavidades únicas alternativas se probaron antes, con un
-lanzador más simple.
+confiables son las que usan la alimentación CPWG con SMA real (filas de N=2, N=3 y
+N=4); las tres cavidades únicas alternativas se probaron antes, con una
+alimentación más simple.
 
 ```{=latex}
 \begin{table*}[t]
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\caption{Qué comparamos: candidatos para la misma especificación (2.87 GHz, 143.5 MHz de ancho de banda, $S_{11} \le -16$ dB en banda). No todas las cifras salen de la misma malla ni del mismo lanzador; ver las notas debajo de la tabla.}
+\caption{Qué comparamos: candidatos para la misma especificación (2.87 GHz, 143.5 MHz de ancho de banda, $S_{11} \le -16$ dB en banda). No todas las cifras salen de la misma malla ni de la misma alimentación; ver las notas debajo de la tabla.}
 \label{tab:topos}
 \begin{tabular}{p{0.20\textwidth}cccp{0.36\textwidth}}
 \hline
 \textbf{Candidato} & \textbf{Largo de placa (mm)} & \textbf{Ancho de banda (MHz)} & \textbf{$S_{11}$ en banda (dB)} & \textbf{Veredicto} \\
 \hline
-Modo dual N=2, una cavidad (a) & 119 & 316.6 & $-10.76$ / -- & Perdió: ancho de banda y adaptación se oponen en todos los parámetros. Con el lanzador anterior (c) llegó a $-17.7$ dB, pero ese no es el que fabricamos. \\
+Modo dual N=2, una cavidad (a) & 119 & 316.6 & $-10.76$ / -- & Perdió: ancho de banda y adaptación se oponen en todos los parámetros. Con la alimentación anterior (c) llegó a $-17.7$ dB, pero esa no es la que fabricamos. \\
 \hline
 Cascada N=3, la elegida (b) & 165.78 & 182.3 & $-11.15$ / $-35.4$ & Elegida y fabricada. Un grado de libertad más a 1.4 veces el largo; no cumple $-16$ dB ni 143.5 MHz. Con malla de producción (a) había dado $-13.37$ dB y 189 MHz. \\
 \hline
@@ -768,7 +768,7 @@ N=4 compacto, dos cavidades de modo dual & -- & -- & -- & Cerrado: cinco mecanis
 \end{tabular}
 
 \vspace{3pt}
-\par\noindent{\footnotesize\textit{Notas.} $S_{11}$ en banda: peor valor dentro de la banda / cero de reflexión más profundo; ``--'' indica que el dato no está disponible. Origen de las cifras: (a) lanzador CPWG + SMA, malla de producción (gruesa); (b) lanzador CPWG + SMA, malla fina; (c) lanzador anterior con solo los pads del conector (sin ranura adaptada), malla de producción: el $S_{11}$ y el ancho de banda son los del mejor punto de los barridos de acoplamiento de agosto de 2026, y el largo de placa es el del mejor diseño de la búsqueda conjunta previa, cuya cavidad es la que fijaron esos barridos. Las filas con distinto origen no son comparables en rigor.\par}
+\par\noindent{\footnotesize\textit{Notas.} $S_{11}$ en banda: peor valor dentro de la banda / cero de reflexión más profundo; ``--'' indica que el dato no está disponible. Origen de las cifras: (a) alimentación CPWG + SMA, malla de producción (gruesa); (b) alimentación CPWG + SMA, malla fina; (c) alimentación anterior con solo los pads del conector (sin ranura adaptada), malla de producción: el $S_{11}$ y el ancho de banda son los del mejor punto de los barridos de acoplamiento de agosto de 2026, y el largo de placa es el del mejor diseño de la búsqueda conjunta previa, cuya cavidad es la que fijaron esos barridos. Las filas con distinto origen no son comparables en rigor.\par}
 \end{table*}
 ```
 
@@ -790,21 +790,21 @@ mm) soporta el par degenerado TE$_{102}$/TE$_{201}$. Una fila flotante de vías
 interna separa y acopla ese par [@shen2009dualmode; @xu2014hexagonal], de modo
 que obtuvimos dos polos con una sola cavidad y la placa se redujo a 119 mm.
 
-Con el lanzador CPWG real, su mejor respuesta fue $f_c = 2.904$ GHz, 316.6 MHz
+Con la alimentación CPWG real, su mejor respuesta fue $f_c = 2.904$ GHz, 316.6 MHz
 de ancho de banda, $-10.76$ dB de adaptación y 1.45 dB de pérdida de inserción.
 Los barridos que hicimos sobre el filtro ensamblado mostraron que en esta
 topología el ancho de banda y la adaptación se oponen en todos los parámetros.
 Con $w_{\text{iris}} = 11$ mm la banda mide 145.6 MHz, que es lo que pedíamos,
 pero la adaptación cae a $-1.75$ dB. Un acoplamiento interno y uno externo no
-alcanzan para ubicar dos polos y adaptarlos a la vez. Con el lanzador anterior
-de solo pads el mismo tipo de filtro había llegado a $-17.7$ dB, pero ese no es
-el lanzador que fabricamos.
+alcanzan para ubicar dos polos y adaptarlos a la vez. Con la alimentación anterior
+de solo pads el mismo tipo de filtro había llegado a $-17.7$ dB, pero esa no es
+la alimentación que fabricamos.
 
 ```{=latex}
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.95\textwidth]{figures/fig_designs.png}
-\caption{Mejor diseño de cada topología con el mismo lanzador CPWG + SMA
+\caption{Mejor diseño de cada topología con la misma alimentación CPWG + SMA
 (Palace).}
 \label{fig:designs}
 \end{figure*}
@@ -931,7 +931,7 @@ el gráfico parecía razonable y el número estaba mal. Además del puerto que
 ocultaba la línea de 41 $\Omega$ (Sección \ref{sec:sma}), encontramos una
 selección del par de modos equivocado, que daba un $k$ 21 veces menor; caras de
 la malla sin condición de borde, que producían pérdidas menores que las de un
-modelo sin pérdidas; y una macro de CST que dibujaba el lanzador 1000 veces más
+modelo sin pérdidas; y una macro de CST que dibujaba la alimentación 1000 veces más
 grande.
 
 Uno de los defectos conviene explicarlo con un dibujo: la cuantización de las
@@ -1040,7 +1040,7 @@ $Q_c \approx 540$ para una cavidad TE101 de 0.76 mm con cobre liso
 [@pozar2012microwave], de modo que $Q_u \approx 180$. La Tabla
 \ref{tab:lossbudget} suma los términos. Los 0.5 dB que no podemos asignar son la
 parte del resultado de Palace que el modelo de matriz no tiene; los atribuimos a
-radiación en las secciones abiertas de microstrip, taper y lanzador, y no los
+radiación en las secciones abiertas de microstrip, taper y alimentación, y no los
 separamos.
 
 ```{=latex}
@@ -1052,7 +1052,7 @@ separamos.
 \hline
 Disipación en el dieléctrico ($Q_u = 270$, 6.3\,\% de ancho de banda) & 0.8 \\
 Desadaptación de $-11$\,dB & 0.35 \\
-Lanzador y radiación (resto del resultado de Palace) & $\approx$0.5 \\
+Alimentación y radiación (resto del resultado de Palace) & $\approx$0.5 \\
 \textbf{Palace, paredes de conductor perfecto} & \textbf{1.70} \\
 Cobre ($Q_c \approx 540$) & $+0.4$ \\
 \textbf{Predicción antes de medir} & \textbf{2.1--2.3} \\
@@ -1100,7 +1100,7 @@ empeora la adaptación en unos 5 dB.}
 \centering
 \includegraphics[width=0.9\textwidth]{figures/fig_launch_renders.png}
 \caption{Modelos 3D (Palace) de las tres alimentaciones: placa completa y
-detalle del lanzador de entrada. Verde: cobre; marrón: RO4350B; amarillo:
+detalle de la alimentación de entrada. Verde: cobre; marrón: RO4350B; amarillo:
 conector SMA.}
 \label{fig:renders}
 \end{figure*}
