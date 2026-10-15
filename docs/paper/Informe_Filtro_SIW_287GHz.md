@@ -1223,7 +1223,7 @@ ambos simuladores y las cuatro mediciones corregidas. La Fig.
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\caption{Filtro N=3 en cascada fabricado: especificación, simulación y medición. Todas las columnas se procesan con el mismo código. La banda es $2.870\pm1.4\%$\,GHz (la banda especificada del 5\,\%). CST corresponde a la geometría previa al recorte. Las cifras de Palace en banda son de la geometría fabricada; su $S_{21}$ en 2.45/3.5\,GHz y la espuria provienen del barrido de 0--8\,GHz previo al recorte. La espuria es el mayor $S_{21}$ entre 3.6 y 5.0\,GHz. Columnas medidas: VNA = calibración del instrumento, SW = recalibración por software de los archivos sin calibrar (Sec.~\ref{sec:vna}); S = conectores soldados, U = sin soldar (\emph{unsoldered}), C = calibrado.}
+\caption{Filtro N=3 en cascada fabricado: especificación, simulación y medición. Todas las columnas se procesan con el mismo código. La banda es $2.870\pm1.4\%$\,GHz (la banda especificada del 5\,\%). CST corresponde a la geometría previa al recorte. Las cifras de Palace en banda son de la geometría fabricada; su $S_{21}$ en 2.45/3.5\,GHz y la espuria provienen del barrido de 0--8\,GHz previo al recorte. La espuria es el mayor $S_{21}$ entre 3.6 y 5.0\,GHz. Columnas medidas: VNA = calibración del instrumento, SW = recalibración por software de los archivos sin calibrar (Sec.~\ref{sec:vna}); S = conectores soldados, U = sin soldar (\emph{unsoldered}), C = calibrado. $Q_L$ y $Q_u$ efectivo se definen en la Sec.~\ref{sec:q}. El ancho de banda especificado es el de rizado de 0.1\,dB; el $Q_L$ de la especificación es el del prototipo ideal a $-3$\,dB (199\,MHz), no $1/\mathrm{FBW} = 20$.}
 \label{tab:comparison}
 \begin{tabular}{lccccccc}
 \hline
@@ -1232,6 +1232,8 @@ ambos simuladores y las cuatro mediciones corregidas. La Fig.
 Frecuencia central (GHz) & 2.870 & 2.878 & 2.876 & 2.894 & 2.898 & 2.895 & 2.898 \\
 Ancho de banda a $-3$\,dB (MHz) & 143.5 & 180 & 182 & 171 & 172 & 172 & 174 \\
 Ancho de banda fraccional (\%) & 5.0 & 6.2 & 6.3 & 5.9 & 5.9 & 6.0 & 6.0 \\
+$Q$ cargado $Q_L = f_c/\mathrm{BW}$ & 14.4 & 16.0 & 15.8 & 16.9 & 16.9 & 16.8 & 16.7 \\
+$Q_u$ efectivo (de la IL) & -- & 173 & 179 & 138 & 136 & 159 & 155 \\
 $S_{21}$ pico (dB) & -- & $-$1.80 & $-$1.70 & $-$2.38 & $-$2.41 & $-$2.04 & $-$2.08 \\
 Peor $S_{21}$ en banda (dB) & -- & $-$3.76 & $-$2.58 & $-$7.14 & $-$7.62 & $-$6.79 & $-$7.26 \\
 Peor $S_{11}$ en banda (dB) & $\le -16$ & $-$6.9 & $-$11.1 & $-$5.3 & $-$4.8 & $-$4.6 & $-$4.1 \\
@@ -1348,6 +1350,73 @@ una referencia real de 50 $\Omega$. Muestran que la reactancia del conector
 forma parte de la sintonía. La medición muestra que la placa con su conector
 coincide con la simulación con conector en frecuencia central, ancho de banda y
 bandas espurias, y no en pérdida de retorno.
+
+# Factor de calidad: Q cargado y Q descargado {#sec:q}
+
+La respuesta se puede resumir con dos factores de calidad. El **Q cargado** del
+filtro, $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$, dice qué tan angosta es la
+banda pasante con los puertos conectados. Lo leímos directamente de $|S_{21}|$:
+la línea punteada de la Fig. \ref{fig:qzoom} está 3 dB por debajo del pico de
+cada curva, y sus extremos son los bordes de la banda. El **Q descargado**
+$Q_u$ mide la pérdida propia de cada resonador y fija la pérdida de inserción
+(Ec. \ref{eq:il}). Las dos filas de $Q$ de la Tabla \ref{tab:comparison} y la
+Fig. \ref{fig:qcomp} salen del mismo código (`siw measure`) para las cuatro
+fuentes.
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_q_zoom_es.png}
+\caption{Q cargado leído de $|S_{21}|$. La línea punteada está 3\,dB por
+debajo del pico de cada curva y va de borde a borde de la banda; la flecha
+marca el ancho de banda y el recuadro, $Q_L = f_c/\mathrm{BW}$.}
+\label{fig:qzoom}
+\end{figure*}
+```
+
+**Referencia teórica del Q cargado.** El 5 % de la especificación es el ancho
+de banda de *rizado* de 0.1 dB, 143.5 MHz, y su $Q$ es
+$1/\mathrm{FBW} = 20$. A $-3$ dB el prototipo de Chebyshev ideal de orden 3 es
+$\cosh\!\big(\tfrac{1}{N}\operatorname{arccosh}\sqrt{(10^{0.3}-1)/(10^{0.01}-1)}\big)
+= 1.39$ veces más ancho: 199 MHz, es decir $Q_L = 14.4$. Ese es el valor
+comparable con lo que medimos, porque todas las cifras de ancho de banda de este
+informe son a $-3$ dB. Palace da 15.8, CST 16.0 y la placa 16.9 (16.8 con la
+calibración por software). Con esa referencia la banda a $-3$ dB no es más
+ancha que la del diseño sino entre 9 % (Palace) y 14 % (placa) más angosta, lo
+que coincide con un acoplamiento interno algo menor que el objetivo en el
+ajuste de matriz ($k_{12} = 0.042$ en Palace y 0.044 en la placa, frente a
+0.046). Las comparaciones anteriores contra 143.5 MHz mezclan las dos
+definiciones de ancho de banda.
+
+**$Q_u$ efectivo.** Despejamos $Q_u$ de la Ec. \ref{eq:il} con la pérdida
+medida en el pico. El FBW de esa ecuación es el de rizado, así que dividimos el
+FBW medido a $-3$ dB por 1.39. Probamos el procedimiento sobre el prototipo
+ideal con pérdidas: con $Q_u = 270$ devuelve 270, y con 180 devuelve 181. Como
+toda la pérdida (desadaptación, alimentación, radiación, conector) se carga a
+los resonadores, el resultado es un $Q_u$ *efectivo*, una cota inferior del
+propio del resonador. Palace da 179 y CST 173. Las dos simulaciones tienen
+paredes de conductor perfecto, cuyo techo es el dieléctrico, $Q_d = 270$; la
+diferencia es la desadaptación y la alimentación del balance de la Tabla
+\ref{tab:lossbudget}. La placa da 138 con la calibración del instrumento y 159
+con la de software, dentro del rango de 130 a 185 que dio el modelo directo de
+la matriz de acoplamiento (Sección \ref{sec:vna}). La placa queda entre 0.77 y
+0.89 veces el valor de Palace; esa diferencia es lo que suman el cobre, el
+acabado ENIG y el conector real, que las simulaciones no tienen. La referencia
+con cobre liso, $1/Q_u = 1/Q_d + 1/Q_c$ con $Q_c \approx 540$, da 180 para el
+resonador solo.
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/fig_q_comparison_es.png}
+\caption{Factores de calidad de las cuatro fuentes frente a la teoría
+(barras rayadas). (a) Q cargado: el valor comparable es el del prototipo ideal
+a $-3$\,dB (14.4), no $1/\mathrm{FBW}$ (20, banda de rizado). (b) $Q_u$
+efectivo despejado de la pérdida de inserción, frente al límite del dieléctrico
+(270) y al de dieléctrico más cobre liso (180).}
+\label{fig:qcomp}
+\end{figure*}
+```
 
 # Conclusiones y próximos pasos {#sec:concl}
 

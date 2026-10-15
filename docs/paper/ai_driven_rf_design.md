@@ -779,7 +779,7 @@ four corrected measurements through the same code (`siw measure`). Fig.
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\caption{Fabricated cascade N=3 filter: specification, simulation and measurement. Every column is processed with the same code. In-band is $2.870\pm1.4\%$\,GHz (the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. Measured columns: VNA = instrument calibration, SW = software recalibration of the raw files (Sec.~\ref{sec:vna}); S = connectors soldered, U = unsoldered, C = calibrated.}
+\caption{Fabricated cascade N=3 filter: specification, simulation and measurement. Every column is processed with the same code. In-band is $2.870\pm1.4\%$\,GHz (the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. Measured columns: VNA = instrument calibration, SW = software recalibration of the raw files (Sec.~\ref{sec:vna}); S = connectors soldered, U = unsoldered, C = calibrated. $Q_L$ and the effective $Q_u$ are defined in Sec.~\ref{sec:q}. The specified bandwidth is the 0.1\,dB ripple bandwidth; the specification $Q_L$ is that of the ideal prototype at $-3$\,dB (199\,MHz), not $1/\mathrm{FBW} = 20$.}
 \label{tab:comparison}
 \begin{tabular}{lccccccc}
 \hline
@@ -788,6 +788,8 @@ four corrected measurements through the same code (`siw measure`). Fig.
 Centre frequency (GHz) & 2.870 & 2.878 & 2.876 & 2.894 & 2.898 & 2.895 & 2.898 \\
 $-3$\,dB bandwidth (MHz) & 143.5 & 180 & 182 & 171 & 172 & 172 & 174 \\
 Fractional bandwidth (\%) & 5.0 & 6.2 & 6.3 & 5.9 & 5.9 & 6.0 & 6.0 \\
+Loaded $Q_L = f_c/\mathrm{BW}$ & 14.4 & 16.0 & 15.8 & 16.9 & 16.9 & 16.8 & 16.7 \\
+Effective $Q_u$ (from IL) & -- & 173 & 179 & 138 & 136 & 159 & 155 \\
 Peak $S_{21}$ (dB) & -- & $-$1.80 & $-$1.70 & $-$2.38 & $-$2.41 & $-$2.04 & $-$2.08 \\
 Worst in-band $S_{21}$ (dB) & -- & $-$3.76 & $-$2.58 & $-$7.14 & $-$7.62 & $-$6.79 & $-$7.26 \\
 Worst in-band $S_{11}$ (dB) & $\le -16$ & $-$6.9 & $-$11.1 & $-$5.3 & $-$4.8 & $-$4.6 & $-$4.1 \\
@@ -900,6 +902,70 @@ bandwidth and spurious bands, and not in return loss.
 
 All figures in this section are regenerated from the files in
 `measurements/2026-10-14_vna/` by `siw measure --paper`.
+
+# Quality factor: loaded and unloaded Q {#sec:q}
+
+Two quality factors summarise the response. The **loaded Q** of the filter,
+$Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$, says how narrow the passband is with
+the ports attached. We read it straight off $|S_{21}|$: the dotted line in Fig.
+\ref{fig:qzoom} sits 3 dB below each curve's peak, and its ends are the band
+edges. The **unloaded Q** $Q_u$ measures each resonator's own loss and sets the
+insertion loss (Eq. \ref{eq:il}). The two $Q$ rows of Table
+\ref{tab:comparison} and Fig. \ref{fig:qcomp} come from the same code
+(`siw measure`) for all four sources.
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_q_zoom.png}
+\caption{Loaded Q read from $|S_{21}|$. The dotted line is 3\,dB below each
+curve's peak and runs edge to edge; the arrow marks the bandwidth and the box
+gives $Q_L = f_c/\mathrm{BW}$.}
+\label{fig:qzoom}
+\end{figure*}
+```
+
+*Theoretical loaded Q.* The specified 5 % is the 0.1 dB *ripple* bandwidth,
+143.5 MHz, whose $Q$ is $1/\mathrm{FBW} = 20$. At $-3$ dB the ideal third-order
+Chebyshev prototype is
+$\cosh\!\big(\tfrac{1}{N}\operatorname{arccosh}\sqrt{(10^{0.3}-1)/(10^{0.01}-1)}\big)
+= 1.39$ times wider: 199 MHz, or $Q_L = 14.4$. That is the value to compare
+with, because every bandwidth in this paper is a $-3$ dB one. Palace gives
+15.8, CST 16.0 and the board 16.9 (16.8 with the software calibration).
+Against that reference the $-3$ dB band is not wider than designed but
+9 % (Palace) to 14 % (board) narrower, consistent with the internal coupling
+the matrix fit finds slightly below target ($k_{12} = 0.042$ in Palace and 0.044
+on the board, against 0.046). Earlier comparisons against 143.5 MHz mix the
+two bandwidth definitions.
+
+*Effective $Q_u$.* We solve Eq. \ref{eq:il} for $Q_u$ with the measured peak
+loss. The FBW in that equation is the ripple one, so the measured $-3$ dB FBW is
+divided by 1.39. On the ideal lossy prototype the procedure returns 270 for
+$Q_u = 270$ and 181 for 180. Because all loss (mismatch, launch, radiation,
+connector) is charged to the resonators, the result is an *effective* $Q_u$,
+a lower bound on the resonator's own. Palace gives 179 and CST 173. Both
+simulations have perfectly conducting walls, whose ceiling is the dielectric,
+$Q_d = 270$; the gap is the mismatch and launch terms of the loss budget
+(Table \ref{tab:lossbudget}). The board gives 138 with the instrument
+calibration and 159 with the software one, inside the 130–185 range the
+coupling-matrix forward model gave in Sec. \ref{sec:vna}. The board sits at
+0.77–0.89 of Palace; that is what copper, the ENIG finish and the real
+connector add, none of which the simulations contain. The smooth-copper
+reference, $1/Q_u = 1/Q_d + 1/Q_c$ with $Q_c \approx 540$, gives 180 for the
+resonator alone.
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/fig_q_comparison.png}
+\caption{Quality factors of the four sources against theory (hatched bars).
+(a) Loaded Q: the comparable value is the ideal prototype at $-3$\,dB (14.4),
+not $1/\mathrm{FBW}$ (20, ripple band). (b) Effective $Q_u$ solved from the
+insertion loss, against the dielectric limit (270) and dielectric plus smooth
+copper (180).}
+\label{fig:qcomp}
+\end{figure*}
+```
 
 # Discussion: gaps and room to improve
 

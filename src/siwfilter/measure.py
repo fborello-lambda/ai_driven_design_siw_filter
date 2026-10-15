@@ -222,6 +222,45 @@ def _zeros(f, s_db, lo=2.6, hi=3.2, depth=-10.0, prom=3.0):
     return [(float(f[m][i]), float(s_db[m][i])) for i in pk if s_db[m][i] <= depth]
 
 
+def cheb_3db_ratio(N: int, ripple_db: float) -> float:
+    """-3 dB bandwidth / ripple bandwidth of an N-th order Chebyshev prototype
+    (1.388 for N=3, 0.1 dB). The spec's FBW is the RIPPLE bandwidth; every
+    measured BW in this module is the -3 dB one."""
+    import math
+    eps = math.sqrt(10 ** (ripple_db / 10) - 1)
+    return math.cosh(math.acosh(math.sqrt(10 ** 0.3 - 1) / eps) / N)
+
+
+def q_metrics(fc_ghz: float, bw_mhz: float, il_db: float, spec: FilterSpec) -> dict:
+    """Loaded Q of the passband and the effective unloaded Q implied by its loss.
+
+    ``q_loaded = fc / BW_-3dB``. ``qu_eff`` inverts the narrow-band Chebyshev
+    loss estimate IL0 = 4.343 sum(g_i) / (FBW Qu) (Hong & Lancaster), where FBW
+    is the RIPPLE bandwidth: the curve's -3 dB FBW divided by ``cheb_3db_ratio``.
+    Checked on the ideal lossy prototype (Qu 270 -> 270, 180 -> 181). Every loss
+    in the source (connector, launch, radiation, mismatch) is charged to the
+    resonators, so it is an effective Qu, not the resonator's own."""
+    from .synthesis import chebyshev_g
+    if not bw_mhz or bw_mhz <= 0:
+        return {"q_loaded": None, "qu_eff": None}
+    g = chebyshev_g(spec.N, spec.ripple_db)
+    fbw_ripple = bw_mhz / 1e3 / fc_ghz / cheb_3db_ratio(spec.N, spec.ripple_db)
+    return {"q_loaded": fc_ghz * 1e3 / bw_mhz,
+            "qu_eff": 4.343 * float(np.sum(g[1:spec.N + 1])) / (fbw_ripple * il_db) if il_db > 0 else None}
+
+
+def q_theory(spec: FilterSpec) -> dict:
+    """Design / material values the measured Q are compared with. ``q_loaded``
+    is the -3 dB loaded Q of the ideal prototype (f0 / BW_-3dB); 1/FBW is the
+    ripple-band value."""
+    from .config import QC_COPPER_EST
+    r = cheb_3db_ratio(spec.N, spec.ripple_db)
+    qd = 1.0 / spec.substrate.tan_d
+    return {"q_loaded": 1.0 / (spec.FBW * r), "q_loaded_ripple": 1.0 / spec.FBW,
+            "bw3db_mhz": spec.FBW * r * spec.f0 / 1e6, "qu_dielectric": qd,
+            "qu_dielectric_copper": 1.0 / (1.0 / qd + 1.0 / QC_COPPER_EST)}
+
+
 def metrics(c: Curve, spec: FilterSpec | None = None) -> dict:
     """Figures of merit of one curve. dB values are S-parameter magnitudes
     (S21 = -insertion loss). In-band = f0 +/- FBW/2 of the SPEC, not of the
@@ -242,7 +281,9 @@ def metrics(c: Curve, spec: FilterSpec | None = None) -> dict:
                    s11_inband_worst_db=float(c.s11_db[band].max()),
                    s11_best_db=float(c.s11_db[pass_m].min()),
                    f_s11_best_ghz=float(f[pass_m][np.argmin(c.s11_db[pass_m])]),
-                   n_s11_zeros=len(_zeros(f, c.s11_db)), band_truncated=bool(e["band_truncated"]))
+                   n_s11_zeros=len(_zeros(f, c.s11_db)), band_truncated=bool(e["band_truncated"]),
+                   f_lo_ghz=float(e["f_lo"]), f_hi_ghz=float(e["f_hi"]))
+        out.update(q_metrics(out["fc_ghz"], out["bw_mhz"], -out["s21_peak_db"], spec))
         if c.s22_db is not None:
             out["s22_inband_worst_db"] = float(c.s22_db[band].max())
             out["s22_best_db"] = float(c.s22_db[pass_m].min())
@@ -313,7 +354,7 @@ def comparison_metrics(curves: dict[str, Curve], spec: FilterSpec | None = None)
 
 SPEC_COLUMN = lambda spec: {  # noqa: E731
     "fc_ghz": spec.f0 / 1e9, "bw_mhz": spec.FBW * spec.f0 / 1e6, "fbw_pct": 100 * spec.FBW,
-    "s11_inband_worst_db": -16.0}
+    "s11_inband_worst_db": -16.0, "q_loaded": q_theory(spec)["q_loaded"]}
 
 
 # --------------------------------------------------------------------------
@@ -324,7 +365,9 @@ LABELS = {
         "cols": ["Spec.", "CST", "Palace", "VNA SC", "VNA UC", "SW S", "SW U"],
         "rows": {
             "fc_ghz": "Centre frequency (GHz)", "bw_mhz": r"$-3$\,dB bandwidth (MHz)",
-            "fbw_pct": "Fractional bandwidth (\\%)", "s21_peak_db": r"Peak $S_{21}$ (dB)",
+            "fbw_pct": "Fractional bandwidth (\\%)",
+            "q_loaded": r"Loaded $Q_L = f_c/\mathrm{BW}$", "qu_eff": r"Effective $Q_u$ (from IL)",
+            "s21_peak_db": r"Peak $S_{21}$ (dB)",
             "s21_inband_worst_db": r"Worst in-band $S_{21}$ (dB)",
             "s11_inband_worst_db": r"Worst in-band $S_{11}$ (dB)",
             "s22_inband_worst_db": r"Worst in-band $S_{22}$ (dB)",
@@ -337,13 +380,18 @@ LABELS = {
                     r"are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from "
                     r"the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. "
                     r"Measured columns: VNA = instrument calibration, SW = software recalibration of the "
-                    r"raw files (Sec.~\ref{sec:vna}); S = connectors soldered, U = unsoldered, C = calibrated."),
+                    r"raw files (Sec.~\ref{sec:vna}); S = connectors soldered, U = unsoldered, C = calibrated. "
+                    r"$Q_L$ and the effective $Q_u$ are defined in Sec.~\ref{sec:q}. The specified bandwidth "
+                    r"is the 0.1\,dB ripple bandwidth; the specification $Q_L$ is that of the ideal prototype "
+                    r"at $-3$\,dB (199\,MHz), not $1/\mathrm{FBW} = 20$."),
         "label": "tab:comparison"},
     "es": {
         "cols": ["Espec.", "CST", "Palace", "VNA SC", "VNA UC", "SW S", "SW U"],
         "rows": {
             "fc_ghz": "Frecuencia central (GHz)", "bw_mhz": r"Ancho de banda a $-3$\,dB (MHz)",
-            "fbw_pct": "Ancho de banda fraccional (\\%)", "s21_peak_db": r"$S_{21}$ pico (dB)",
+            "fbw_pct": "Ancho de banda fraccional (\\%)",
+            "q_loaded": r"$Q$ cargado $Q_L = f_c/\mathrm{BW}$", "qu_eff": r"$Q_u$ efectivo (de la IL)",
+            "s21_peak_db": r"$S_{21}$ pico (dB)",
             "s21_inband_worst_db": r"Peor $S_{21}$ en banda (dB)",
             "s11_inband_worst_db": r"Peor $S_{11}$ en banda (dB)",
             "s22_inband_worst_db": r"Peor $S_{22}$ en banda (dB)",
@@ -358,12 +406,15 @@ LABELS = {
                     r"0--8\,GHz previo al recorte. La espuria es el mayor $S_{21}$ entre 3.6 y 5.0\,GHz. "
                     r"Columnas medidas: VNA = calibración del instrumento, SW = recalibración por software "
                     r"de los archivos sin calibrar (Sec.~\ref{sec:vna}); S = conectores soldados, "
-                    r"U = sin soldar (\emph{unsoldered}), C = calibrado."),
+                    r"U = sin soldar (\emph{unsoldered}), C = calibrado. $Q_L$ y $Q_u$ efectivo se "
+                    r"definen en la Sec.~\ref{sec:q}. El ancho de banda especificado es el de rizado de "
+                    r"0.1\,dB; el $Q_L$ de la especificación es el del prototipo ideal a $-3$\,dB (199\,MHz), "
+                    r"no $1/\mathrm{FBW} = 20$."),
         "label": "tab:comparison"},
 }
 
 _COLS = ("spec", "cst", "palace", "SC", "UC", "SW_S", "SW_U")
-_ROWS = ("fc_ghz", "bw_mhz", "fbw_pct", "s21_peak_db", "s21_inband_worst_db", "s11_inband_worst_db",
+_ROWS = ("fc_ghz", "bw_mhz", "fbw_pct", "q_loaded", "qu_eff", "s21_peak_db", "s21_inband_worst_db", "s11_inband_worst_db",
          "s22_inband_worst_db", "s11_best_db", "n_s11_zeros", "rej_2.45_db", "rej_3.5_db", "spur_db")
 
 
@@ -377,8 +428,12 @@ def _cell(key: str, m: dict | None) -> str:
         return f"{v:.3f}"
     if key == "bw_mhz":
         return f"{v:.0f}"
-    if key == "fbw_pct":
+    if v is None:
+        return "--"
+    if key in ("fbw_pct", "q_loaded"):
         return f"{v:.1f}"
+    if key == "qu_eff":
+        return f"{v:.0f}"
     if key == "s11_best_db":
         return f"{v:.1f} @ {m['f_s11_best_ghz']:.3f}"
     if key == "spur_db":
@@ -396,7 +451,8 @@ def comparison_table_latex(cm: dict, spec: FilterSpec, lang: str = "en") -> str:
     L = LABELS[lang]
     cols = {"spec": SPEC_COLUMN(spec), **cm}
     spec_cells = {"fc_ghz": f"{spec.f0 / 1e9:.3f}", "bw_mhz": f"{spec.FBW * spec.f0 / 1e6:.1f}",
-                  "fbw_pct": f"{100 * spec.FBW:.1f}", "s11_inband_worst_db": "$\\le -16$"}
+                  "fbw_pct": f"{100 * spec.FBW:.1f}", "q_loaded": f"{q_theory(spec)['q_loaded']:.1f}",
+                  "s11_inband_worst_db": "$\\le -16$"}
     lines = [r"\begin{table*}[t]", r"\centering", r"\footnotesize", r"\setlength{\tabcolsep}{4pt}",
              r"\caption{" + L["caption"] + "}", r"\label{" + L["label"] + "}",
              r"\begin{tabular}{l" + "c" * len(_COLS) + "}", r"\hline",
@@ -414,12 +470,13 @@ def comparison_table_latex(cm: dict, spec: FilterSpec, lang: str = "en") -> str:
 def comparison_table_md(cm: dict, spec: FilterSpec, lang: str = "en") -> str:
     L = LABELS[lang]
     cols = {"spec": SPEC_COLUMN(spec), **cm}
-    strip = lambda s: s.replace("\\,", " ").replace("$", "").replace("\\", "").replace("--", "-")  # noqa: E731
+    strip = lambda s: s.replace("\\mathrm{BW}", "BW").replace("\\,", " ").replace("$", "").replace("\\", "").replace("--", "-")  # noqa: E731
     out = ["| | " + " | ".join(L["cols"]) + " |", "|---|" + "---|" * len(_COLS)]
     for r in _ROWS:
-        cells = [("--" if r not in ("fc_ghz", "bw_mhz", "fbw_pct", "s11_inband_worst_db")
+        cells = [("--" if r not in ("fc_ghz", "bw_mhz", "fbw_pct", "q_loaded", "s11_inband_worst_db")
                   else {"fc_ghz": f"{spec.f0 / 1e9:.3f}", "bw_mhz": f"{spec.FBW * spec.f0 / 1e6:.1f}",
-                        "fbw_pct": f"{100 * spec.FBW:.1f}", "s11_inband_worst_db": "<= -16"}[r])
+                        "fbw_pct": f"{100 * spec.FBW:.1f}", "q_loaded": f"{q_theory(spec)['q_loaded']:.1f}",
+                        "s11_inband_worst_db": "<= -16"}[r])
                  if c == "spec" else _cell(r, cols.get(c)) for c in _COLS]
         if all(x == "--" for x in cells):
             continue
@@ -640,6 +697,85 @@ def plot_calibration_check(ds: Dataset, cal: SoftwareCal, path: str) -> str:
     return path
 
 
+Q_SOURCES = ("palace", "cst", "SC", "SW_S")
+Q_TEXT = {
+    "en": {"src": {"palace": "Palace", "cst": "CST", "SC": "VNA soldered\n(instrument cal.)",
+                   "SW_S": "VNA soldered\n(software cal.)"},
+           "zoom_src": {"palace": "Palace (fine mesh)", "cst": "CST (FD)", "SC": "VNA, soldered, instrument cal."},
+           "th_qlr": "Ripple band\n(1/FBW)", "th_ql": "Theory\n(ideal, -3 dB)", "th_qd": "Theory\n(dielectric,\nPEC walls)", "th_qdc": "Theory\n(dielectric\n+ copper)",
+           "ql": r"Loaded $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$", "qu": r"Effective $Q_u$ (from IL)",
+           "t_ql": "(a) loaded Q", "t_qu": r"(b) effective unloaded $Q_u$",
+           "freq": "Frequency (GHz)", "peak": "peak"},
+    "es": {"src": {"palace": "Palace", "cst": "CST", "SC": "VNA soldado\n(cal. instrumento)",
+                   "SW_S": "VNA soldado\n(cal. software)"},
+           "zoom_src": {"palace": "Palace (malla fina)", "cst": "CST (FD)", "SC": "VNA, soldado, cal. instrumento"},
+           "th_qlr": "Banda de\nrizado (1/FBW)", "th_ql": "Teoría\n(ideal, -3 dB)", "th_qd": "Teoría\n(dieléctrico,\nparedes PEC)", "th_qdc": "Teoría\n(dieléctrico\n+ cobre)",
+           "ql": r"$Q$ cargado $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$", "qu": r"$Q_u$ efectivo (de la IL)",
+           "t_ql": "(a) Q cargado", "t_qu": r"(b) $Q_u$ efectivo",
+           "freq": "Frecuencia (GHz)", "peak": "pico"},
+}
+_Q_COLORS = {"palace": "k", "cst": "C2", "SC": "C3", "SW_S": "C0"}
+
+
+def plot_q_comparison(cm: dict, spec: FilterSpec, path: str, lang: str = "en") -> str:
+    """Bars: loaded Q and effective Qu per source, next to the theoretical values."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    T, th = Q_TEXT[lang], q_theory(spec)
+    keys = [k for k in Q_SOURCES if k in cm and cm[k].get("q_loaded")]
+    fig, axs = plt.subplots(1, 2, figsize=(11, 4))
+    panels = ((axs[0], "q_loaded", [(T["th_qlr"], th["q_loaded_ripple"]), (T["th_ql"], th["q_loaded"])], T["ql"], T["t_ql"], "{:.1f}"),
+              (axs[1], "qu_eff", [(T["th_qd"], th["qu_dielectric"]), (T["th_qdc"], th["qu_dielectric_copper"])],
+               T["qu"], T["t_qu"], "{:.0f}"))
+    for a, key, theo, ylab, title, fmt in panels:
+        labs = [t[0] for t in theo] + [T["src"][k] for k in keys]
+        vals = [t[1] for t in theo] + [cm[k][key] for k in keys]
+        bars = a.bar(range(len(vals)), vals, color=["0.55"] * len(theo) + [_Q_COLORS[k] for k in keys])
+        for b in bars[:len(theo)]:
+            b.set_hatch("//"); b.set_edgecolor("w")
+        for i, v in enumerate(vals):
+            a.text(i, v, fmt.format(v), ha="center", va="bottom", fontsize=9)
+        a.set_xticks(range(len(vals))); a.set_xticklabels(labs, fontsize=7)
+        a.set(ylabel=ylab, title=title); a.grid(axis="y", alpha=.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def plot_q_zoom(curves: dict[str, Curve], cm: dict, path: str, lang: str = "en") -> str:
+    """Zoomed |S21| per source with the -3 dB bandwidth drawn as a dotted line."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    T = Q_TEXT[lang]
+    keys = [k for k in ("palace", "cst", "SC") if k in curves and k in cm]
+    fig, ax = plt.subplots(1, len(keys), figsize=(4.7 * len(keys), 4.2), sharey=True, squeeze=False)
+    for a, k in zip(ax[0], keys):
+        c, m = curves[k], cm[k]
+        w = (c.f_ghz >= 2.6) & (c.f_ghz <= 3.2)
+        lo, hi, pk = m["f_lo_ghz"], m["f_hi_ghz"], m["s21_peak_db"]
+        thr, fc = pk - 3.0, 0.5 * (m["f_lo_ghz"] + m["f_hi_ghz"])
+        a.plot(c.f_ghz[w], c.s21_db[w], color=_Q_COLORS[k], lw=2)
+        a.axhline(pk, color="0.7", ls="--", lw=.8)
+        a.hlines(thr, lo, hi, colors="0.2", linestyles=":", lw=1.8)
+        a.vlines([lo, hi], thr - 0.6, thr + 0.6, colors="0.2", lw=1.2)
+        a.annotate("", xy=(lo, thr - 1.2), xytext=(hi, thr - 1.2),
+                   arrowprops={"arrowstyle": "<->", "color": "0.2"})
+        a.text(fc, thr - 1.7, rf"BW$_{{-3\,\mathrm{{dB}}}}$ = {m['bw_mhz']:.0f} MHz", ha="center", va="top", fontsize=10)
+        a.text(fc, pk + .25, f"{T['peak']} {pk:.2f} dB", ha="center", fontsize=8, color="0.4")
+        a.text(0.03, 0.04, f"$f_c$ = {m['fc_ghz']:.3f} GHz\n$Q_L = f_c/\\mathrm{{BW}}$ = {m['q_loaded']:.1f}",
+               transform=a.transAxes, fontsize=10, va="bottom", bbox={"boxstyle": "round", "fc": "w", "ec": "0.8"})
+        a.set(title=T["zoom_src"][k], xlim=(2.70, 3.10), ylim=(-9, 1), xlabel=T["freq"])
+        a.grid(alpha=.3)
+    ax[0][0].set_ylabel("|S21| (dB)")
+    fig.tight_layout()
+    fig.savefig(path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 # --------------------------------------------------------------------------
 # driver
 # --------------------------------------------------------------------------
@@ -686,6 +822,10 @@ def run(dataset: str = DEFAULT_DATASET, kit: str = "nominal", fit: bool = False,
     json.dump(res, open(out_data(f"{out_name}_metrics.json"), "w"), indent=2)
     figs = [plot_comparison(curves, spec, out_img(f"{out_name}_comparison.png")),
             plot_calibration_check(ds, cal, out_img(f"{out_name}_calibration_check.png"))]
+    for lang, sfx in (("en", ""), ("es", "_es")):
+        figs += [plot_q_comparison(cm, spec, out_img(f"{out_name}_q_comparison{sfx}.png"), lang),
+                 plot_q_zoom(curves, cm, out_img(f"{out_name}_q_zoom{sfx}.png"), lang)]
+    res["q_theory"] = q_theory(spec)
     res["figures"] = figs
     if paper:
         _write_paper_artifacts(ds, cal, curves, cm, res, spec, out_name)
@@ -719,6 +859,9 @@ def _write_paper_artifacts(ds, cal, curves, cm, res, spec, out_name) -> None:
     os.makedirs(data, exist_ok=True)
     shutil.copy2(out_img(f"{out_name}_comparison.png"), os.path.join(figs, "fig_measured_vs_sim.png"))
     shutil.copy2(out_img(f"{out_name}_calibration_check.png"), os.path.join(figs, "fig_calibration_check.png"))
+    for sfx in ("", "_es"):
+        for kind in ("q_comparison", "q_zoom"):
+            shutil.copy2(out_img(f"{out_name}_{kind}{sfx}.png"), os.path.join(figs, f"fig_{kind}{sfx}.png"))
     json.dump({k: v for k, v in res.items() if k != "figures"},
               open(os.path.join(data, "measurement_metrics.json"), "w"), indent=2)
     proc = os.path.join(ds.root, "processed")

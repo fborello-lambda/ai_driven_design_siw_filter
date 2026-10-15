@@ -141,6 +141,11 @@ SUBSTRATES = {
 }
 DEFAULT_SUBSTRATE = "RO4350B_0.76mm"
 
+# Conductor Q of one TE101 cavity on RO4350B_0.76mm with smooth copper (Pozar
+# cavity formula). With Qd = 1/tan_d = 270 it gives the theoretical Qu ~ 180
+# quoted in the papers' loss budget; used by `siw measure` for the Q figure.
+QC_COPPER_EST = 540.0
+
 
 @dataclass(frozen=True)
 class Substrate:
