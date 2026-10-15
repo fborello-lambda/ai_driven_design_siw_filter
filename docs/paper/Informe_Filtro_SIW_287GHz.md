@@ -1363,6 +1363,17 @@ $Q_u$ mide la pérdida propia de cada resonador y fija la pérdida de inserción
 Fig. \ref{fig:qcomp} salen del mismo código (`siw measure`) para las cuatro
 fuentes.
 
+En el filtro completo los dos cumplen papeles distintos:
+
+- $Q_L$ lo fijan los acoplamientos ($k$ y $Q_e$). Define el ancho de banda y
+  casi no depende de $Q_u$ mientras $Q_u \gg Q_L$.
+- $Q_u$ no cambia el ancho de banda, pero fija la pérdida de inserción.
+  Escribiendo la Ec. \ref{eq:il} en términos del $Q$ cargado de la banda de
+  rizado, $Q_{L,\text{rizado}} = 1/\mathrm{FBW}$,
+  $$ \mathrm{IL}_0 \approx 4.343 \sum_i g_i \, \frac{Q_{L,\text{rizado}}}{Q_u}\ \text{dB}. $$
+  Cuanto más angosto es el filtro ($Q_L$ mayor) o más pérdida tiene cada
+  resonador ($Q_u$ menor), mayor es la pérdida.
+
 ```{=latex}
 \begin{figure*}[t]
 \centering
