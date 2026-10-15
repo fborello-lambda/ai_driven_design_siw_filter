@@ -644,7 +644,7 @@ def plot_calibration_check(ds: Dataset, cal: SoftwareCal, path: str) -> str:
 # driver
 # --------------------------------------------------------------------------
 PAPER_DIR = data_path("docs", "paper")
-PAPER_FILES = {"en": "ai_driven_rf_design.md", "es": "Anteproyecto_Filtro_SIW_287GHz.md"}
+PAPER_FILES = {"en": "ai_driven_rf_design.md", "es": "Informe_Filtro_SIW_287GHz.md"}
 
 
 def run(dataset: str = DEFAULT_DATASET, kit: str = "nominal", fit: bool = False, paper: bool = False,

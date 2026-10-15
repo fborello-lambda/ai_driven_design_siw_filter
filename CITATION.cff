@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this code, data or workflow, please cite it as below."
+title: "siw_filter: an LLM-agent-driven design flow for an SIW bandpass filter"
+type: software
+license: MIT
+repository-code: "https://github.com/fborello-lambda/siw_filter"
+version: 0.1.0
+date-released: 2026-10-15
+authors:
+  - family-names: Borello
+    given-names: Federico
+    email: fborello.contact@gmail.com
+    affiliation: "Universidad Tecnológica Nacional, Facultad Regional Buenos Aires"
+preferred-citation:
+  type: article
+  title: "AI-Driven RF Design: An LLM Coding Agent Takes a Substrate Integrated Waveguide Filter from Specification to Fabrication"
+  authors:
+    - family-names: Borello
+      given-names: Federico
+  year: 2026
+  status: preprint
+  notes: "Preprint; replace with the arXiv identifier or journal reference when available."

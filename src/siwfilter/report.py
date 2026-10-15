@@ -36,8 +36,8 @@ import skrf as rf
 from .config import OUTPUT_DIR, data_path, out_s2p, out_img
 
 REPORT_DIR = data_path("docs")               # STATE.md (tag docs-archive-2026-09-29) figures
-PAPER_DIR = os.path.join(REPORT_DIR, "paper")  # Anteproyecto + its figures
-REPORT_MD = "Anteproyecto_Filtro_SIW_287GHz.md"
+PAPER_DIR = os.path.join(REPORT_DIR, "paper")  # Informe + its figures
+REPORT_MD = "Informe_Filtro_SIW_287GHz.md"
 IMG_DIR = os.path.join(OUTPUT_DIR, "imgs")
 
 # Pipeline-produced figures the report embeds by bare filename.

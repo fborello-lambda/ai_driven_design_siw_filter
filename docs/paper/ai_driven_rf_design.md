@@ -125,22 +125,78 @@ were compared three times under three different objectives and never matched
 this choice. The connector is a Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA
 [@taoglas_sma].
 
-The low-pass prototype gives g1 = g3 = 1.0316 and g2 = 1.1474 for N = 3
-[@hong2001microstrip]. The bandpass mapping then gives the design targets:
+## Design equations
 
-$$ k_{i,i+1} = \frac{\text{FBW}}{\sqrt{g_i g_{i+1}}} = 0.0460,
-\qquad Q_e = \frac{g_0 g_1}{\text{FBW}} = 20.63 . $$
+The low-pass Chebyshev prototype gives $g_1 = g_3 = 1.0316$ and $g_2 = 1.1474$
+for $N = 3$ and 0.1 dB ripple [@hong2001microstrip]. The bandpass mapping turns
+them into the two numbers the geometry must reproduce, the coupling between
+adjacent cavities and the external quality factor of the end cavities:
 
-The SIW width follows from a TE10 cutoff near 0.7 f0 through the Cassivi–Wu
-correction $a_{\text{siw}} = a_{\text{eff}} + d^2/(0.95p)$
-[@cassivi2002dispersion]. The cavity lengths follow from the TE101 resonance.
-Each feed is a 50 Ω microstrip line (Hammerstad [@hammerstad1980accurate])
-flared into the SIW by a Deslandes taper [@deslandes2010design]. At the board
-edge it becomes a grounded coplanar waveguide (CPWG) launch sized to the SMA
-footprint: a 1.2 mm trace with 0.2512 mm gaps, which solves to 50.0 Ω by
-conformal mapping [@wadell1991transmission; @simons2001coplanar]. The
-coupling-matrix formulation [@cameron2003advanced; @cameron2018microwave]
-provides both the ideal target response and, later, the diagnostic fit.
+```{=latex}
+\begin{equation}
+k_{i,i+1} = \frac{\mathrm{FBW}}{\sqrt{g_i\,g_{i+1}}} = 0.0460 ,
+\qquad
+Q_e = \frac{g_0\,g_1}{\mathrm{FBW}} = 20.63 .
+\label{eq:synth}
+\end{equation}
+```
+
+The waveguide width follows from choosing the TE10 cutoff near $0.7 f_0$, which
+sets the equivalent width, and from the Cassivi–Wu correction for the finite
+via fence [@cassivi2002dispersion]:
+
+```{=latex}
+\begin{equation}
+a_\mathrm{eff} = \frac{c}{2 f_c \sqrt{\varepsilon_r}} , \quad f_c \approx 0.7 f_0 ,
+\qquad
+a_\mathrm{siw} = a_\mathrm{eff} + \frac{d^2}{0.95\,p} .
+\label{eq:width}
+\end{equation}
+```
+
+Each cavity length follows from the TE101 resonance condition:
+
+```{=latex}
+\begin{equation}
+f_{101} = \frac{c}{2\sqrt{\varepsilon_r}}
+\sqrt{\frac{1}{a_\mathrm{eff}^{2}} + \frac{1}{L^{2}}} .
+\label{eq:te101}
+\end{equation}
+```
+
+Eq. (\ref{eq:te101}) assumes ideal walls, so the real length is shorter once the
+tapers and apertures load the cavity (Sec. VI). The feed is a 50 Ω microstrip
+line (Hammerstad [@hammerstad1980accurate]) flared into the SIW by a Deslandes
+taper [@deslandes2010design]. At the board edge it becomes a grounded coplanar
+waveguide (CPWG) launch sized to the SMA footprint: a 1.2 mm trace with
+0.2512 mm gaps, which solves to 50.0 Ω by conformal mapping
+[@wadell1991transmission; @simons2001coplanar].
+
+The two couplings are measured, not computed, because closed-form iris formulas
+are unreliable for SIW. Two coupled closed cavities split their resonance into
+$f_1$ and $f_2$, and a single cavity driven through its apertures has a loaded
+quality factor $Q_L$:
+
+```{=latex}
+\begin{equation}
+k = \frac{f_2^{2} - f_1^{2}}{f_2^{2} + f_1^{2}} ,
+\qquad
+Q_e = \frac{2}{1/Q_L - 1/Q_u} .
+\label{eq:extract}
+\end{equation}
+```
+
+The coupling-matrix formulation [@cameron2003advanced; @cameron2018microwave]
+provides the ideal target response and, later, the diagnostic fit. The
+dissipation of a narrowband filter then follows from the unloaded quality
+factor $Q_u$ [@hong2001microstrip]:
+
+```{=latex}
+\begin{equation}
+\mathrm{IL}_0 \approx \frac{4.343 \sum_i g_i}{\mathrm{FBW}\; Q_u} \ \text{dB}.
+\label{eq:il}
+\end{equation}
+```
 
 # Toolchain and working method
 
@@ -211,27 +267,82 @@ and the command that reproduces them. A project brief file (`CLAUDE.md`) acted
 as the agent's persistent memory across sessions. Handoff documents carried
 the state from one machine to another.
 
-The ML layer is a scikit-optimize GP [@skopt; @rasmussen2006gaussian] with
-two fidelities: coarse-mesh evaluations for the search and a fine-mesh
-confirmation of the winner. It also has a fast physics screen that rejects
-non-resonant candidates before a full solve, a patience-based early stop, and
-an objective that went through ten revisions (v9–v18). Later revisions fitted
-the whole response to the ideal Chebyshev target instead of scoring
-individual points.
+**From the textbook steps to the tool.** Table \ref{tab:pipeline} lists what a
+coupled-resonator SIW filter normally takes by hand and which command replaces
+each step. The equations are the classical ones [@hong2001microstrip;
+@cassivi2002dispersion; @deslandes2006accurate]. What the tool changes is
+that every step that used to be a hand-fitted curve is a measurement with a
+solver, and the chain from specification to gerbers is one sequence of
+commands.
 
-**Compute.** To speed up the search, the work moved to a workstation with an
-NVIDIA GTX 1660 SUPER (6 GB). Palace ran with its GPU backend on that card,
-and the author supervised the long agent sessions remotely through Claude
-Code's Remote Control. The GPU was 1.24× faster than 4 CPU ranks on the
-dual-mode model, with S-parameters identical to 10⁻⁹ dB. However, the card
-ran out of memory above about 176 k tetrahedra (174.6 k finished, 178.4 k did
-not). The 166 mm cascade exceeded that at any adequate mesh density, so no
-GPU mesh preset was ever validated for it. The GPU was not tried on the
-fine-mesh verification either, whose CPU run needed 315 k unknowns and about
-5.5 GB. All production runs therefore ended up on CPUs with 4 MPI ranks. Four
-attempts on a 3.7 GB host failed, three of them explicitly out of memory; the
-final runs used a 16 GB host at about 8 s per frequency point. In short,
-memory rather than arithmetic was the binding constraint throughout.
+```{=latex}
+\begin{table*}[t]
+\centering
+\footnotesize
+\caption{The design steps of an SIW coupled-resonator filter: the textbook way and what the tool does.}
+\label{tab:pipeline}
+\begin{tabular}{p{0.8cm}p{2.3cm}p{6.6cm}p{6.6cm}}
+\hline
+ & \textbf{Step} & \textbf{By hand} & \textbf{In the tool} \\
+\hline
+1 & Synthesis & Chebyshev $g_i$ by recursion; $k_{i,i+1}=\mathrm{FBW}/\sqrt{g_ig_{i+1}}$, $Q_e=g_0g_1/\mathrm{FBW}$; ideal response from the coupling matrix & \texttt{synthesis.py}: targets $k$, $Q_e$ and the ideal \texttt{target.s2p} \\
+2 & Waveguide width & $a_\mathrm{eff}=c/(2f_c\sqrt{\varepsilon_r})$ with $f_c\approx0.7f_0$; $a_\mathrm{siw}=a_\mathrm{eff}+d^2/(0.95p)$; via rules on $p/d$ & \texttt{siw\_geometry.py}, from the substrate and via presets in \texttt{config.py}; builds the via fences and the board \\
+3 & Cavity length & $f_{101}=\dfrac{c}{2\sqrt{\varepsilon_r}}\sqrt{a_\mathrm{eff}^{-2}+L^{-2}}$ & first guess only; corrected from a driven solve in step 7 \\
+4 & Feed & 50\,$\Omega$ microstrip width (Hammerstad), taper (Deslandes), coplanar gap by conformal mapping & \texttt{siw\_geometry.py}, \texttt{launch.py}: taper and the CPWG footprint of the SMA \\
+5 & Internal coupling & simulate two coupled cavities, read the split $k=(f_2^2-f_1^2)/(f_2^2+f_1^2)$, fit $w(k)$ & \texttt{siw calibrate --what k}: Palace eigenmode of a closed two-cavity model, polynomial fit, inverted at the target $k$ \\
+6 & External coupling & one resonator, $Q_L$ from the $-3$\,dB width or the group delay, $Q_e=2/(1/Q_L-1/Q_u)$ & \texttt{siw calibrate --what qe}: one driven cavity with two apertures, fit of $w_\mathrm{ext}(Q_e)$ \\
+7 & Assembly and tuning & simulate the whole filter, change lengths and irises by hand until the reflection zeros are equiripple & \texttt{siw synth-design}: joint $(k,f_c)$ refinement, driven centre-frequency trim, separate middle-cavity correction, pole-shape check \\
+8 & Final polish & manual sweeps of one parameter at a time & \texttt{siw design --seed}: local Bayesian search (below) \\
+9 & Layout and CAD & CST model drawn by hand; gerbers from a PCB tool & \texttt{siw cst}, \texttt{siw kicad} and 34 file-level checks \\
+10 & Verification & VNA measurement and calibration & \texttt{siw measure}: software recalibration and comparison with the simulations \\
+\hline
+\end{tabular}
+\end{table*}
+```
+
+**The optimizer.** The search code is our own, written around Palace, not a
+package taken from a design tool. A candidate is a set of geometry parameters:
+the cavity lengths (mirrored about the centre), the iris widths, the external
+aperture and the taper length. The microstrip width stays at its 50 Ω value. To
+evaluate a candidate the code meshes the whole board with gmsh, connectors and
+launch included, writes the Palace configuration, runs a driven sweep on a
+coarse mesh and reads $|S_{11}|$ and $|S_{21}|$. A fast physics screen at $f_0$
+runs first and rejects candidates that do not resonate; the rejected ones get a
+graded penalty, so the surrogate still sees a gradient. The objective sums the
+RMSE of $|S_{11}|$ against the ideal Chebyshev response (both clipped at a
+floor), the shape of $|S_{21}|$, the insertion loss, the centre-frequency error
+outside a deadband, a two-sided bandwidth error and the board length. Three
+one-sided hinges add the real specification: worst in-band $S_{11}\le-16$ dB,
+loss within an allowance over the dielectric floor, and symmetry. The
+objective went through ten revisions (v9–v18); the early ones scored individual
+points and the later ones fitted the whole response. A Gaussian-process
+surrogate (scikit-optimize [@skopt; @rasmussen2006gaussian], `gp_hedge`
+acquisition) proposes each next candidate after a random seeding phase whose
+size scales with the budget. A patience rule stops a plateau early, and the
+winner is solved again on a fine mesh and checked after rounding every
+dimension to the 0.1 mm fabrication resolution. In local mode (`--seed`,
+`--span`) the search box is a few millimetres around a calibrated design. A
+coarse evaluation takes 6–20 min, so sample efficiency matters more than
+throughput, and a lock serialises the Palace solves.
+
+**Compute.** To speed up the search we moved to a workstation with an NVIDIA
+GTX 1660 SUPER (6 GB) and ran Palace with its GPU backend there. The author
+supervised the long agent sessions remotely through Claude Code's Remote
+Control. On the dual-mode model the GPU was 1.24× faster than 4 CPU ranks, with
+S-parameters identical to 10⁻⁹ dB, and disabling MFEM's pooled allocator
+(`MFEM_MEMORY=cuda`) removed the first out-of-memory failures, which had killed
+every point of an eigenmode sweep. But the card does not have the memory for the
+meshes that matter. It finished a driven solve with 174.6 k tetrahedra and ran
+out at 178.4 k, in the error estimator, and only one rank per card works. The
+166 mm cascade exceeds that at any adequate mesh density, so no GPU mesh preset
+was ever validated for it; the code now caps GPU use at 176 k tetrahedra and
+falls back to the CPU. The GPU was not tried on the fine-mesh verification,
+which needs 315 k unknowns and about 5.5 GB on the CPU. All production runs
+therefore ran on CPUs with 4 MPI ranks. Four attempts on a 3.7 GB host failed,
+three of them explicitly out of memory; the final runs used a 16 GB host at
+about 8 s per frequency point. Memory, not arithmetic, was the binding
+constraint, and a card with more memory, or the half-model and adaptive sweeps
+of Sec. IX, would bring the cascade onto the GPU.
 
 # Why global Bayesian search failed
 
@@ -266,12 +377,12 @@ The replacement measures each coupling on the smallest structure that exhibits
 it (Fig. \ref{fig:calib}):
 
 * **Internal coupling.** A closed two-cavity eigenmode solve splits the
-  cavity mode into f1 and f2, and $k = (f_2^2 - f_1^2)/(f_2^2 + f_1^2)$
-  [@hong2001microstrip]. This is smooth in $w_{\text{iris}}$.
+  cavity mode into $f_1$ and $f_2$, and $k$ follows from Eq. (\ref{eq:extract}).
+  It is smooth in $w_{\text{iris}}$.
 * **External Q.** One cavity driven symmetrically through two apertures gives
-  the loaded Q, and $Q_e = 2/(1/Q_L - 1/Q_u)$. Here Qu = 1/$\tan\delta$ = 270.3,
-  independently matched by the eigenmode Q. This is smooth and monotonic in
-  $w_{\text{ext}}$.
+  the loaded Q, and $Q_e$ follows from Eq. (\ref{eq:extract}). Here
+  $Q_u = 1/\tan\delta = 270.3$, independently matched by the eigenmode Q. It is
+  smooth and monotonic in $w_{\text{ext}}$.
 
 Inverting the fitted curves at the synthesis targets, assembling the filter
 and making a final driven fc trim converged in about three solves per curve.
@@ -306,14 +417,16 @@ about two distinct geometries, and the GP was tuning a knob that did nothing
 could not express the required k = [0.0415, 0.0329, 0.0415].
 
 ```{=latex}
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/fig_quantization.png}
-\caption{Via-fence quantization. Filtering a fixed pitch grid collapsed
-different iris widths onto identical meshes. Segment-wise placement makes
-the geometry continuous in its parameters.}
+\includegraphics[width=0.95\textwidth]{figures/fig_quantization.png}
+\caption{Via-fence quantization. (a) With the fixed grid, requesting an iris of
+6 mm or 9 mm placed exactly the same vias (dashed: requested edge, $w/2$). (b) With
+the fix the iris arms start at $w/2$ and every requested width gives a different
+mesh. (c) Opening actually meshed versus requested width: steps of about 6 mm
+before, a straight line after. Six requested widths fell on only three geometries.}
 \label{fig:quant}
-\end{figure}
+\end{figure*}
 ```
 
 # Silent defects: a taxonomy
@@ -477,24 +590,49 @@ untrimmed board: external Q on target, $k$ 4.8\,\% weak, end cavities 17\,MHz lo
 \end{figure}
 ```
 
-**Why the insertion loss is high.** For a narrowband filter,
-IL$_0 \approx 4.343\sum g_i/(\text{FBW}\,Q_u)$ [@hong2001microstrip], so the
-loss is set by the unloaded Q. The Palace runs model the metal as a perfect
-conductor, so their Q is bounded by the dielectric:
-$Q_d = 1/\tan\delta = 270$. The coupling-matrix fits returned 229–320, which
-brackets that bound; the 320 value exceeds it and reflects the fit's
-uncertainty rather than lower loss. At the simulated 6.3 % bandwidth,
-$Q_u = 270$ predicts 0.8 dB of dissipation, and the −11 dB in-band mismatch
-adds 0.35 dB. We attribute the remaining ≈0.5 dB of the simulated 1.70 dB to
-radiation from the open microstrip, taper and launch sections, which we did
-not separate. Real copper lowers Q further. For a TE101 cavity 0.76 mm high,
-$Q_c \approx 540$ with smooth copper [@pozar2012microwave], so
-$Q_u \approx 180$ and the dissipation rises by about 0.4 dB. That is
-consistent with the 0.59 dB that the exterior-face copper model added. The
-board should therefore measure roughly 2.2–2.3 dB (a prediction written before
-the measurement; Sec. VIII reports 2.0–2.4 dB). This is close to the floor for
-this laminate, thickness and bandwidth, not a design error. Each loss
-mechanism points to an improvement:
+**Why the insertion loss is high.** The loss of a narrowband filter is set by
+the unloaded Q, Eq. (\ref{eq:il}). With the dielectric and the copper in series,
+
+```{=latex}
+\begin{equation}
+\frac{1}{Q_u} = \frac{1}{Q_d} + \frac{1}{Q_c} ,
+\qquad Q_d = \frac{1}{\tan\delta} = 270 .
+\label{eq:qu}
+\end{equation}
+```
+
+The Palace runs model the walls as perfect conductors, so their $Q_u$ is capped
+by $Q_d$. The coupling-matrix fits returned 229–320, which brackets that cap;
+the 320 value exceeds it and reflects the fit's uncertainty, not lower loss.
+Real copper adds $Q_c \approx 540$ for a TE101 cavity 0.76 mm high with smooth
+copper [@pozar2012microwave], so $Q_u \approx 180$. Table \ref{tab:lossbudget}
+adds the terms up. The 0.5 dB we cannot attribute is the part of the Palace
+result that the matrix model does not have; we assign it to radiation from the
+open microstrip, taper and launch sections and did not separate it.
+
+```{=latex}
+\begin{table}[t]
+\centering
+\caption{Insertion-loss budget at 2.87\,GHz (dB).}
+\label{tab:lossbudget}
+\begin{tabular}{p{0.74\columnwidth}c}
+\hline
+Dielectric dissipation ($Q_u = 270$, 6.3\,\% bandwidth) & 0.8 \\
+Mismatch at $-11$\,dB & 0.35 \\
+Launch and radiation (remainder of the Palace result) & $\approx$0.5 \\
+\textbf{Palace, perfect-conductor walls} & \textbf{1.70} \\
+Copper ($Q_c \approx 540$) & $+0.4$ \\
+\textbf{Predicted, before the measurement} & \textbf{2.1--2.3} \\
+\textbf{Measured (Sec.~\ref{sec:vna})} & \textbf{2.0--2.4} \\
+\hline
+\end{tabular}
+\end{table}
+```
+
+The prediction was written before the board was measured. The 0.4 dB for copper
+is consistent with the 0.59 dB that an exterior-face copper model added. The
+result is close to the floor for this laminate, thickness and bandwidth, not a
+design error. Each loss mechanism points to an improvement:
 
 * Qd is fixed by the laminate: $\tan\delta$ = 0.0037 is high for a filter.
 * Qc scales with the substrate height, and 0.76 mm is thin.
@@ -686,7 +824,7 @@ we did not test this. The −3 dB bandwidth is 171–174 MHz, 5–6 % below Pala
 
 *Insertion loss.* The peak $S_{21}$ is −2.38 and −2.41 dB with the instrument
 calibration and −2.04 and −2.08 dB with the software one, so 2.0–2.4 dB within
-the 0.3 dB uncertainty above. Palace gives 1.70 dB. We predicted 2.2–2.3 dB
+the 0.3 dB uncertainty above. Palace gives 1.70 dB. We predicted 2.1–2.3 dB
 before measuring (Sec. VII), so the measurement brackets the prediction.
 Section VII estimated the loss from the dielectric and a smooth-copper cavity.
 The forward model of the fitted coupling matrix can read the measured loss

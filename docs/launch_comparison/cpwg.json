@@ -195,7 +195,7 @@
  "s11w": -5.133076518156,
  "il_band": -4.543584568432,
  "tag": "launch_cpwg",
- "csv": "/home/ubuntu/siw_filter/output/data/postpro/launch_cpwg/port-S.csv",
+ "csv": "output/data/postpro/launch_cpwg/port-S.csv",
  "bw": 164.46040403332862,
  "fc_3db": 2.874974822350351,
  "f_lo": 2.7927446203336865,

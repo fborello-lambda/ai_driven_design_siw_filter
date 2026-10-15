@@ -10,16 +10,14 @@ wheels/
 .venv
 
 # All script outputs go here (regenerable); committed figures live in docs/.
-# Exception: keep the EM calibration cache (expensive to regenerate, hours of
-# openEMS) so a fresh clone still gets the calibrated iris widths.
-/output/*
-!/output/data
-/output/data/*
-!/output/data/calibration.json
-# SMA connector v1 manifest, cited by docs/sma_connector/README.md
-!/output/data/versions/
-/output/data/versions/*
-!/output/data/versions/sma-v1.json
+/output/
+
+# Builds and derived data: regenerate with docs/paper/submission/build.py and `siw measure --paper`
+/docs/paper/ai_driven_rf_design_arxiv.pdf
+/docs/paper/ai_driven_rf_design_ieee_access.pdf
+/docs/paper/submission/access.tex
+/docs/paper/submission/*.tar.gz
+/measurements/*/processed/
 
 # Stray photos in the project root are never committed (only docs/ ones are).
 /*.png

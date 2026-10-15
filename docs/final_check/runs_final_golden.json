@@ -195,7 +195,7 @@
   "s11w": -10.70735172751,
   "il_band": -2.379242790147,
   "tag": "final_check",
-  "csv": "/home/ubuntu/siw_filter/output/data/postpro/final_check/port-S.csv",
+  "csv": "output/data/postpro/final_check/port-S.csv",
   "bw": 184.2734136602182,
   "fc_3db": 2.872142190219505,
   "f_lo": 2.7800054833893957,

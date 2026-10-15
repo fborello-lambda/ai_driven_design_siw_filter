@@ -5,6 +5,9 @@
 results, bug taxonomy, gaps). Where this file disagrees with those or with
 `golden/`, they are right. Historical notes (roadmaps, handoffs, exploration
 logs) were removed from the tree; they live in git tag `docs-archive-2026-09-29`.
+The one-off CST/Palace audit scripts, venue notes and generated PDFs removed on
+2026-10-15 are in tag `archive-2026-10-15`. `docs/paper/Informe_Filtro_SIW_287GHz.md` is the
+Spanish course report (chronological, no AI-workflow content).
 
 **Status (2026-10-15):** board fabricated by JLCPCB (RO4350B, ENIG, ~USD 120)
 and measured on 2026-10-14 (`measurements/2026-10-14_vna/`). Measured: fc

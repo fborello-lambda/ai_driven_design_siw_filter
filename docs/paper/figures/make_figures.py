@@ -41,7 +41,6 @@ COLORS = ["#1f77b4", "#2ca02c", "#d62728"]
 BAND = (2.87 - 0.07175, 2.87 + 0.07175)
 
 COPIES = {
-    "fig_quantization.png": "docs/dualmode_cavity/via_continuity_bugfix.png",
     "fig_final_trim.png": "docs/final_check/trim_comparison.png",
     "fig_coupling_fit.png": "docs/final_check/analysis.png",
     "fig_launch_sparams.png": "docs/launch_comparison/sparams.png",
@@ -262,6 +261,70 @@ def fig_setup():
     print("wrote", OUT / "fig_setup.jpg")
 
 
+def fig_quantization():
+    """Via-row quantization bug (fixed in the cascade mesh builders), redrawn so it is readable.
+
+    Old rule: the iris arms were the vias of a FIXED grid with |y| > w/2 (grid step 3.06 mm for
+    a_siw = 39.79 mm, p = 3 mm), so the opening only changed when w/2 crossed a grid point. New
+    rule: the arms span exactly [w/2, half-width] with the pitch adjusted. Numbers are
+    reproduced from the construction rule (the old code no longer exists in the tree).
+    """
+    a_siw, p, d = 39.79, 3.0, 1.5
+    half = a_siw / 2
+    n_grid = int(round(a_siw / p))
+    grid = np.linspace(-half, half, n_grid + 1)
+    grid_pos = grid[grid > 0]
+
+    def before(w):
+        return grid_pos[grid_pos > w / 2]
+
+    def after(w):
+        n = max(1, int(round((half - w / 2) / p)))
+        return np.linspace(w / 2, half, n + 1)
+
+    txt = {
+        "en": dict(a="(a) Before: fixed grid", b="(b) After: arms placed from w/2",
+                   c="(c) Opening of the iris in the mesh", x="y from the filter axis (mm)",
+                   row="requested w = {w:g} mm", cx="requested iris width w (mm)",
+                   cy="width actually meshed (mm)", old="before (fixed grid)", new="after (fix)",
+                   note="6 and 9 mm:\nsame mesh", note2="12 and 15 mm:\nsame mesh", note3="18 and 21 mm:\nsame mesh",
+                   edge="requested edge w/2"),
+        "es": dict(a="(a) Antes: grilla fija", b="(b) Después: brazos desde w/2",
+                   c="(c) Abertura del iris en la malla", x="y desde el eje del filtro (mm)",
+                   row="w pedido = {w:g} mm", cx="ancho de iris pedido w (mm)",
+                   cy="ancho realmente mallado (mm)", old="antes (grilla fija)", new="después (corrección)",
+                   note="6 y 9 mm:\nmisma malla", note2="12 y 15 mm:\nmisma malla", note3="18 y 21 mm:\nmisma malla",
+                   edge="borde pedido w/2"),
+    }
+    for lang, t in txt.items():
+        fig, ax = plt.subplots(1, 3, figsize=(13, 3.8), gridspec_kw={"width_ratios": [1.2, 1.2, 1]})
+        for a, fn, title in ((ax[0], before, t["a"]), (ax[1], after, t["b"])):
+            for row, (w, col) in enumerate(((6, "C0"), (9, "C3"))):
+                y0 = 4.0 - 4.0 * row
+                for y in fn(w):
+                    a.add_patch(plt.Circle((y, y0), d / 2, color=col, alpha=0.85))
+                a.plot([w / 2, w / 2], [y0 - 1.6, y0 + 1.6], "k--", lw=0.9)
+                a.text(0.2, y0 + 2.0, t["row"].format(w=w), ha="left", va="center", fontsize=8, color=col)
+            a.set_xlim(0, half + 1.2); a.set_ylim(-2.0, 6.6); a.set_aspect("equal")
+            a.set_yticks([]); a.set_xlabel(t["x"]); a.set_title(title, fontsize=10)
+            for sp in ("top", "right", "left"):
+                a.spines[sp].set_visible(False)
+        ax[0].plot([], [], "k--", lw=0.9, label=t["edge"]); ax[0].legend(fontsize=7.5, loc="lower right", frameon=False)
+        w = np.linspace(4, 22, 400)
+        eff = [2 * before(x)[0] if len(before(x)) else np.nan for x in w]
+        ax[2].plot(w, w, color="C2", lw=2, label=t["new"])
+        ax[2].plot(w, eff, color="C1", lw=2, label=t["old"])
+        for (w1, w2), lab in (((6, 9), t["note"]), ((12, 15), t["note2"]), ((18, 21), t["note3"])):
+            e = 2 * before(w1)[0]
+            ax[2].plot([w1, w2], [e, e], "o-", color="k", ms=4, lw=0.8)
+            ax[2].text((w1 + w2) / 2, e + 0.6, lab, ha="center", va="bottom", fontsize=7)
+        ax[2].set(xlabel=t["cx"], ylabel=t["cy"], title=t["c"])
+        ax[2].grid(alpha=0.3); ax[2].legend(fontsize=8, loc="lower right")
+        fig.tight_layout()
+        name = "fig_quantization.png" if lang == "en" else "fig_quantizacion_es.png"
+        _save(fig, name)
+
+
 def copies():
     for dst, src in COPIES.items():
         p = ROOT / src
@@ -280,3 +343,4 @@ if __name__ == "__main__":
     fig_layouts()
     fig_calib()
     fig_setup()
+    fig_quantization()
