@@ -10,9 +10,11 @@ bandwidth 10 kHz, source power −15 dBm.
 
 ## Calibration
 
-The instrument was calibrated at the ends of the two test cables with the
-3.5 mm mechanical kit (85033D/E), **full two-port SOLR (unknown thru), isolation
-omitted** (photo `photos/vna_cal_setup.jpg`). In the `.s2p` headers,
+The instrument was calibrated at the ends of the two test cables in **full
+two-port SOLR (unknown thru), isolation omitted** (photo
+`photos/vna_cal_setup.jpg`). The standards were a **generic SMA short, open and
+load, not a characterised vendor kit**; the instrument was set to the 3.5 mm
+85033D/E definitions, the nearest it offers. In the `.s2p` headers,
 `Correction: …(ON U)` means the calibration is applied, `…(Rdy)` means it is
 stored but not applied (raw data).
 
@@ -42,9 +44,11 @@ siw measure --paper      # refresh the tables/figures used in docs/paper/
 `siw measure` re-calibrates the raw DUT files from the raw standards (SOL on
 each port, reciprocal unknown thru, `scikit-rf`) and checks the result against
 the instrument-calibrated files: mean |ΔΓ| 0.03 (S11) / 0.04 (S22) and 0.17 dB
-in S21 over 2.6–3.2 GHz. A passive thru cannot show gain, but the calibrated thru
-reads +0.18 dB (instrument) and +0.26 dB (software), so S21 carries about
-0.3 dB of uncertainty.
+in S21 over 2.6–3.2 GHz. Both use the same standard definitions, so this checks
+the implementation, not the standards. A passive thru cannot show gain, but the
+calibrated thru reads +0.18 dB (instrument) and +0.26 dB (software), so S21
+carries about 0.3 dB of uncertainty; its S11 is −18.4 / −17.6 dB at worst, so
+reflections below about −18 dB are not resolved.
 
 ## Caveats
 

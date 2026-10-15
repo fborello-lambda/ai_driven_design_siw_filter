@@ -1315,9 +1315,10 @@ def main(argv: list[str] | None = None) -> int:
     p_mea.add_argument("--dataset", default=_m.DEFAULT_DATASET,
                        help="directory with dut_*.s2p, raw_standards/ and check_thru_calibrated.s2p")
     p_mea.add_argument("--kit", choices=["nominal", "ideal"], default="nominal",
-                       help="standard model for the software calibration: nominal 3.5 mm kit "
-                            "(offset delay + open capacitance) or ideal +1/-1/0 (default: nominal; "
-                            "magnitudes are insensitive, phase/reference plane is not)")
+                       help="standard model for the software calibration: nominal (the 85033D/E-style "
+                            "definitions the instrument was set to: offset delay + open capacitance) "
+                            "or ideal +1/-1/0 (default: nominal; magnitudes are insensitive, "
+                            "phase/reference plane is not)")
     p_mea.add_argument("--palace", default=_m.DEFAULT_PALACE, help="golden .s11s21.json of the simulation")
     p_mea.add_argument("--cst", default=_m.DEFAULT_CST, help="CST .s2p for the comparison column")
     p_mea.add_argument("--fit", action="store_true",

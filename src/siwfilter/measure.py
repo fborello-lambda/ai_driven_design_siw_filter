@@ -117,10 +117,12 @@ def load_dataset(root: str = DEFAULT_DATASET) -> Dataset:
 def _reflection_standard(kind: str, f_hz: np.ndarray, model: str) -> np.ndarray:
     """Reflection coefficient of an open/short/match standard.
 
-    ``ideal``: Gamma = +1 / -1 / 0. ``nominal``: first-order 3.5 mm-kit model
-    (offset delay + open fringing capacitance). The nominal numbers are typical
-    kit values used ONLY as a sensitivity check -- they are not read from the
-    kit definition of the instrument that took the data.
+    ``ideal``: Gamma = +1 / -1 / 0. ``nominal``: first-order 85033D/E-style model
+    (offset delay + open fringing capacitance), i.e. the definitions the
+    instrument was SET to. The physical standards of the 2026-10-14 session were a
+    generic SMA short/open/load, so these definitions are an assumption shared by the
+    instrument's calibration and ours: their agreement checks the implementation, not
+    the standards. The values are typical ones, not read from the instrument.
     """
     n = len(f_hz)
     if kind == "match":

@@ -15,11 +15,13 @@ specification: the match is worse than simulated and the loss higher.
 | Centre frequency         | 2.87 GHz  | 2.876 GHz          | 2.894 GHz                |
 | −3 dB bandwidth          | 143.5 MHz | 182 MHz            | 171 MHz                  |
 | Peak insertion loss      | —         | 1.7 dB             | 2.0–2.4 dB               |
-| Worst in-band S11        | −16 dB    | −11.1 dB           | −5 dB (best dip −17 dB)  |
+| Worst in-band S11        | −16 dB    | −11.1 dB           | −5 dB (best min. −17 dB*) |
 | First spurious passband  | —         | 4.61 GHz, −3.8 dB  | 4.68 GHz, −4.4 dB        |
 
 The measured range is the instrument calibration (2.4 dB) and an independent
 software recalibration of the raw data (2.0 dB); `siw measure` reproduces both.
+\*The calibration standards were a generic SMA short/open/load, so reflections
+below about −18 dB are not resolved.
 Board size is 165.8 × 45.8 mm.
 
 ## Key files

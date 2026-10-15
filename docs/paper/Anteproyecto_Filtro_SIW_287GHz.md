@@ -28,8 +28,8 @@ abstract: |
   especificación de $-16$ dB, y un ajuste de matriz de acoplamiento explica por
   qué. La placa fabricada por JLCPCB se midió con un analizador vectorial de
   redes: centro en 2.894 GHz, ancho de banda de 171 MHz, pérdida de inserción
-  de 2.0 a 2.4 dB y un único cero de reflexión ($-17$ a $-20$ dB); no se alcanza la
-  especificación de $-16$ dB.
+  de 2.0 a 2.4 dB y un mínimo de reflexión ancho cerca de $-18$ dB, el piso de la
+  verificación de calibración; no se alcanza la especificación de $-16$ dB.
 bibliography: references.bib
 csl: ieee-jestpe.csl
 header-includes:
@@ -866,10 +866,14 @@ Las placas fueron recibidas y medidas (Sección \ref{sec:vna}).
 La placa (Fig. \ref{fig:setup}) se midió con un analizador vectorial de redes
 portátil Keysight FieldFox N9917A (18 GHz), entre 100 MHz y 5 GHz con 10 001
 puntos, 10 kHz de ancho de banda de FI y $-15$ dBm de potencia de la fuente. El
-instrumento se calibró en los extremos de los dos cables de prueba con un kit
-mecánico de 3.5 mm (85033D/E), en modo SOLR completo de dos puertos: corto,
-abierto y carga adaptada en cada puerto, más un thru recíproco de longitud
-desconocida, con el aislamiento omitido. Los cables terminan en conectores SMA
+instrumento se calibró en los extremos de los dos cables de prueba en modo SOLR
+completo de dos puertos: corto, abierto y carga en cada puerto, más un thru
+recíproco de longitud desconocida, con el aislamiento omitido. Los estándares
+fueron un corto, un abierto y una carga SMA genéricos, no un kit comercial
+caracterizado; el instrumento se configuró con las definiciones del kit
+85033D/E de 3.5 mm, las más cercanas que ofrece, de modo que los retardos de
+desplazamiento, la capacidad del abierto y la pérdida de retorno de la carga
+reales son desconocidos. Los cables terminan en conectores SMA
 que acoplan directamente con los de la placa, de modo que el plano de referencia
 es la cara del conector, como en las simulaciones. Se guardaron cuatro estados
 de la misma placa: conectores soldados, o apoyados contra la placa sin soldar,
@@ -883,8 +887,8 @@ guardaron el abierto, el corto, la carga y el thru crudos, en el mismo plano.
 \caption{Montaje de medición. Arriba: la placa fabricada con sus conectores y
 los cables de prueba (sin máscara antisoldante, acabado ENIG). Abajo a la
 izquierda: banco de medición con el analizador. Abajo a la derecha: pantalla de
-calibración del instrumento (kit de 3.5 mm, SOLR completo de dos puertos con
-thru desconocido).}
+calibración del instrumento (definiciones del kit 85033D/E de 3.5 mm
+seleccionadas, SOLR completo de dos puertos con thru desconocido).}
 \label{fig:setup}
 \end{figure}
 ```
@@ -896,18 +900,29 @@ resolvió por software el modelo de error de ocho términos, con una calibració
 de un puerto corto-abierto-carga (SOL) en cada puerto y el paso del thru
 desconocido para los términos de transmisión [@ferrero1992unknownthru], con
 scikit-rf [@arsenovic2022scikitrf], y se aplicó a las dos placas sin calibrar.
-El abierto y el corto siguen un modelo nominal del kit de 3.5 mm (unos 30 ps de
-retardo de desplazamiento y 49 fF de capacidad de borde; valores típicos, no
-leídos del instrumento). El resultado coincide con los archivos corregidos por
+El abierto y el corto siguen las definiciones con que se configuró el
+instrumento: un modelo del 85033D/E (unos 30 ps de retardo de desplazamiento y
+49 fF de capacidad de borde; valores típicos, no leídos del instrumento). El resultado coincide con los archivos corregidos por
 el instrumento con un $|\Delta\Gamma|$ medio de 0.03 en $S_{11}$ y 0.04 en
 $S_{22}$, y de 0.17 dB en $S_{21}$, entre 2.6 y 3.2 GHz (Fig.
 \ref{fig:calcheck}). Reemplazar el modelo del kit por estándares ideales
 $+1/-1/0$ cambia las magnitudes en menos de 0.03 dB ($S_{21}$) y 0.09 dB
-($S_{11}$), y solo desplaza el plano de referencia. Un thru medido después de
-la calibración del instrumento da +0.18 dB, y la calibración por software
-aplicada al thru crudo da +0.26 dB. Un thru pasivo no puede tener ganancia, de
-modo que ambas correcciones son optimistas en $S_{21}$, y se toma su
-incertidumbre como unos 0.3 dB.
+($S_{11}$), y solo desplaza el plano de referencia.
+
+Ambas correcciones suponen las mismas definiciones de los estándares, de modo
+que su coincidencia verifica la implementación y los archivos crudos, no los
+estándares. Los retardos y la capacidad del abierto desplazan sobre todo el plano
+de referencia, y la prueba anterior acota su efecto sobre las magnitudes. La
+carga es distinta: una carga SMA de uso general con 25 dB de pérdida de retorno,
+que no se midió, dejaría un error de directividad de 0.056, comparable a los
+mínimos que se quieren leer. El thru de verificación da una cota empírica.
+Después de la calibración del instrumento devuelve +0.18 dB en $S_{21}$ y, en el
+peor caso entre 2.6 y 3.2 GHz, $-18.4$ dB en $S_{11}$; la calibración por
+software aplicada al thru crudo da +0.26 dB y $-17.6$ dB. Un thru pasivo no puede
+tener ganancia, de modo que ambas correcciones son optimistas en $S_{21}$, y se
+toma su incertidumbre como unos 0.3 dB. Las reflexiones por debajo de unos
+$-18$ dB no se resuelven; el peor $S_{11}$ en banda es confiable a unos
+$\pm 2$ dB.
 
 ```{=latex}
 \begin{figure*}[t]
@@ -992,13 +1007,15 @@ la simulación solo con dieléctrico y unos 180 esperados con cobre liso. No se
 separan la rugosidad del cobre, la fuga de la hilera de vías, las soldaduras, el
 conector ni el acabado ENIG en las líneas de alimentación.
 
-*Pérdida de retorno.* Los tres ceros de reflexión simulados aparecen como un
-único cero ancho, de $-17$ dB en el mejor caso con la calibración del instrumento
-($-19$ a $-20$ dB con la de software), con un hombro; el peor $S_{11}$
-en banda es $-5$ dB. La pérdida explica la mayor parte de esto, porque fusiona
-los ceros, y el desvío de 24 MHz respecto de la banda especificada se suma a
-ella. Los puertos difieren levemente: el mejor $S_{22}$ es $-21$ dB, frente a
-$-17$ dB de $S_{11}$ en la placa soldada.
+*Pérdida de retorno.* La traza muestra un mínimo ancho con un hombro, de
+$-17$ dB en el mejor caso con la calibración del instrumento ($-19$ a $-20$ dB
+con la de software), y el peor $S_{11}$ en banda es $-5$ dB. Los tres ceros
+simulados están entre $-23$ y $-35$ dB, por debajo del piso de $-18$ dB de la
+verificación de calibración, de modo que la medición no puede confirmarlos uno
+por uno; el modelo de matriz indica que tanta pérdida los fusiona en uno, que es
+lo que parece la traza. El desvío de 24 MHz respecto de la banda especificada se
+suma a la cifra en banda. Los puertos difieren levemente (mejor $S_{22}$ de $-21$ dB, frente a
+$-17$ dB de $S_{11}$ en la placa soldada), dentro del piso de calibración.
 
 *Soldadura.* Soldar los conectores cambia el resultado calibrado en 3 MHz en
 frecuencia central, 0.03 dB en pérdida de inserción y 0.5 dB en el peor $S_{11}$
@@ -1069,10 +1086,11 @@ El filtro N=3 fabricado se midió con un analizador vectorial de redes (Sección
 de la simulación y 24 MHz por encima del objetivo, con 171 MHz de ancho de
 banda. La pérdida de inserción es de 2.0 a 2.4 dB, entre 0.3 y 0.7 dB mayor que
 la de Palace, lo que equivale a un factor de calidad descargado efectivo de
-130 a 185. Esa pérdida fusiona los tres ceros de reflexión simulados en uno
-solo, de $-17$ a $-20$ dB, y el peor $|S_{11}|$ en banda es de 5 dB, frente a 11 dB
-simulados y 16 dB especificados: no se alcanza la especificación de adaptación
-ni de ancho de banda. La recalibración por software de los estándares crudos
+130 a 185. En el modelo de matriz, esa pérdida fusiona los tres ceros de
+reflexión simulados en uno, y el peor $|S_{11}|$ en banda es de 5 dB, frente a
+11 dB simulados y 16 dB especificados: no se alcanza la especificación de
+adaptación ni de ancho de banda. Los estándares de calibración genéricos limitan
+la lectura de los ceros en sí (piso de unos $-18$ dB), no los 5 dB. La recalibración por software de los estándares crudos
 coincide con la del instrumento en promedio dentro de 0.2 dB en $S_{21}$ (hasta 1 dB en los flancos), y la banda
 espuria a partir de 4.4 GHz ($-4$ dB) quedó confirmada por la medición.
 
@@ -1081,6 +1099,8 @@ Como trabajo futuro quedan:
 - re-centrar la banda, lo que requiere entre 0.5 y 1 mm de longitud de cavidad;
 - aplicar la corrección coordinada de $w_{\text{ext}}$, $l_{\text{cav1}}$ y
   $w_{\text{iris}}$;
+- repetir la medición con un kit de calibración SMA caracterizado, o con
+  estándares thru-reflect-line en la placa, para resolver los ceros;
 - evaluar un laminado de menor pérdida;
 - suprimir la banda espuria que comienza en 4.4 GHz con un filtro pasabajos.
 

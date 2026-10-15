@@ -8,7 +8,8 @@ logs) were removed from the tree; they live in git tag `docs-archive-2026-09-29`
 
 **Status (2026-10-15):** board fabricated by JLCPCB (RO4350B, ENIG, ~USD 120)
 and measured on 2026-10-14 (`measurements/2026-10-14_vna/`). Measured: fc
-2.894 GHz, BW 171 MHz, IL 2.0–2.4 dB, one S11 zero (−17 to −20 dB best, −5 dB worst
+2.894 GHz, BW 171 MHz, IL 2.0–2.4 dB, one broad S11 minimum (−17 to −20 dB, at the −18 dB floor of the generic SMA
+calibration standards; −5 dB worst
 in band); spec (−16 dB) not met. `siw measure` reproduces every measured
 number; `siw measure --paper` refreshes the tables/figures in `docs/paper/`
 (both papers carry `<!-- BEGIN siw-table:… -->` markers for that).

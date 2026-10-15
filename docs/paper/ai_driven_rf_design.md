@@ -25,10 +25,11 @@ abstract: |
   list the checks that now catch each class. Third, the board, made by JLCPCB on
   Rogers RO4350B with ENIG finish for about USD 120, was measured with a vector
   network analyzer and recalibrated independently in software. It is centred at
-  2.894 GHz with 171 MHz bandwidth, 2.0 to 2.4 dB insertion loss and a
-  single reflection zero (-17 to -20 dB). The simulation predicted 2.876 GHz, 182 MHz,
-  1.7 dB and three zeros, and the measured loss fits an effective unloaded Q of
-  about 130 to 185. The -16 dB specification is not met.
+  2.894 GHz with 171 MHz bandwidth, 2.0 to 2.4 dB insertion loss and one broad
+  reflection minimum near -18 dB, the floor of the calibration check. The
+  simulation predicted 2.876 GHz, 182 MHz, 1.7 dB and three zeros, and the
+  measured loss fits an effective unloaded Q of about 130 to 185. The -16 dB
+  specification is not met.
 bibliography: references.bib
 csl: ieee-jestpe.csl
 link-citations: true
@@ -566,9 +567,12 @@ fields; the measurement cannot exclude it on the feed lines (Sec. VIII).
 The board (Fig. \ref{fig:setup}) was measured with a Keysight FieldFox N9917A
 handheld vector network analyzer (18 GHz), from 100 MHz to 5 GHz with 10 001
 points, 10 kHz IF bandwidth and −15 dBm source power. The instrument was
-calibrated at the ends of the two test cables with a 3.5 mm mechanical kit
-(85033D/E) in full two-port SOLR mode: a short, an open and a match on each
-port, plus a reciprocal thru of unknown length, with isolation omitted. The
+calibrated at the ends of the two test cables in full two-port SOLR mode: a
+short, an open and a load on each port, plus a reciprocal thru of unknown
+length, with isolation omitted. The standards were a generic SMA short, open
+and load, not a characterised vendor kit; the instrument was set to the
+definitions of the 3.5 mm 85033D/E kit, the nearest it offers, so the true
+offset delays, open capacitance and load return loss are unknown. The
 cables end in SMA plugs that mate directly with the board's jacks, so the
 reference plane is the connector face, as in the simulations. Four states of
 the same board were saved: connectors soldered, or seated against the board
@@ -581,8 +585,8 @@ The raw open, short, match and thru were saved as well, at the same plane.
 \includegraphics[width=\columnwidth]{figures/fig_setup.jpg}
 \caption{Measurement setup. Top: the fabricated board with its connectors
 and test cables (no soldermask, ENIG finish). Bottom left: bench setup with
-the VNA. Bottom right: the instrument's calibration screen (3.5 mm kit,
-full two-port SOLR with unknown thru).}
+the VNA. Bottom right: the instrument's calibration screen (3.5 mm 85033D/E
+definitions selected, full two-port SOLR with unknown thru).}
 \label{fig:setup}
 \end{figure}
 ```
@@ -592,17 +596,27 @@ correction. We solved the eight-term error model in software, with a one-port
 short-open-load calibration on each port and the unknown-thru step for the
 transmission terms [@ferrero1992unknownthru], using scikit-rf
 [@arsenovic2022scikitrf], and applied it to the two uncalibrated boards. The
-open and short follow a nominal 3.5 mm kit model (about 30 ps offset delay and
-49 fF fringing capacitance; typical values, not read from the instrument). The
-result agrees with the instrument-corrected files to a mean $|\Delta\Gamma|$ of
+open and short follow the definitions the instrument was set to: a model of the
+85033D/E (about 30 ps offset delay and 49 fF fringing capacitance; typical
+values, not read from the instrument). The result agrees with the instrument-corrected files to a mean $|\Delta\Gamma|$ of
 0.03 for $S_{11}$ and 0.04 for $S_{22}$, and to 0.17 dB for $S_{21}$, over
 2.6–3.2 GHz (Fig. \ref{fig:calcheck}). Replacing the kit model by ideal
 $+1/-1/0$ standards changes the magnitudes by less than 0.03 dB ($S_{21}$) and
-0.09 dB ($S_{11}$) and only moves the reference plane. A thru measured after
-the instrument calibration reads +0.18 dB, and the software calibration
-applied to the raw thru reads +0.26 dB. A passive thru cannot have gain, so both
-corrections are optimistic in $S_{21}$, and we take its uncertainty as about
-0.3 dB.
+0.09 dB ($S_{11}$) and only moves the reference plane.
+
+Both corrections assume the same standard definitions, so their agreement
+checks the implementation and the saved raw files, not the standards. The
+offsets and the open's capacitance mostly move the reference plane, and the
+test above bounds their effect on the magnitudes. The load is different: a
+general-purpose SMA load with a 25 dB return loss, which we did not measure,
+would leave a directivity error of 0.056, comparable to the dips we want to
+read. The check thru sets an empirical bound. After the instrument calibration
+it returns +0.18 dB in $S_{21}$ and −18.4 dB in $S_{11}$ at worst over
+2.6–3.2 GHz, and the software calibration applied to the raw thru gives
++0.26 dB and −17.6 dB. A passive thru cannot have gain, so both corrections are
+optimistic in $S_{21}$, and we take its uncertainty as about 0.3 dB. Reflections
+below about −18 dB are not resolved; the worst in-band $S_{11}$ is good to about
+±2 dB.
 
 ```{=latex}
 \begin{figure*}[t]
@@ -686,12 +700,14 @@ therefore roughly 130–185, against 229 in the dielectric-only simulation and
 about 180 expected with smooth copper. We do not separate copper roughness, via-fence leakage,
 solder joints, the connector and the ENIG finish on the feed lines.
 
-*Return loss.* The three simulated reflection zeros appear as one broad zero,
-$-17$ dB at best with the instrument calibration ($-19$ to $-20$ dB with the software
-one), with a shoulder; the worst in-band $S_{11}$ is −5 dB. The
-loss explains most of this, since it merges the zeros, and the 24 MHz offset
-from the specified band adds to it. The ports differ slightly: the best $S_{22}$
-is −21 dB against −17 dB for $S_{11}$ on the soldered board.
+*Return loss.* The trace shows one broad minimum with a shoulder, $-17$ dB at
+best with the instrument calibration ($-19$ to $-20$ dB with the software one),
+and the worst in-band $S_{11}$ is −5 dB. The three simulated zeros are at
+−23 to −35 dB, below the −18 dB floor of the calibration check, so the
+measurement cannot confirm them one by one; the matrix model says that this
+much loss merges them into one, which is what the trace looks like. The 24 MHz
+offset from the specified band adds to the in-band figure. The ports differ slightly (best $S_{22}$ −21 dB
+against −17 dB for $S_{11}$ on the soldered board), within the calibration floor.
 
 *Soldering.* Soldering the connectors changes the calibrated result by
 3 MHz in centre frequency, 0.03 dB in insertion loss and 0.5 dB in worst
@@ -775,6 +791,10 @@ argues for keeping those checks in the loop.
 
 * One board and one measurement session: no spread across boards, and the
   S21 scale is uncertain by about 0.3 dB (Sec. VIII).
+* The calibration standards were a generic SMA short, open and load, not a
+  characterised kit. The calibrated thru returns −18 dB, so reflection zeros
+  deeper than that are not resolved, and the worst in-band return loss is
+  good to about ±2 dB.
 * The specification is not met: the board measures −5 dB worst in-band return
   loss against −16 dB (simulated: −11.1 dB), and 171 MHz bandwidth against
   143.5 MHz.
@@ -816,6 +836,8 @@ argues for keeping those checks in the loop.
 * A lower-loss or thicker laminate.
 * Space-mapping or surrogate models [@bandler2004space] trained on the
   calibration data.
+* Repeating the measurement with a characterised SMA calibration kit, or with
+  on-board thru-reflect-line standards, to resolve the zeros.
 * Making the physics sanity checks a mandatory step of the agent loop rather
   than a habit.
 
@@ -830,8 +852,10 @@ of silent defects with physics checks. The measurement confirms the
 simulations where the physics is simple: the spurious bands fall at the
 predicted frequencies and the centre frequency is within 1 % of the specification. It also shows
 what the simulations did not capture: 0.3 to 0.7 dB more loss than Palace,
-which merges the three reflection zeros into one, so the worst in-band return
-loss is 5 dB, not the simulated 11 dB and not the specified 16 dB. The
+which in the matrix model merges the three reflection zeros into one, so the
+worst in-band return loss is 5 dB, not the simulated 11 dB and not the specified
+16 dB. The generic calibration standards limit the reading of the zeros
+themselves (floor about −18 dB), not the 5 dB. The
 independent software recalibration agrees with the instrument's on average
 within 0.2 dB in $S_{21}$ (up to 1 dB on the steep band edges), so this conclusion does not rest on one calibration. The code,
 data and scripts that produced every number are in the repository, and
