@@ -10,26 +10,27 @@ author: "\\vspace{-2em}"
 date: 2026
 abstract: |
   We report the design, fabrication and measurement of a third-order, 2.87 GHz
-  substrate integrated waveguide bandpass filter in which a large-language-model
+  substrate integrated waveguide bandpass filter. A large-language-model
   coding agent wrote and operated the entire toolchain: Chebyshev synthesis,
   parametric geometry, finite-element simulation with the open-source solver
   Palace, Bayesian optimization, and the export of fabrication files. One
   engineer set the specification, took the design decisions and ran the
   commercial-solver cross-checks. Three results stand out. First, a
   Gaussian-process optimizer applied to the assembled filter never reached a
-  usable match, because the passband width it scores is discontinuous in the
-  external coupling; measuring smooth observables on small structures and
+  usable match. This is because the passband width it scores is discontinuous
+  in the external coupling. Measuring smooth observables on small structures and
   inverting the coupling relations converged in about three solves per curve.
   Second, most of the 47 fixes in the project history corrected defects that
-  produced plausible numbers without raising any error; we classify them and
-  list the checks that now catch each class. Third, the board, made by JLCPCB on
-  Rogers RO4350B with ENIG finish for about USD 120, was measured with a vector
-  network analyzer and recalibrated independently in software. It is centred at
-  2.894 GHz with 171 MHz bandwidth, 2.0 to 2.4 dB insertion loss and one broad
-  reflection minimum near -18 dB, the floor of the calibration check. The
-  simulation predicted 2.876 GHz, 182 MHz, 1.7 dB and three zeros, and the
-  measured loss fits an effective unloaded Q of about 130 to 185. The -16 dB
-  specification is not met.
+  produced plausible numbers without raising any error. We classify them and
+  list the checks that now catch each class. Third, JLCPCB made the board on
+  Rogers RO4350B with ENIG finish for about USD 120. We measured it with a
+  vector network analyzer and recalibrated the data independently in software.
+  It is centred at 2.894 GHz with 171 MHz bandwidth, 2.0 to 2.4 dB insertion loss and
+  one broad reflection minimum near -18 dB. This is the floor of the calibration
+  check. The simulation predicted 2.876 GHz, 182 MHz, 1.7 dB and three zeros.
+  The measured loss matches an effective unloaded Q of 150 to 185, as expected
+  once the copper loss is added to the simulation. The -16 dB specification is
+  not met.
 bibliography: references.bib
 csl: ieee-jestpe.csl
 link-citations: true
@@ -45,7 +46,7 @@ header-includes:
         \parbox{\textwidth}{\centering
           Federico Borello\\[2pt]
           {\small Universidad Tecnológica Nacional --- Facultad Regional Buenos Aires,
-          Argentina\\ fborello.contact@gmail.com}%
+          Argentina\\ fborello@frba.utn.edu.ar}%
         }%
       }%
     }
@@ -69,8 +70,8 @@ some of the expensive electromagnetic (EM) solves with a cheaper learned or
 coarse model. Learned models are also used to extract coupling matrices from
 simulated responses, recently with physics-informed networks that need no
 labelled training set [@sallam2026pidnn]. In each of these approaches the engineer still writes the
-geometry scripts, meshing, port setup, objective and export code, and
-interprets what the solver returns.
+geometry scripts, the meshing, the port setup, the objective and the export
+code. The engineer also interprets what the solver returns.
 
 Recent large-language-model (LLM) agents work differently: they write and run
 code in a loop, observe the results and revise [@yao2023react;
@@ -79,39 +80,40 @@ code in a loop, observe the results and revise [@yao2023react;
 operated CST, ADS and KiCad through their scripting interfaces to design a GNSS
 front end [@heinrichs2026prompt]. Empirical studies of bugs in agentic
 frameworks classify failures of the agent software itself
-[@zhang2026agenticbugs]. What these reports leave largely unmeasured is how the
-*engineering* fails when an agent drives it: defects in the physical model
-that the agent writes, which matter more than the successes when one decides
-how much to trust the numbers.
+[@zhang2026agenticbugs]. These reports leave one thing largely unmeasured:
+how the *engineering* fails when an agent drives it. These failures are
+defects in the physical model that the agent writes. They matter more than the
+successes when one decides how much to trust the numbers.
 
 This paper reports one complete design effort of that kind. The object is a
-classic structure, a three-cavity Chebyshev SIW filter
-[@deslandes2003single; @bozzi2011review; @chen2014siwfilter]. It was chosen
-because its physics is textbook, so every agent-produced number can be
+classic structure, a three-cavity Chebyshev substrate integrated waveguide
+(SIW) filter [@deslandes2003single; @bozzi2011review; @chen2014siwfilter]. We
+chose it because its physics is textbook, so every agent-produced number can be
 checked against theory. An LLM coding agent (Claude Code [@claudecode])
 wrote and ran all of the design software. The author acted as specifier,
 reviewer and decision-maker. The project history is preserved in git, and most
-claims below map to a commit or a stored result. Some process statistics,
-such as the screen-out rates of the Bayesian search, survive only in
-contemporaneous engineering notes rather than raw logs; we flag these where
+claims below map to a commit or a stored result. Some process statistics
+survive only in engineering notes written at the time, not in raw logs. One
+example is the screen-out rate of the Bayesian search. We flag these where
 they appear.
 
 The contributions are:
 
-1. An account of the tool path: an FDTD solver (openEMS) that could not
-   support match tuning, a finite-element solver (Palace) that could, and a
-   GPU workstation run through remote agent sessions whose memory limits
-   eventually pushed all production runs onto CPUs (Sec. III).
+1. An account of the tool path. A finite-difference time-domain (FDTD) solver
+   (openEMS) could not support match tuning, but a finite-element solver
+   (Palace) could. A GPU workstation, run through remote agent sessions, had
+   memory limits that eventually pushed all production runs onto CPUs
+   (Sec. III).
 2. A measured explanation of why black-box Gaussian-process (GP) search over
    the assembled filter fails, and of why calibrate-and-invert succeeds
    (Sec. IV).
 3. A taxonomy of the silent modelling defects the process produced and
    caught, with the guard that now blocks each class (Sec. V).
-4. The fabricated design, with its deviation from specification diagnosed by
-   coupling-matrix extraction. It is accompanied by a documented dual-mode
-   negative result, an insertion-loss budget, a launch study, the
-   manufacturing path and the VNA measurement of the fabricated board
-   (Secs. VI to VIII).
+4. The fabricated design, and a diagnosis of its deviation from the
+   specification by coupling-matrix extraction. This item also covers a
+   documented dual-mode negative result, an insertion-loss budget, a launch
+   study and the manufacturing path. It ends with the measurement of the
+   fabricated board with a vector network analyzer (VNA) (Secs. VI to VIII).
 
 # Filter specification and synthesis
 
@@ -119,7 +121,7 @@ The specification is f0 = 2.87 GHz, 5 % fractional bandwidth (FBW, 143.5 MHz),
 0.1 dB Chebyshev ripple and |S11| $\le$ −16 dB in band. The laminate is Rogers
 RO4350B, 0.76 mm thick ($\varepsilon_r$ = 3.66, $\tan\delta$ = 0.0037 [@rogers4350b]), with
 0.5 oz copper. The fence vias are 1.5 mm in diameter at a 3.0 mm pitch. Their
-p/d = 2 ratio sits at the edge of the leakage rules of
+p/d = 2 ratio is at the edge of the leakage rules of
 [@xu2005guided; @deslandes2006accurate]. Smaller vias (0.8 mm at 1.5 mm pitch)
 were compared three times under three different objectives and never matched
 this choice. The connector is a Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA
@@ -129,7 +131,7 @@ this choice. The connector is a Taoglas EMPCB.SMAFSTJ.B.HT edge-mount SMA
 
 The low-pass Chebyshev prototype gives $g_1 = g_3 = 1.0316$ and $g_2 = 1.1474$
 for $N = 3$ and 0.1 dB ripple [@hong2001microstrip]. The bandpass mapping turns
-them into the two numbers the geometry must reproduce, the coupling between
+them into two numbers that the geometry must reproduce: the coupling between
 adjacent cavities and the external quality factor of the end cavities:
 
 ```{=latex}
@@ -141,9 +143,9 @@ Q_e = \frac{g_0\,g_1}{\mathrm{FBW}} = 20.63 .
 \end{equation}
 ```
 
-The waveguide width follows from choosing the TE10 cutoff near $0.7 f_0$, which
-sets the equivalent width, and from the Cassivi–Wu correction for the finite
-via fence [@cassivi2002dispersion]:
+We choose the TE10 cutoff near $0.7 f_0$, which sets the equivalent width. The
+Cassivi–Wu correction then gives the real width for the finite via fence
+[@cassivi2002dispersion]:
 
 ```{=latex}
 \begin{equation}
@@ -168,8 +170,8 @@ Eq. (\ref{eq:te101}) assumes ideal walls, so the real length is shorter once the
 tapers and apertures load the cavity (Sec. VI). The feed is a 50 Ω microstrip
 line (Hammerstad [@hammerstad1980accurate]) flared into the SIW by a Deslandes
 taper [@deslandes2010design]. At the board edge it becomes a grounded coplanar
-waveguide (CPWG) launch sized to the SMA footprint: a 1.2 mm trace with
-0.2512 mm gaps, which solves to 50.0 Ω by conformal mapping
+waveguide (CPWG) launch sized to the SMA footprint. The launch has a 1.2 mm
+trace with 0.2512 mm gaps. Conformal mapping gives 50.0 Ω for these dimensions
 [@wadell1991transmission; @simons2001coplanar].
 
 The two couplings are measured, not computed, because closed-form iris formulas
@@ -188,8 +190,8 @@ Q_e = \frac{2}{1/Q_L - 1/Q_u} .
 
 The coupling-matrix formulation [@cameron2003advanced; @cameron2018microwave]
 provides the ideal target response and, later, the diagnostic fit. The
-dissipation of a narrowband filter then follows from the unloaded quality
-factor $Q_u$ [@hong2001microstrip]:
+unloaded quality factor $Q_u$ sets the dissipation of a narrowband filter
+[@hong2001microstrip]:
 
 ```{=latex}
 \begin{equation}
@@ -201,14 +203,14 @@ factor $Q_u$ [@hong2001microstrip]:
 # Toolchain and working method
 
 Fig. \ref{fig:flow} shows the flow and the division of labour.
-Fig. \ref{fig:timeline} shows how the effort was distributed in time.
+Fig. \ref{fig:timeline} shows how the effort was spread over time.
 
 ```{=latex}
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.95\textwidth]{figures/fig_flow.png}
 \caption{Design flow. The agent writes and operates every stage through one
-command-line tool (\texttt{siw}); the engineer supplies the specification and
+command-line tool (\texttt{siw}). The engineer supplies the specification and
 the decisions, and runs the commercial-solver cross-checks.}
 \label{fig:flow}
 \end{figure*}
@@ -227,33 +229,33 @@ cluster where new physics or a new tool entered the loop.}
 
 ## Phase 1: analytic design, openEMS and CST
 
-The first iteration (June 2026) used analytic dimensions, the free FDTD solver
-openEMS [@liebig2013openems] for calibration, and CST Studio Suite 2021
-[@cst2021] as the reference. Python generated a parametric CST VBA macro that
-builds native solids wrapped in the solver's history list. The analytic cavity
+The first iteration (June 2026) used analytic dimensions. It used the free FDTD
+solver openEMS [@liebig2013openems] for calibration and CST Studio Suite 2021
+[@cst2021] as the reference. Python generated a parametric CST VBA macro. The
+macro builds native solids wrapped in the solver's history list. The analytic cavity
 length of 38.23 mm put the CST passband at 2.818 GHz with a 293 MHz band,
 3.65 dB insertion loss and only 1.02 dB return loss. The external coupling was
 uncalibrated and heavily over-coupled.
 
 openEMS was abandoned for three reasons. First, FDTD resolves the 1.5 mm
-cylindrical vias on a staircase grid, which needs at least three cells per
+cylindrical vias on a staircase grid. This needs at least three cells per
 diameter over the whole board. The resonant, high-Q structure also rings down
 slowly, so each full-filter run took minutes to tens of minutes. Second, the
 ports did not give a trustworthy S11. The lumped port radiated like a point
 source instead of launching the microstrip mode. The microstrip port launched
 the mode correctly, but its S11 de-embedding was unstable and even returned
 |S11| > 1. The passband and S21 were reproduced, but the match could not be
-tuned, and matching was the whole remaining problem. Third, there was no eigenmode solver for the
-coupling calibration of Sec. IV, which had to be emulated by reading peak
-splits off driven sweeps.
+tuned. Matching was the whole remaining problem. Third, openEMS had no
+eigenmode solver for the coupling calibration of Sec. IV. The calibration had
+to be emulated by reading peak splits off driven sweeps.
 
-Palace [@palace2023], an MPI-parallel finite-element solver built on MFEM
-[@anderson2021mfem] with gmsh meshes [@geuzaine2009gmsh], removed all three
-obstacles. Its tetrahedral mesh conforms to the vias. Its wave ports solve the
-2D port mode, as CST's do, and are passive by construction. It has an
-eigenmode solver, and it is driven entirely by JSON files, which makes it easy
-for an agent to operate. A first Palace model reproduced the CST result for
-the same geometry and then replaced openEMS in the loop.
+Palace [@palace2023] removed all three obstacles. It is an MPI-parallel
+finite-element solver built on MFEM [@anderson2021mfem] with gmsh meshes
+[@geuzaine2009gmsh]. Its tetrahedral mesh conforms to the vias. Its wave ports
+solve the 2D port mode, as CST's do, and are passive by construction. It has an
+eigenmode solver. JSON files drive it entirely, which makes it easy for an
+agent to operate. A first Palace model reproduced the CST result for the same
+geometry and then replaced openEMS in the loop.
 
 ## Phase 2 onward: an agent-operated toolchain
 
@@ -261,19 +263,19 @@ From August the agent consolidated three copied optimizer scripts into one
 package with a `Topology` interface and a single command-line tool (`siw`).
 The tool covers synthesis, layout, eigenmode and driven solves, Bayesian
 design, 1-D scans, calibration, comparison figures and CAD export. Every
-production number in this paper is reproducible through that tool, and curated
+production number in this paper can be reproduced with that tool. Curated
 results are stored in a `golden/` directory together with their S-parameters
 and the command that reproduces them. A project brief file (`CLAUDE.md`) acted
 as the agent's persistent memory across sessions. Handoff documents carried
 the state from one machine to another.
 
-**From the textbook steps to the tool.** Table \ref{tab:pipeline} lists what a
-coupled-resonator SIW filter normally takes by hand and which command replaces
-each step. The equations are the classical ones [@hong2001microstrip;
-@cassivi2002dispersion; @deslandes2006accurate]. What the tool changes is
-that every step that used to be a hand-fitted curve is a measurement with a
-solver, and the chain from specification to gerbers is one sequence of
-commands.
+**From the textbook steps to the tool.** Table \ref{tab:pipeline} lists the
+steps that a coupled-resonator SIW filter normally takes by hand and the
+command that replaces each step. The equations are the classical ones
+[@hong2001microstrip; @cassivi2002dispersion; @deslandes2006accurate]. The tool
+changes two things. Every step that used to be a hand-fitted curve is now a
+measurement with a solver. The chain from specification to gerbers is now one
+sequence of commands.
 
 ```{=latex}
 \begin{table*}[t]
@@ -303,46 +305,120 @@ commands.
 **The optimizer.** The search code is our own, written around Palace, not a
 package taken from a design tool. A candidate is a set of geometry parameters:
 the cavity lengths (mirrored about the centre), the iris widths, the external
-aperture and the taper length. The microstrip width stays at its 50 Ω value. To
-evaluate a candidate the code meshes the whole board with gmsh, connectors and
-launch included, writes the Palace configuration, runs a driven sweep on a
-coarse mesh and reads $|S_{11}|$ and $|S_{21}|$. A fast physics screen at $f_0$
-runs first and rejects candidates that do not resonate; the rejected ones get a
-graded penalty, so the surrogate still sees a gradient. The objective sums the
-RMSE of $|S_{11}|$ against the ideal Chebyshev response (both clipped at a
-floor), the shape of $|S_{21}|$, the insertion loss, the centre-frequency error
-outside a deadband, a two-sided bandwidth error and the board length. Three
-one-sided hinges add the real specification: worst in-band $S_{11}\le-16$ dB,
-loss within an allowance over the dielectric floor, and symmetry. The
-objective went through ten revisions (v9–v18); the early ones scored individual
-points and the later ones fitted the whole response. A Gaussian-process
-surrogate (scikit-optimize [@skopt; @rasmussen2006gaussian], `gp_hedge`
-acquisition) proposes each next candidate after a random seeding phase whose
-size scales with the budget. A patience rule stops a plateau early, and the
-winner is solved again on a fine mesh and checked after rounding every
-dimension to the 0.1 mm fabrication resolution. In local mode (`--seed`,
-`--span`) the search box is a few millimetres around a calibrated design. A
-coarse evaluation takes 6–20 min, so sample efficiency matters more than
-throughput, and a lock serialises the Palace solves.
+aperture and the taper length. The microstrip width stays at its 50 Ω value.
+To evaluate a candidate, the code meshes the whole board with gmsh, including
+the connectors and the launch. It then writes the Palace configuration and runs
+a driven sweep on a coarse mesh. Finally it reads $|S_{11}|$ and $|S_{21}|$. A
+fast physics screen at $f_0$ runs first. It rejects candidates that do not
+resonate. The rejected ones get a graded penalty, so the surrogate still sees a
+gradient. The objective sums these terms. The first is the root-mean-square
+error (RMSE) of $|S_{11}|$ against the ideal Chebyshev response (both clipped at
+a floor). The others are the shape of $|S_{21}|$, the insertion loss, the
+centre-frequency error outside a deadband, a two-sided bandwidth error and the
+board length. Three one-sided hinges add the real specification: worst in-band
+$S_{11}\le-16$ dB, loss within an allowance over the dielectric floor, and
+symmetry. The objective went
+through ten revisions (v9–v18). The early ones scored individual points, and
+the later ones fitted the whole response. A Gaussian-process surrogate
+(scikit-optimize [@skopt; @rasmussen2006gaussian], `gp_hedge` acquisition)
+proposes each next candidate. A random seeding phase comes first, and its size
+scales with the budget. A patience rule stops the search early on a plateau.
+The winner is solved again on a fine mesh, and the result is checked after
+every dimension is rounded to the 0.1 mm fabrication resolution. In local mode
+(`--seed`, `--span`) the search box is a few millimetres around a calibrated
+design. A coarse evaluation takes 6–20 min, so sample efficiency matters more
+than throughput. A lock serialises the Palace solves.
 
-**Compute.** To speed up the search we moved to a workstation with an NVIDIA
-GTX 1660 SUPER (6 GB) and ran Palace with its GPU backend there. The author
+**Compute.** To speed up the search, we moved to a workstation with an NVIDIA
+GTX 1660 SUPER (6 GB) and ran Palace there with its GPU backend. The author
 supervised the long agent sessions remotely through Claude Code's Remote
-Control. On the dual-mode model the GPU was 1.24× faster than 4 CPU ranks, with
-S-parameters identical to 10⁻⁹ dB, and disabling MFEM's pooled allocator
-(`MFEM_MEMORY=cuda`) removed the first out-of-memory failures, which had killed
-every point of an eigenmode sweep. But the card does not have the memory for the
-meshes that matter. It finished a driven solve with 174.6 k tetrahedra and ran
-out at 178.4 k, in the error estimator, and only one rank per card works. The
-166 mm cascade exceeds that at any adequate mesh density, so no GPU mesh preset
-was ever validated for it; the code now caps GPU use at 176 k tetrahedra and
-falls back to the CPU. The GPU was not tried on the fine-mesh verification,
-which needs 315 k unknowns and about 5.5 GB on the CPU. All production runs
-therefore ran on CPUs with 4 MPI ranks. Four attempts on a 3.7 GB host failed,
-three of them explicitly out of memory; the final runs used a 16 GB host at
-about 8 s per frequency point. Memory, not arithmetic, was the binding
-constraint, and a card with more memory, or the half-model and adaptive sweeps
-of Sec. X, would bring the cascade onto the GPU.
+Control. On the dual-mode model the GPU was 1.24× faster than 4 CPU ranks. The
+S-parameters were identical to 10⁻⁹ dB. Disabling MFEM's pooled allocator
+(`MFEM_MEMORY=cuda`) removed the first out-of-memory failures. Those failures
+had killed every point of an eigenmode sweep. But the card does not have enough
+memory for the meshes that matter. It finished a driven solve with 174.6 k
+tetrahedra and ran out at 178.4 k, in the error estimator. Only one rank per
+card works. The 166 mm cascade exceeds that limit at any adequate mesh density,
+so no GPU mesh preset was ever validated for it. The code now caps GPU use at
+176 k tetrahedra and falls back to the CPU. We did not try the GPU on the
+fine-mesh verification. That verification needs 315 k unknowns and about 5.5 GB
+on the CPU. All production runs therefore ran on CPUs with 4 MPI ranks. Four
+attempts on a 3.7 GB host failed, three of them explicitly out of memory. The
+final runs used a 16 GB host at about 8 s per frequency point. Memory, not
+arithmetic, was the binding constraint. A card with more memory would bring the
+cascade onto the GPU. So would the half-model and adaptive sweeps of Sec. X.
+
+## Who did what: models and effort
+
+The commit trailers and the agent's session logs record which model was
+working and for how long. Table \ref{tab:models} and Fig. \ref{fig:effort}
+summarise them. They come from `docs/paper/make_process_stats.py`, which keeps
+only counts, with no prompts and no file contents.
+
+```{=latex}
+\begin{table*}[t]
+\centering
+\footnotesize
+\caption{Models used, from the session logs and the commit trailers. Turns are
+assistant messages in the main thread, plus those of sub-agents. Output tokens
+cover both. Fix commits are those whose message starts with \texttt{fix}.
+Commit counts are for the history up to commit \texttt{4d570ac}.}
+\label{tab:models}
+\begin{tabular}{lccccc}
+\hline
+\textbf{Model} & \textbf{Main-thread dates (2026)} & \textbf{Turns (main + sub-agent)} & \textbf{Output tokens (M)} & \textbf{Commits with trailer} & \textbf{of which fix} \\
+\hline
+Sonnet 5   & 22 Aug--10 Sep & 9\,287 + 1\,362 & 8.41 & 64 & 16 \\
+Opus 5     & 22 Aug--4 Sep  & 3\,673 + 65     & 3.57 & 43 & 14 \\
+Fable 5    & 28 Aug         & 48              & 0.06 & 1  & 0 \\
+Opus 5.5   & 23--29 Sep     & 922             & 0.73 & 12 & 0 \\
+Sonnet 5.5 & 15 Oct         & 424 + 200       & 0.63 & 5  & 0 \\
+\hline
+\textbf{Total} & & 14\,354 + 1\,627 & 13.39 & 125 & 30 \\
+\hline
+\end{tabular}
+\end{table*}
+```
+
+```{=latex}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_effort.png}
+\caption{Effort over time. Top: hours per day in which the agent was active,
+counting only gaps shorter than 20 min between logged events. Bottom: commits
+per day, coloured by the model named in the commit trailer. Grey commits have
+no trailer.}
+\label{fig:effort}
+\end{figure*}
+```
+
+What the numbers show:
+
+* *Two models worked side by side.* Sonnet 5 and Opus 5 were both active from
+  22 August to early September, with about the same share of commits (64 and
+  43) and fixes (16 and 14). Sonnet 5 produced 70 % of the output tokens of
+  that period. The logs record the model of every turn but not why it was
+  chosen. The later work used Opus 5.5 (23--29 September, the fabrication
+  files and the final checks) and Sonnet 5.5 (15 October, the measurement and
+  this text). One 48-turn run on Fable 5 on 28 August produced one commit.
+* *Sub-agents did a small part.* There were 27 sub-agent runs, 26 on Sonnet
+  models and one on Opus 5. They account for 4 % of the output tokens.
+* *Effort was concentrated.* The agent was active for 135 hours on 21 days.
+  The busiest days, 24, 28 and 31 August, each had 14--15 hours. The engineer
+  sent about 500 messages, which is 24 per active day.
+* *Most of the work was running things.* The logs hold 4\,393 shell commands
+  (3\,816 in the main thread and 577 in sub-agents), 738 file edits, 758 file
+  reads and 74 web searches. The agent also called a timer 874 times and a
+  monitor 214 times. These calls waited for solver runs that lasted from
+  minutes to hours, without holding the conversation.
+* *Fixes were a fifth of the history.* 47 of 220 commits are fixes (21 %).
+  Of the 125 commits with a trailer, 30 are fixes. The trailer is a lower
+  bound for agent work. Of the 198 commits between 22 August and 10 September,
+  90 have no trailer. The logs show the agent working on every one of those
+  days.
+* *Code was rewritten.* The history adds 16.1 k lines of Python and removes 5.9 k,
+  including the clean-up of 15 October. A typical commit touches two files. The
+  package now has 12.4 k lines.
 
 # Why global Bayesian search failed
 
@@ -354,47 +430,47 @@ floor of 0.64 dB.
 
 Run globally over the assembled cascade, the same machinery never produced a
 worst in-band S11 better than −5 dB in more than 60 driven evaluations. The
-cause is structural. The objective scores the passband width, and that width
-is discontinuous in the external aperture $w_{\text{ext}}$. Below a coupling threshold
-only the centre pole clears the −3 dB line, so the band measures one
-resonance. Above the threshold all N poles merge and the width jumps. On the
+cause is structural. The objective scores the passband width. That width is
+discontinuous in the external aperture $w_{\text{ext}}$. Below a coupling
+threshold, only the centre pole clears the −3 dB line, so the band measures one
+resonance. Above the threshold, all N poles merge and the width jumps. On the
 N = 3 cascade the widths recorded during the search were 16, 22, 36, 65 and
-then 215 MHz, with the 143.5 MHz target inside the jump. We re-measured this
+then 215 MHz. The 143.5 MHz target lies inside the jump. We re-measured this
 for the paper on the fabricated geometry (Fig. \ref{fig:calib}c, data in the
-repository). The width rises 96, 106, 123 MHz for $w_{\text{ext}}$ = 10–12 mm,
-jumps to 195 MHz at 13 mm, and then *falls* again as the end cavities are
-over-coupled and the reflection zeros drop from three to one. The target
+repository). The width rises 96, 106, 123 MHz for $w_{\text{ext}}$ = 10–12 mm
+and jumps to 195 MHz at 13 mm. It then *falls* again, because the end cavities
+become over-coupled and the reflection zeros drop from three to one. The target
 width is crossed twice. The second crossing, at 16 mm, has one reflection
-zero and −4 dB of return loss; a bandwidth-driven search, or the scan's own
-inversion (15.2 mm), lands there. A GP assumes a smooth objective, so it
+zero and −4 dB of return loss. A bandwidth-driven search lands there, and so
+does the scan's own inversion (15.2 mm). A GP assumes a smooth objective, so it
 inherits both the jump and the false solution. The search-health data showed
-the same thing:
-57–83 % of cascade candidates were screened out, leaving 2–9 informative
-points per run, against 34–37 % and about 19 informative points on the
-dual-mode filter, where the search converged.
+the same thing. On the cascade, 57–83 % of candidates were screened out, which
+left 2–9 informative points per run. On the dual-mode filter, where the search
+converged, 34–37 % were screened out and there were about 19 informative
+points.
 
-The replacement measures each coupling on the smallest structure that exhibits
-it (Fig. \ref{fig:calib}):
+The replacement measures each coupling on the smallest structure that shows it
+(Fig. \ref{fig:calib}):
 
 * **Internal coupling.** A closed two-cavity eigenmode solve splits the
   cavity mode into $f_1$ and $f_2$, and $k$ follows from Eq. (\ref{eq:extract}).
   It is smooth in $w_{\text{iris}}$.
 * **External Q.** One cavity driven symmetrically through two apertures gives
   the loaded Q, and $Q_e$ follows from Eq. (\ref{eq:extract}). Here
-  $Q_u = 1/\tan\delta = 270.3$, independently matched by the eigenmode Q. It is
-  smooth and monotonic in $w_{\text{ext}}$.
+  $Q_u = 1/\tan\delta = 270.3$. The eigenmode Q independently matches this
+  value. It is smooth and monotonic in $w_{\text{ext}}$.
 
-Inverting the fitted curves at the synthesis targets, assembling the filter
-and making a final driven fc trim converged in about three solves per curve.
-The re-run calibration for this paper inverts to $w_{\text{iris}}$ = 13.85 mm
-and $w_{\text{ext}}$ = 13.53 mm, against 14.42 and 13.96 mm on the fabricated
-board, whose end cavities were subsequently trimmed.
+We inverted the fitted curves at the synthesis targets, assembled the filter
+and made a final driven trim of the centre frequency (fc). This converged in
+about three solves per curve. The re-run calibration for this paper inverts to
+$w_{\text{iris}}$ = 13.85 mm and $w_{\text{ext}}$ = 13.53 mm. The fabricated
+board has 14.42 and 13.96 mm, and its end cavities were trimmed afterwards.
 The resulting internal coupling was within 2 % of target. At that checkpoint
-the N = 4 centre frequency also landed at 2.870 GHz, although the N = 4 design
-was later abandoned, its best return loss being −6.1 dB (Sec. VI). The GP was kept only as a local polish
-seeded with the result (`--seed`). The physics that worked is textbook
-[@hong2001microstrip; @cameron2018microwave]. What the agent contributed was
-running the calibrations quickly, and diagnosing why the black-box route had
+the N = 4 centre frequency also landed at 2.870 GHz. The N = 4 design was later
+abandoned. Its best return loss was −6.1 dB (Sec. VI). The GP was kept only as
+a local polish seeded with the result (`--seed`). The physics that worked is
+textbook [@hong2001microstrip; @cameron2018microwave]. The agent's contribution
+was to run the calibrations quickly and to diagnose why the black-box route had
 failed.
 
 ```{=latex}
@@ -409,12 +485,12 @@ and 13\,mm and then falls. Labels: number of reflection zeros. Coarse mesh.}
 \end{figure*}
 ```
 
-Two further search failures were caused by the parameterization itself rather
-than by the search. The via fences were first generated by filtering a fixed
-grid, so the iris width was *quantized*. The whole cascade search box spanned
-about two distinct geometries, and the GP was tuning a knob that did nothing
-(Fig. \ref{fig:quant}). In addition, N $\ge$ 4 had a single shared iris width and
-could not express the required k = [0.0415, 0.0329, 0.0415].
+Two further search failures came from the parameterization itself, not from
+the search. The via fences were first generated by filtering a fixed grid, so
+the iris width was *quantized*. The whole cascade search box spanned about two
+distinct geometries. The GP was tuning a knob that did nothing
+(Fig. \ref{fig:quant}). In addition, N $\ge$ 4 had a single shared iris width
+and could not express the required k = [0.0415, 0.0329, 0.0415].
 
 ```{=latex}
 \begin{figure*}[t]
@@ -431,11 +507,11 @@ before, a straight line after. Six requested widths fell on only three geometrie
 
 # Silent defects: a taxonomy
 
-As of commit `b06bf63` (29 Sep 2026) the history holds 212 commits, 117 of
-them with an agent co-author trailer, and 47 labelled *fix*. Most corrected defects that
-never raised an error: the solver converged and the plot looked reasonable,
-but the number was wrong. Table \ref{tab:bugs} groups representative cases.
-Three rules paid for themselves repeatedly. First, if a fix does not change
+As of 15 Oct 2026 (up to commit `4d570ac`) the history holds 220 commits, 125 of
+them with an agent co-author trailer, and 47 labelled *fix*. Most of the fixes
+corrected defects that never raised an error. The solver converged and the plot
+looked reasonable, but the number was wrong. Table \ref{tab:bugs} groups
+representative cases. Three rules paid off repeatedly. First, if a fix does not change
 the number, the diagnosis was wrong. Second, after two wrong inferences, stop
 inferring and run a one-factor ladder. Third, check every result against what
 physics allows: insertion loss cannot beat a lossless model, the pole count
@@ -465,16 +541,17 @@ Convergence & Selection metric (S11 $-13.37$\,dB) from a non-converged mesh; ref
 \end{table*}
 ```
 
-Two cases changed the course of the project. In the first, when a real SMA
-coax launch replaced the ideal port, the optimized microstrip width of
-2.26 mm turned out to be a 41 Ω line. The optimizer had exploited a port that
-normalizes to whatever it sits on, and the true 50 Ω width is 1.664 mm. The
-first coax model also used a full-size 0.82 mm pin, which is thicker than the
-0.76 mm board, and returned −0.2 dB S11. That was real physics, not a bug
+Two cases changed the course of the project. In the first, a real SMA coax
+launch replaced the ideal port. The optimized microstrip width of 2.26 mm then
+turned out to be a 41 Ω line. The optimizer had exploited a port that
+normalizes to whatever it sits on. The true 50 Ω width is 1.664 mm. The first
+coax model also used a full-size 0.82 mm pin, which is thicker than the 0.76 mm
+board. It returned −0.2 dB S11. That was real physics, not a bug
 (Fig. \ref{fig:sma}). In the second, an independent audit against CST showed
-that the −13.37 dB return loss used to choose the cascade over the dual-mode
-design was a coarse-mesh artefact. The converged value is about −10.7 dB. The
-decision survived, but the justification had to be rewritten.
+that the −13.37 dB return loss was a coarse-mesh artefact. We had used that
+value to choose the cascade over the dual-mode design. The converged value is
+about −10.7 dB. The decision survived, but the justification had to be
+rewritten.
 
 ```{=latex}
 \begin{figure}[t]
@@ -490,25 +567,25 @@ and a cable-size pin larger than the board shorts the launch.}
 
 **Cavity lengths.** The analytic 38.23 mm cavity placed the band at
 2.82–2.905 GHz (openEMS/CST). An openEMS sweep to 35.93 mm and 33.64 mm moved
-it to 2.982 and 3.077 GHz, a slope of about −37 MHz/mm. Palace, which models
-the loading by the tapers and external apertures that the analytic formula
-ignores, shortened the cavities to about 34.4 mm. Calibrate-and-invert then
-gave unequal cavities, 34.24/35.50/34.24 mm. The fine-mesh coupling fit found
-the end cavities about 17 MHz low, and a −0.3 mm trim (33.94/35.50/33.94 mm)
-was chosen. A −0.6 mm trim gained only 0.07 dB and cost 0.4 dB of band-edge
-loss. The measured sensitivity at the end cavities was about 27 MHz/mm,
-roughly half the 50 MHz/mm rule of thumb.
+it to 2.982 and 3.077 GHz, a slope of about −37 MHz/mm. Palace models the
+loading by the tapers and external apertures, which the analytic formula
+ignores. With Palace the cavities shortened to about 34.4 mm. Calibrate-and-invert
+then gave unequal cavities, 34.24/35.50/34.24 mm. The fine-mesh coupling fit
+found the end cavities about 17 MHz low, so a −0.3 mm trim
+(33.94/35.50/33.94 mm) was chosen. A −0.6 mm trim gained only 0.07 dB and cost
+0.4 dB of band-edge loss. The measured sensitivity at the end cavities was
+about 27 MHz/mm, roughly half the 50 MHz/mm rule of thumb.
 
-**Board size.** The design space was also explored for a smaller board
+**Board size.** We also explored the design space for a smaller board
 (Figs. \ref{fig:layouts} and \ref{fig:designs}). The candidates were a
 single-cavity dual-mode N = 2 filter (119 mm), the N = 3 cascade (166 mm) and
-an N = 4 cascade (211 mm). Three other single-cavity shapes were tried:
+an N = 4 cascade (211 mm). We also tried three other single-cavity shapes:
 corner-cut, circular-cross and rhombic. None came closer to the specification
-than the dual-mode cavity (best S11 −6 to −9 dB). A compact N = 4 made from
-two dual-mode cavities was closed after five mechanisms plus a joint GP search
-all stopped at two of four poles: offset apertures, near-corner coupling,
-top-copper slots, discrete posts and quad-mode cavities. A four-cavity
-single-mode cascade works, but it needs 180–206 mm.
+than the dual-mode cavity (best S11 −6 to −9 dB). We closed the compact N = 4
+made from two dual-mode cavities, after five mechanisms and a joint GP search
+all stopped at two of four poles. The five mechanisms were offset apertures,
+near-corner coupling, top-copper slots, discrete posts and quad-mode cavities.
+A four-cavity single-mode cascade works, but it needs 180–206 mm.
 
 ```{=latex}
 \begin{figure*}[t]
@@ -537,24 +614,24 @@ degenerate TE102/TE201 pair. A floating internal via row splits the pair and
 couples it [@shen2009dualmode; @xu2014hexagonal]. Under the matched CPWG launch
 its best response is fc 2.904 GHz, 316.6 MHz bandwidth, −10.76 dB return loss
 and 1.45 dB insertion loss. Real copper adds 0.32 dB. One-dimensional scans on
-the assembled filter show that, on this topology, bandwidth and match are
-*opposed* on every geometry parameter. At $w_{\text{iris}}$ = 11 mm the band is 145.6 MHz
-(4.94 % FBW), but the return loss is −1.75 dB. The pad-only launch used
-earlier reached −17.7 dB, but that launch was not the one fabricated. N = 2
-has only one internal and one external coupling, which is not enough freedom
+the assembled filter show that bandwidth and match are *opposed* on every
+geometry parameter of this topology. At $w_{\text{iris}}$ = 11 mm the band is
+145.6 MHz (4.94 % FBW), but the return loss is −1.75 dB. The pad-only launch
+used earlier reached −17.7 dB. That launch was not the one fabricated. N = 2
+has only one internal and one external coupling. This is not enough freedom
 to place two poles and also match them. The cascade has an extra degree of
 freedom at 1.4× the length, and it won the head-to-head comparison.
 
 # The fabricated design
 
 The chosen geometry is $l_{\text{cav1}}$ = 33.939, $l_{\text{cav2}}$ = 35.503, $w_{\text{iris}}$ = 14.416,
-$w_{\text{ext}}$ = 13.96, $l_{\text{taper}}$ = 15.738 and $w_{\text{ms}}$ = 1.6636 mm, on a
-165.78 × 45.79 mm board. Fig. \ref{fig:final} shows the fine-mesh result
-(2.5/0.45 mm volume mesh, 0.15 mm coax ports, 9.12 mm air, 61 points):
-fc 2.876 GHz, −3 dB bandwidth 182.3 MHz, worst in-band $|S_{11}|$ −11.15 dB,
-insertion loss 1.70 dB at the peak and 2.58 dB at the band edge. Table
-\ref{tab:comparison} (Sec. VIII) sets it against the specification, CST and the
-measurements.
+$w_{\text{ext}}$ = 13.96, $l_{\text{taper}}$ = 15.738 and $w_{\text{ms}}$ = 1.6636 mm.
+The board is 165.78 × 45.79 mm. Fig. \ref{fig:final} shows the fine-mesh result
+(2.5/0.45 mm volume mesh, 0.15 mm coax ports, 9.12 mm air, 61 points).
+The result is fc 2.876 GHz, −3 dB bandwidth 182.3 MHz and worst in-band
+$|S_{11}|$ −11.15 dB. Insertion loss is 1.70 dB at the peak and 2.58 dB at the
+band edge. Table \ref{tab:comparison} (Sec. VIII) sets it against the
+specification, CST and the measurements.
 
 ```{=latex}
 \begin{figure}[t]
@@ -570,28 +647,46 @@ interior ripple from $-11.2$ to $-14.5$\,dB. The worst point stays at the
 **Why it misses the specification.** A lossy N = 3 coupling-matrix fit to the
 refined sweep of the untrimmed board (Fig. \ref{fig:cmfit}) puts the external
 coupling on target (+0.4 %), which exonerates the launch. It finds the internal
-coupling 4.8 % weak and the end cavities 17 MHz low. The trim halves the
-detuning: the same fit on the fabricated geometry gives the end cavities 11 MHz
-low, the internal coupling 8 % weak and the external coupling 4.5 % weak
-($Q_e$ 22.6 against 20.6). The worst in-band point sits at the upper band edge, where the equiripple region
-ends near 2.935 GHz against a target edge of 2.942 GHz. Adding
-+0.6 mm of $w_{\text{iris}}$ on top of the trim widened the band without
-helping. Adding +0.4 mm of $w_{\text{ext}}$ on top of both was strongly
-harmful, and also pulled the end cavities down. No isolated $w_{\text{ext}}$
-trial was run. A coordinated local move remains open.
+coupling 4.8 % weak and the end cavities 17 MHz low. The trim reduces the
+detuning. The same fit on the fabricated geometry gives the end cavities 11 MHz
+low. It gives the internal coupling 8 % weak and the external coupling 4.5 %
+weak ($Q_e$ 22.6 against 20.6). The worst in-band point sits at the upper band
+edge. There the equiripple region ends near 2.935 GHz, against a target edge of
+2.942 GHz. Adding +0.6 mm of $w_{\text{iris}}$ on top of the trim widened the
+band without helping. Adding +0.4 mm of $w_{\text{ext}}$ on top of both was
+strongly harmful, and also pulled the end cavities down. No isolated
+$w_{\text{ext}}$ trial was run. A coordinated local move remains open.
 
 ```{=latex}
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/fig_coupling_fit.png}
-\caption{Lossy coupling-matrix fit used to diagnose the return-loss gap:
-untrimmed board: external Q on target, $k$ 4.8\,\% weak, end cavities 17\,MHz low.}
+\caption{Lossy coupling-matrix fit used to diagnose the return-loss gap.
+Untrimmed board: external Q on target, $k$ 4.8\,\% weak, end cavities 17\,MHz low.}
 \label{fig:cmfit}
 \end{figure}
 ```
 
-**Why the insertion loss is high.** The loss of a narrowband filter is set by
-the unloaded Q, Eq. (\ref{eq:il}). With the dielectric and the copper in series,
+**Is the insertion loss (IL) what we should expect?** Yes, to within the
+measurement uncertainty. A hand calculation shows this. It needs only a few
+numbers. It also shows how much the real cavity length and the real copper
+change the answer.
+
+*Step 1: the loss formula.* The unloaded Q, $Q_u$, is the quality factor of one
+cavity on its own, without the external circuit. It says how much energy the
+cavity stores compared with what it loses in each cycle, so a higher $Q_u$ means
+a lower insertion loss. It sets the loss of a narrowband filter,
+Eq. (\ref{eq:il}). For $N=3$ the sum of the prototype elements is
+$\sum g_i = 3.21$, and the design bandwidth is FBW = 0.05, so
+
+```{=latex}
+\begin{equation}
+\mathrm{IL}_0 \approx \frac{4.343 \times 3.21}{0.05\, Q_u} = \frac{279}{Q_u}\ \text{dB}.
+\label{eq:il279}
+\end{equation}
+```
+
+*Step 2: the Q of one cavity.* The dielectric and the copper act in series,
 
 ```{=latex}
 \begin{equation}
@@ -601,59 +696,104 @@ the unloaded Q, Eq. (\ref{eq:il}). With the dielectric and the copper in series,
 \end{equation}
 ```
 
-The Palace runs model the walls as perfect conductors, so their $Q_u$ is capped
-by $Q_d$. The coupling-matrix fits returned 229–320, which brackets that cap;
-the 320 value exceeds it and reflects the fit's uncertainty, not lower loss.
-Real copper adds $Q_c \approx 540$ for a TE101 cavity 0.76 mm high with smooth
-copper [@pozar2012microwave], so $Q_u \approx 180$. Table \ref{tab:lossbudget}
-adds the terms up. The 0.5 dB we cannot attribute is the part of the Palace
-result that the matrix model does not have; we assign it to radiation from the
-open microstrip, taper and launch sections and did not separate it.
+The dielectric alone gives $279/270 = 1.03$ dB. For the copper we use the
+conductor $Q$ of a TE$_{101}$ cavity [@pozar2012microwave],
+
+```{=latex}
+\begin{equation}
+Q_c = \frac{(kaL)^3\, b\,\eta}{2\pi^2 R_s}\;
+\frac{1}{2a^3b + 2bL^3 + a^3L + aL^3},
+\label{eq:qc}
+\end{equation}
+```
+
+with $k = 2\pi f\sqrt{\varepsilon_r}/c$ and $\eta = 377/\sqrt{\varepsilon_r}$.
+The effective width is $a = 39.0$ mm (Sec. II) and the substrate height is
+$b = 0.76$ mm. The cavity length is $L$. The surface resistance of copper at
+2.87 GHz is $R_s = 14$ m$\Omega$ (skin depth $\delta = 1.23$ $\mu$m). The
+fabricated end and middle cavities, 33.9 mm and 35.5 mm long, give
+$Q_c$ = 519 and 547, so $Q_c$ is about 530--540 and we use 540. Copper alone
+then costs $279/540 = 0.52$ dB. The two together give $Q_u = 180$ and 1.55 dB.
+
+*Step 3: from the cavities to the board.* Palace models the walls as perfect
+conductors, so its 1.70 dB contains the dielectric but no copper. It is
+0.67 dB above the 1.03 dB of the formula. The simulated board also has about
+60 mm of 50 Ω feed line, the SMA transition, radiation from the open
+microstrip sections and the mismatch between the reflection zeros. The formula
+contains none of them. We did not separate these terms. Only the feed line is
+easy to estimate. On this laminate a 50 Ω line loses 1.5 dB/m in the
+dielectric and 1.5 dB/m in smooth copper. So 60 mm cost 0.09 dB in each.
+
+*Step 4: add the copper to the simulation.* The copper is an extra term, so
+the expected loss is $1.70 + 0.52 + 0.09 = 2.3$ dB (Table \ref{tab:lossbudget}).
+Real foil is rough. The Hammerstad factor $K = 1 + \tfrac{2}{\pi}\arctan\!\big(1.4(\Delta/\delta)^2\big)$
+multiplies the conductor loss. For an rms roughness $\Delta$ of 0.5, 1 and 2
+$\mu$m it is 1.14, 1.47 and 1.83. The total then becomes 2.4, 2.6 and 2.8 dB.
+The measured 2.0--2.4 dB (±0.3 dB) is at or below the smooth-copper value, so
+there is no unexplained loss. The data cannot tell smooth copper from a
+roughness of up to about 1 $\mu$m rms.
 
 ```{=latex}
 \begin{table}[t]
 \centering
-\caption{Insertion-loss budget at 2.87\,GHz (dB).}
+\caption{Insertion-loss budget at 2.87\,GHz (dB), from Eqs. (\ref{eq:il279})--(\ref{eq:qc}).}
 \label{tab:lossbudget}
 \begin{tabular}{p{0.74\columnwidth}c}
 \hline
-Dielectric dissipation ($Q_u = 270$, 6.3\,\% bandwidth) & 0.8 \\
-Mismatch at $-11$\,dB & 0.35 \\
-Launch and radiation (remainder of the Palace result) & $\approx$0.5 \\
+Cavity dielectric ($Q_d = 270$) & 1.03 \\
+Feed lines, SMA launch, radiation, mismatch (rest of the Palace result) & 0.67 \\
 \textbf{Palace, perfect-conductor walls} & \textbf{1.70} \\
-Copper ($Q_c \approx 540$) & $+0.4$ \\
-\textbf{Predicted, before the measurement} & \textbf{2.1--2.3} \\
+Copper in the cavities ($Q_c \approx 540$) & $+0.52$ \\
+Copper in the feed lines (about 60\,mm) & $+0.09$ \\
+\textbf{Expected, smooth copper} & \textbf{2.3} \\
+Same, rms roughness 0.5 / 1 / 2\,$\mu$m & 2.4 / 2.6 / 2.8 \\
 \textbf{Measured (Sec.~VIII)} & \textbf{2.0--2.4} \\
 \hline
 \end{tabular}
 \end{table}
 ```
 
-The prediction was written before the board was measured. The 0.4 dB for copper
-is consistent with the 0.59 dB that an exterior-face copper model added. The
-result is close to the floor for this laminate, thickness and bandwidth, not a
-design error. Each loss mechanism points to an improvement:
+The first version of this budget was written before the board was measured and
+gave 2.1--2.3 dB. It used the simulated 6.3 % bandwidth in the loss formula
+instead of the 5 % of the prototype, which the $g_i$ belong to. It also used a
+copper term of 0.4 dB. With the corrected terms, the dielectric part moves from
+0.8 to 1.0 dB, the copper part from 0.4 to 0.5 dB, and the total from 2.2 to
+2.3 dB. The 0.52 dB for copper agrees with two other estimates. The
+coupling-matrix model adds 0.55 dB when $Q_u$ falls from 270 to 180. An
+exterior-face copper model in Palace adds 0.59 dB. This is a lower bound,
+because the internal trace and ground sheets stay ideal there.
 
-* Qd is fixed by the laminate: $\tan\delta$ = 0.0037 is high for a filter.
-* Qc scales with the substrate height, and 0.76 mm is thin.
-* The loss scales as 1/FBW, so a narrow band costs more.
-* The band edges lose more (2.58 dB) because the group delay peaks there.
+**How the real length and the copper move the answer.**
 
-The 0.59 dB conductor-loss figure comes from a model that applies copper
-conductivity to the exterior faces only; the internal trace and ground sheets
-stay ideal, so it is a lower bound. A 1.52 mm RO4350B
-board only reaches IL $\approx$ 1.3 dB, because Qd still dominates. RT/duroid 5880
-($\tan\delta$ $\approx$ 0.0009) at 1.52 mm would bring it to about 0.5 dB.
+* *Cavity length.* $Q_c$ grows with the size of the cavity: 519 at 33.9 mm,
+  593 at the analytic 38.2 mm of Phase 1. The trimmed cavities therefore lose
+  about 0.07 dB more than the analytic ones would. A length tolerance of
+  $\pm0.1$ mm moves the centre frequency by 2.7 MHz (27 MHz/mm) but $Q_c$ by
+  only 0.3 %, so it does not change the loss.
+* *Board length.* Each 10 mm of 50 Ω feed line costs 0.03 dB in smooth copper.
+  The 165.8 mm board carries about 60 mm of feed line, so the feeds cost 0.2 dB
+  of the total.
+* *Copper roughness.* Doubling the conductor loss ($K$ = 2) would add 0.6 dB.
+  The measurement suggests that it is lower.
+* *Bandwidth.* The loss scales as $1/\mathrm{FBW}$: for the same $Q_u$, a 10 %
+  filter would lose half as much as this 5 % one.
+* *Laminate.* The loss scales with $\tan\delta$: a 10 % change in $\tan\delta$
+  moves the dielectric part by 0.1 dB. The band edges lose more than the
+  centre (2.58 dB in Palace) because the group delay peaks there.
+
+A 1.52 mm RO4350B board only reaches IL $\approx$ 1.3 dB, because $Q_d$ still
+dominates. RT/duroid 5880 ($\tan\delta$ $\approx$ 0.0009) at 1.52 mm would
+bring it to about 0.5 dB.
 
 **Cross-solver check.** CST Frequency Domain, run from the generated macro,
 agreed with Palace on fc (2.876 vs. 2.875 GHz) and IL (1.80 vs. 1.85 dB) on the
-untrimmed board.
-Getting there took ten debugging steps on the macro and solver setup, seven
-of them actual fixes, and a coax-only
-control model to separate port problems from filter problems. In Table \ref{tab:comparison} the CST run gives
-2.878 GHz, 180 MHz and 1.80 dB against 2.876 GHz, 182 MHz and 1.70 dB for Palace
-on the fabricated geometry (CST is the untrimmed one). The time-domain solver
-was never made fully stable.
+untrimmed board. Getting there took ten debugging steps on the macro and the
+solver setup. Seven of them were actual fixes. We also built a coax-only
+control model, to separate port problems from filter problems. In Table
+\ref{tab:comparison} the CST run gives 2.878 GHz, 180 MHz and 1.80 dB. Palace
+gives 2.876 GHz, 182 MHz and 1.70 dB on the fabricated geometry. The CST
+geometry is the untrimmed one. The time-domain solver was never made fully
+stable.
 
 **The connector is part of the design.** Figs. \ref{fig:launch} and \ref{fig:renders} compare
 three launches on the same geometry: a bare microstrip feed, the CPWG launch
@@ -661,8 +801,8 @@ without a connector, and the CPWG launch with the SMA. Without the connector
 only one reflection zero remains, and the worst in-band S11 is −6.3 dB
 (microstrip) or −5.1 dB (CPWG), against −11.1 dB with it. The filter was
 tuned with the connector's reactance in place. The bare CPWG port also shows
-a port-modelling trap: its first two Palace modes belong to the ground pours
-(S21 $\approx$ −78 dB), and the signal mode is mode 3.
+a port-modelling trap. Its first two Palace modes belong to the ground pours
+(S21 $\approx$ −78 dB). The signal mode is mode 3.
 
 ```{=latex}
 \begin{figure}[t]
@@ -685,18 +825,20 @@ close-up. Green: copper; brown: RO4350B; yellow: SMA connector.}
 ```
 
 **Manufacturing.** The same command-line tool writes the KiCad board, the
-gerbers, the drill files, a STEP solid, and 34 automated file-level checks
-[@jlcpcb_caps]. The checks include drawn-versus-meshed geometry and
-CST-versus-mesh via positions. JLCPCB stocks RO4350B 0.76 mm but offers only
-1 oz outer copper. That leaves the finished thickness at about 0.84 mm at the
-pads, against the SMA fork slot of 0.81 ± 0.1 mm, which is marginal and can be
-fixed by scraping 15–20 µm of copper under the connector legs. The no-mask
-requirement is carried by the gerbers and stated in the order notes. The
-boards were ordered from JLCPCB on Rogers RO4350B with an ENIG finish; the
-order cost about USD 120, laminate surcharge included. ENIG was chosen because
-the unmasked copper is exposed and ENIG is a durable barrier. We assumed that the
-plating, which sits on the air side of the copper, does not touch the cavity
-fields; the measurement cannot exclude it on the feed lines (Sec. VIII).
+gerbers, the drill files and a STEP solid. It also runs 34 automated
+file-level checks [@jlcpcb_caps]. The checks include drawn-versus-meshed
+geometry and CST-versus-mesh via positions. JLCPCB stocks RO4350B 0.76 mm but
+offers only 1 oz outer copper. That leaves the finished thickness at about
+0.84 mm at the pads. The SMA fork slot is 0.81 ± 0.1 mm, so the fit is
+marginal. It can be fixed by removing 15–20 µm of copper under the connector
+legs. In practice the author did this with a nail file until the connector
+seated in the slot. The gerbers carry the no-mask requirement, and the order
+notes state it. The boards were ordered from JLCPCB on Rogers RO4350B with an
+electroless nickel immersion gold (ENIG) finish. The order cost about USD 120,
+laminate surcharge included. We chose ENIG because the unmasked copper is
+exposed and ENIG is a durable barrier. We assumed that the plating, which sits
+on the air side of the copper, does not touch the cavity fields. The
+measurement cannot exclude it on the feed lines (Sec. VIII).
 
 # Measured results {#sec:vna}
 
@@ -877,9 +1019,9 @@ match and thru files.}
 
 ## Comparison with simulation
 
-Table \ref{tab:comparison} puts the specification, both simulators and the
-four corrected measurements through the same code (`siw measure`). Fig.
-\ref{fig:measvsim} shows the curves.
+Table \ref{tab:comparison} compares the specification, both simulators and the
+four corrected measurements, all processed by the same code (`siw measure`).
+Fig. \ref{fig:measvsim} shows the curves.
 
 *How $f_c$ and the bandwidth are read.* One definition is used throughout the
 paper and for every source. On each curve we take the maximum of $|S_{21}|$
@@ -941,50 +1083,51 @@ appear in the measurement at the simulated frequencies.}
 *Centre frequency and bandwidth.* The measured band is centred at 2.894 GHz
 (soldered) and 2.898 GHz (unsoldered), against 2.876 GHz in Palace and 2.870 GHz
 in the specification. The +18 MHz (0.6 %) offset to the simulation corresponds
-to an effective permittivity about 1.3 % below the 3.66 used for design,
-well inside the spread between a laminate's design and process values;
-we did not test this. The −3 dB bandwidth is 171–174 MHz, 5–6 % below Palace.
+to an effective permittivity about 1.3 % below the 3.66 used for design. This
+is well inside the spread between a laminate's design and process values. We
+did not test this. The −3 dB bandwidth is 171–174 MHz, 4–6 % below Palace.
 
 *Insertion loss.* The peak $S_{21}$ is −2.38 and −2.41 dB with the instrument
-calibration and −2.04 and −2.08 dB with the software one, so 2.0–2.4 dB within
-the 0.3 dB uncertainty above. Palace gives 1.70 dB. We predicted 2.1–2.3 dB
-before measuring (Sec. VII), so the measurement brackets the prediction.
-Section VII estimated the loss from the dielectric and a smooth-copper cavity.
-The forward model of the fitted coupling matrix can read the measured loss
-as an effective unloaded Q: keeping the Palace-fitted couplings and varying
-only $Q_u$, it gives 1.1 dB and three reflection zeros at $Q_u$ = 270, 1.7 dB
-and two zeros at 180, 2.3 dB and one zero at 130 (Fig. \ref{fig:measvsim}b
-shows one). Read straight off the model, the measured 2.0–2.4 dB means $Q_u$ of
-about 125–150. The matrix has no launch, and Palace shows 0.4 dB more than the
-matrix at $Q_u$ = 229; removing that gives 150–185. The effective unloaded Q is
-therefore roughly 130–185, against 229 in the dielectric-only simulation and
-about 180 expected with smooth copper. We do not separate copper roughness, via-fence leakage,
-solder joints, the connector and the ENIG finish on the feed lines.
+calibration and −2.04 and −2.08 dB with the software one. So the loss is
+2.0–2.4 dB, within the 0.3 dB uncertainty above. Palace gives 1.70 dB. The
+budget of Sec. VII expects 2.3 dB for smooth copper. The first version of the
+budget, written before the measurement, gave 2.1–2.3 dB. The measurement is
+therefore at or just below the expectation. The next subsection turns the loss
+into a quality factor. A second route is the forward model of the fitted
+coupling matrix. It can read the measured loss as an effective unloaded Q. We
+kept the Palace-fitted couplings and varied only $Q_u$. The model gives 1.1 dB
+and three reflection zeros at $Q_u$ = 270. It gives 1.7 dB and two zeros at
+180, and 2.3 dB and one zero at 130 (Fig. \ref{fig:measvsim}b shows one). Read straight
+off the model, the measured 2.0–2.4 dB means $Q_u$ of about 125–150. The matrix
+has no launch. Palace shows 0.4 dB more than the matrix at $Q_u$ = 229, and
+removing that gives 150–185. We do not separate copper roughness, via-fence
+leakage, solder joints, the connector and the ENIG finish on the feed lines.
 
-*Return loss.* The trace shows one broad minimum with a shoulder, $-17$ dB at
-best with the instrument calibration ($-19$ to $-20$ dB with the software one),
-and the worst in-band $S_{11}$ is −5 dB. The three simulated zeros are at
-−23 to −35 dB, below the −18 dB floor of the calibration check, so the
-measurement cannot confirm them one by one; the matrix model says that this
-much loss merges them into one, which is what the trace looks like. The 24 MHz
-offset from the specified band adds to the in-band figure. The ports differ slightly (best $S_{22}$ −21 dB
-against −17 dB for $S_{11}$ on the soldered board), within the calibration floor.
+*Return loss.* The trace shows one broad minimum with a shoulder. It is
+$-17$ dB at best with the instrument calibration ($-19$ to $-20$ dB with the
+software one). The worst in-band $S_{11}$ is −5 dB. The three simulated zeros
+are at −23 to −35 dB. This is below the −18 dB floor of the calibration check,
+so the measurement cannot confirm them one by one. The matrix model says that
+this much loss merges them into one. That is what the trace looks like. The
+24 MHz offset from the specified band adds to the in-band figure. The ports
+differ slightly: the best $S_{22}$ is −21 dB against −17 dB for $S_{11}$ on the
+soldered board. This is within the calibration floor.
 
 *Soldering.* Soldering the connectors changes the calibrated result by
 3 MHz in centre frequency, 0.03 dB in insertion loss and 0.5 dB in worst
-in-band $S_{11}$. At 2.9 GHz the contact of the seated connector is adequate,
-and the fork-slot fit discussed in Sec. VII did not become a problem.
+in-band $S_{11}$. At 2.9 GHz the contact of the seated connector is adequate.
+The fork-slot fit discussed in Sec. VII did not become a problem.
 
 *Out of band.* The first spurious passband appears at 4.68 GHz and −4.4 dB,
-against 4.61 GHz and −3.8 dB in Palace and 4.63 GHz and −2.5 dB in CST. Above the
-passband the measurement stays within a few dB of Palace (−45.6 against
-−44.2 dB at 3.7 GHz, −41.2 against −41.7 dB at 4.0 GHz, −43.0 against −39.5 dB at
-3.5 GHz). Below it the simulated rejection keeps falling (−61 dB at 2.45 GHz,
-−92 dB at 2.0 GHz), while the measured one levels off at −44 to −48 dB between
-2.2 and 2.5 GHz and is −55 dB at 2.0 GHz, well above the instrument floor
-(below −70 dB). This points to coupling around the filter
-(open feed regions, cables) or leakage through the via fence, which the models
-do not contain.
+against 4.61 GHz and −3.8 dB in Palace and 4.63 GHz and −2.5 dB in CST. Above
+the passband the measurement stays within a few dB of Palace. At 3.7 GHz it is
+−45.6 dB against −44.2 dB. At 4.0 GHz it is −41.2 dB against −41.7 dB. At
+3.5 GHz it is −43.0 dB against −39.5 dB. Below the passband the simulated
+rejection keeps falling (−61 dB at 2.45 GHz, −92 dB at 2.0 GHz). The measured
+rejection levels off at −44 to −48 dB between 2.2 and 2.5 GHz, and is −55 dB
+at 2.0 GHz. This is well above the instrument floor (below −70 dB). It points
+to coupling around the filter (open feed regions, cables) or leakage through
+the via fence. The models do not contain these paths.
 
 ## Effect of the launch
 
@@ -1015,7 +1158,7 @@ CPWG + SMA, unsold. & 2.898 & 172 & $-$2.41 & $-$4.8 \\
 <!-- END siw-table:launch -->
 
 The simulations without a connector use ports that normalise to the planar
-line and are not comparable in absolute terms with a measured board, which has
+line. They cannot be compared in absolute terms with a measured board, which has
 a connector and a real 50 Ω reference. They show that the connector's
 reactance is part of the tuning. The measurement shows that the board with its
 connector agrees with the connector simulation in centre frequency,
@@ -1094,15 +1237,56 @@ connector add, none of which the simulations contain. The smooth-copper
 reference, $1/Q_u = 1/Q_d + 1/Q_c$ with $Q_c \approx 540$, gives 180 for the
 resonator alone.
 
+*A second estimate, from the group delay.* Eq. \ref{eq:il} needs the
+$g$-values and the bandwidth. A second estimate needs neither. In the time
+$\tau_0$ that a signal spends in the filter, the stored energy decays by the
+factor $\exp(-\omega_0\tau_0/Q_u)$, which is $4.343\,\omega_0\tau_0/Q_u$ dB.
+Setting this equal to the dissipated loss gives
+
+```{=latex}
+\begin{equation}
+Q_u = \frac{4.343\,\omega_0\,\tau_0}{L_\mathrm{diss}},
+\qquad
+L_\mathrm{diss} = -10\log_{10}\frac{|S_{21}|^2}{1-|S_{11}|^2}.
+\label{eq:qdelay}
+\end{equation}
+```
+
+Here $\tau_0$ is the group delay of $S_{21}$ at the transmission peak (the
+phase slope over a 10 MHz aperture), and $L_\mathrm{diss}$ is the power that
+is neither reflected nor transmitted. On the ideal lossy prototype, Eq.
+\ref{eq:qdelay} returns 270 for $Q_u = 270$ and 180 for 180. Eq. \ref{eq:il}
+returns 277 and 187. Palace gives 222 and the board 156 (instrument
+calibration) and 183 (software calibration), Fig. \ref{fig:qdelay}. The two
+estimators charge the feed lines differently. Eq. \ref{eq:il} puts all the loss
+on the resonators, so it is a lower bound on their $Q_u$. Eq. \ref{eq:qdelay}
+also counts the delay of the feed lines and the launch as stored energy, so it
+reads higher. For Palace, whose cavities have exactly $Q_u = 270$, they give
+179 and 222. They agree on the main point: the board is 11 to 30 % below
+Palace. Adding smooth copper in series to the Palace value gives
+$1/(1/222 + 1/540) \approx 158$, which is where the board lies (156 to 183).
+
+```{=latex}
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.78\textwidth]{figures/fig_q_delay.png}
+\caption{Effective unloaded $Q$ from the group delay. (a) Group delay of
+$S_{21}$ for Palace and the soldered board. (b) $Q_u$ from Eq. (\ref{eq:qdelay}).
+The grey bar is the Palace value with smooth copper added in series.}
+\label{fig:qdelay}
+\end{figure*}
+```
+
 ```{=latex}
 \FloatBarrier
 ```
 
 # Discussion: gaps and room to improve
 
-**What was AI-driven, and what was not.** The agent wrote about 11.5 k lines
-of design code, launched and monitored the Palace eigenmode and driven solves, read solver logs, localized
-most of the defects in Table \ref{tab:bugs}, and produced the fabrication
+**What was AI-driven, and what was not.** The agent wrote about 12 k lines
+of design code. It launched and monitored the Palace eigenmode and driven
+solves, read solver logs, and localized most of the defects in
+Table \ref{tab:bugs}. It also produced the fabrication
 files. The engineer chose the specification, topology, laminate and vias,
 decided when to stop tuning, ran every CST check, and more than once rejected
 a confident but wrong explanation. The design physics that finally worked is
@@ -1119,7 +1303,7 @@ electromagnetics. Stating this plainly is more useful than overclaiming.
 * Unreviewed edits from a parallel agent absorbed into a commit.
 * Premature optimism about untested geometries.
 
-Each was caught by a physics check, a solver error or a human question, which
+Each was caught by a physics check, a solver error or a human question. This
 argues for keeping those checks in the loop.
 
 **Gaps.**
@@ -1143,30 +1327,33 @@ argues for keeping those checks in the loop.
 * Spurious passbands start at 4.4 GHz (−4 dB, confirmed by the measurement) and
   need a low-pass filter in a real system.
 * The measured loss is not apportioned between copper roughness, via-fence
-  leakage, solder joints, connector and ENIG on the feed lines; the low-side rejection floor of about −46 dB
-  (simulated: −61 dB) points to coupling around the filter that no model contains.
+  leakage, solder joints, connector and ENIG on the feed lines. The low-side
+  rejection floor of about −46 dB (simulated: −61 dB) points to coupling around
+  the filter that no model contains.
 * There is no controlled comparison against an engineer working without the
-  agent, and no accounting of tokens or cost.
+  agent, and no accounting of cost. The session logs give tokens and active
+  time (Table \ref{tab:models}) but not the engineer's own time.
 * This is a single case study: one engineer, one model family, one filter
   topology. It shows what can happen, not how often.
 * The taxonomy is self-reported by the same engineer–agent pair that made the
   mistakes. Git corroborates that each fix happened, but not the
-  classification. It also lists only caught defects; the physics checks may
+  classification. It also lists only caught defects. The physics checks may
   still miss a comparable class of error.
 * The code has no regression test suite. Its safety net is the physics
   sanity checks and the automated fabrication checks.
 
 **Improvements.**
 
-* A coordinated local correction of $w_{\text{ext}}$, $l_{\text{cav1}}$ and $w_{\text{iris}}$, driven by the
-  coupling-matrix fit, plus re-centring the band: the +24 MHz offset from
-  2.870 GHz is of the order of 0.5–1 mm of cavity length (27 MHz/mm measured at
-  the end cavities, about 46 MHz/mm for the ideal cavity).
+* A coordinated local correction of $w_{\text{ext}}$, $l_{\text{cav1}}$ and
+  $w_{\text{iris}}$, driven by the coupling-matrix fit, and a re-centring of the
+  band. The +24 MHz offset from 2.870 GHz is of the order of 0.5–1 mm of cavity
+  length. The sensitivity is 27 MHz/mm measured at the end cavities, and about
+  46 MHz/mm for the ideal cavity.
 * Fitting the coupling matrix to the measurement needs a model of the launch.
   With the plain matrix the fit is ill-conditioned ($Q_u$ between 57 and 85 for
   two nearly identical curves), so we read the loss through the forward model.
-* Adaptive frequency sweeps and y-symmetric half-models, for roughly 2× memory
-  and 5–10× fewer solves, which would bring the cascade within GPU limits.
+* Adaptive frequency sweeps and y-symmetric half-models, for about half the
+  memory and 5–10× fewer solves, which would bring the cascade within GPU limits.
 * A GPU with more memory.
 * A lower-loss or thicker laminate.
 * Space-mapping or surrogate models [@bandler2004space] trained on the
@@ -1176,32 +1363,142 @@ argues for keeping those checks in the loop.
 * Making the physics sanity checks a mandatory step of the agent loop rather
   than a habit.
 
+# The human part: how the text was written and what it means
+
+## How this text was written
+
+The paper was written in a conversation, in many short rounds, and the engineer
+was never a passive reader. Each round had the same shape. The engineer asked
+for something or objected to something. The agent drafted or revised. Sub-agents
+that start without the conversation then reviewed the result and listed errors,
+and the engineer decided which findings to accept. Tables and figures of
+measured results are regenerated by `siw measure --paper`, so the numbers in the
+text can always be checked against code. Table \ref{tab:prompts} lists some of
+the engineer's prompts. They are paraphrased and corrected for grammar, so they
+show the process and are not literal quotes.
+
+```{=latex}
+\begin{table*}[t]
+\centering
+\footnotesize
+\caption{Examples of the engineer's prompts (paraphrased) and what each one changed.}
+\label{tab:prompts}
+\begin{tabular}{p{0.7cm}p{7.8cm}p{7.4cm}}
+\hline
+\textbf{\#} & \textbf{Prompt (paraphrased)} & \textbf{What changed} \\
+\hline
+1 & ``Reorganize the information we have, remove what is irrelevant, and write a paper called \emph{AI-Driven RF Design}.'' & Repository cleanup (deleted files stay in git tags) and the first full draft. \\
+2 & ``Say that we started with openEMS and why it did not work for us, then moved to Palace. Mention the GPU with remote control, and the Python scripts for the optimization. We ended up running on the CPU. Recognize the gaps, and reference every paper we used.'' & Phase 1 and 2 sections, the compute paragraph, the gaps list and the bibliography. \\
+3 & ``I would prefer a venue that is not very restrictive in peer review. I do not mind if it is rejected. Check that LLM-written papers are accepted.'' & The arXiv and IEEE Access build targets, and a plain statement of LLM authorship. \\
+4 & ``Run several reviewers on the paper, and analyze extremely carefully whether it is safe to make the repository public.'' & Corrections to claims in the text, and an audit of the git history and metadata before release. \\
+5 & ``The calibration kit was not a vendor kit. It was a generic SMA short, open and load.'' & Text, README and code documentation corrected, and the $-18$ dB floor caveat added. \\
+6 & ``Explain how the pipeline works: the equations that are needed, the traditional steps, and how the tool solves each one. Explain the optimizer too, since we wrote it around Palace. If needed, show the equations as display equations.'' & Table \ref{tab:pipeline}, the optimizer paragraph and the display equations. \\
+7 & ``Should we add today's commits? The paper is old. Some passages are hard to read, so simplify the wording. I do not know if simple technical English is acceptable in a paper, but I want it easy to follow.'' & Updated history statistics and timeline, and a plain-language editing pass. \\
+8 & ``Is it easy to get the $Q$ of the filter from the plots? Is the insertion loss an expected number? We got 1.7 dB in the simulation. Show how the real length and the copper change it, with an easy calculation.'' & Sec. VII loss budget and Sec. IX. \\
+9 & ``I do not understand why we need $Q_u$ or what it represents. Can we get it from Palace instead of CST?'' & A plain explanation of $Q_u$, and the raw Palace run stored with its phase, so that the Palace value could be computed. \\
+\hline
+\end{tabular}
+\end{table*}
+```
+
+The agent also made mistakes in the text itself. It described the calibration
+standards as a vendor kit when they were a generic SMA kit (prompt 5). It
+wrote that the out-of-band rejection was a flat 45 dB, which is wrong: it is
+44--48 dB between 2.2 and 2.5 GHz, where the simulation gives 61 dB. The
+second error was found in review. Both were corrected before release. This
+agrees with the failure modes of Sec. X: the agent is confident, and the
+checks have to come from outside.
+
+## What the engineer did that the agent did not
+
+The physics that finally worked is classical, and most of the software was the
+agent's. It is still worth listing what the agent did not do, because a reader
+would otherwise credit it to the agent.
+
+* *The idea of a coplanar-waveguide (CPWG) feed.* It came from a class that the
+  author attended, not from the agent.
+* *The physical work.* The SMA connector did not fit the board until the
+  author filed the copper under its legs with a nail file (Sec. VII). No
+  simulation could do that.
+* *The measurement.* The author made sure that the VNA was used calibrated, and
+  that the calibration was checked with a thru.
+* *Reading.* The author checked the papers, the references and whether the
+  equations looked right. Most of this was needed in the prototype period.
+  After that the process went smoothly.
+* *Free range.* The author also let the agent try other geometries that use
+  other propagation modes. It was a blind search: without a physical idea of
+  why a mode should help, the agent only explored (Sec. VI).
+
+The simulation and optimization loop was the opposite. It is raw computation.
+It was easy to implement and to improve with the idea of an agentic loop: the
+agent runs a solve, reads the result, changes the model and runs again, and no
+human has to be in that loop.
+
+## Reflections and concerns
+
+These are the author's views, offered with the evidence of one project.
+
+**Knowledge is no longer the scarce thing.** The author's view is that AI has
+solved the problem of scarce knowledge. It reduces the time, and if it is
+guided correctly it does a better job than the author would have done alone.
+The coupled-resonator theory, the solver input format and the fabrication file
+formats were all things the agent knew or found in minutes. What it did not do
+was choose the problem, bring an idea from outside the text, or touch the board.
+
+**What is scarce now is money and the willingness to try new things.** A
+simulation costs nothing but time, so the agent could try as many as it liked.
+The board cost about USD 120 and gave one measurement, and it was the only
+physical iteration of the project. The loop that the agent can run alone stops
+where the physical world begins. The second shortage is willingness: the
+agent tries whatever it is pointed at, and deciding to point it at an
+unfamiliar solver, a new topology or a new kind of board is still a human choice.
+
+**The gap between doing and knowing.** What one can do with an agent grows
+faster than what one understands. In this project the gap was real. A working
+filter exists whose code the author did not write line by line, and Table
+\ref{tab:bugs} shows that the numbers can look right and be wrong. The defence
+was to check the result against physics, which is knowledge, not production.
+
+**Where the value goes.** If production becomes instant, the value does not
+disappear. It moves to judgment and taste: choosing which thing to do, and
+seeing when the answer is wrong. In this project that meant the specification,
+the topology, the stopping decision and the doubts that a confident
+explanation did not remove.
+
+**Accountability.** The agent does not want anything and is not answerable for
+its results. The author is, and says so in the acknowledgment [@ieee_ai_policy].
+
 # Conclusion
 
 An LLM coding agent took an SIW bandpass filter from specification to
-fabrication files, with one engineer supervising, and the board was then
+fabrication files, with one engineer supervising. The board was then
 manufactured and measured. Two things decided the design outcome. The first was
-replacing black-box search over a discontinuous objective with calibration of
-smooth observables on small structures. The second was catching a long series
+to replace black-box search over a discontinuous objective with calibration of
+smooth observables on small structures. The second was to catch a long series
 of silent defects with physics checks. The measurement confirms the
-simulations where the physics is simple: the spurious bands fall at the
-predicted frequencies and the centre frequency is within 1 % of the specification. It also shows
-what the simulations did not capture: 0.3 to 0.7 dB more loss than Palace,
-which in the matrix model merges the three reflection zeros into one, so the
-worst in-band return loss is 5 dB, not the simulated 11 dB and not the specified
-16 dB. The generic calibration standards limit the reading of the zeros
-themselves (floor about −18 dB), not the 5 dB. The
-independent software recalibration agrees with the instrument's on average
-within 0.2 dB in $S_{21}$ (up to 1 dB on the steep band edges), so this conclusion does not rest on one calibration. The code,
-data and scripts that produced every number are in the repository, and
-`siw measure` reproduces the measured columns of Table \ref{tab:comparison}.
+simulations where the physics is simple. The spurious bands fall at the
+predicted frequencies, and the centre frequency is within 1 % of the
+specification. The measurement also shows what the simulations did not
+capture: 0.3 to 0.7 dB more loss than Palace. This is about the 0.6 dB of
+copper loss that the perfect-conductor walls leave out (Sec. VII). In the
+matrix model this loss merges the three reflection zeros into one. So the
+worst in-band return loss is 5 dB, not the simulated 11 dB and not the
+specified 16 dB. The generic calibration standards limit the reading of the
+zeros themselves (floor about −18 dB), not the 5 dB. The independent software
+recalibration agrees with the instrument's on average within 0.2 dB in
+$S_{21}$ (up to 1 dB on the steep band edges). So this conclusion does not rest
+on one calibration. The code, data and scripts that produced every number are
+in the repository. `siw measure` reproduces the measured columns of
+Table \ref{tab:comparison}. The agent made the computation cheap. The idea of
+the feed, the connector, the calibration and the decisions on what to trust
+stayed with the engineer (Sec. XI).
 
 # Acknowledgment {-}
 
 The design software, simulations, figures and a first draft of this text
-were produced with Claude Code (Anthropic; Claude Sonnet 5, Opus 5 and 5.5,
-Fable 5) under the author's direction, as described in Sec. III. The author
-reviewed all results and text and takes full responsibility for them
+were produced with Claude Code (Anthropic) under the author's direction. The
+models were Claude Sonnet 5 and 5.5, Opus 5 and 5.5, and Fable 5. Sec. III
+describes this work. The author reviewed all results and text and takes full responsibility for them
 [@ieee_ai_policy]. The complete history and data are available in the
 project repository.
 

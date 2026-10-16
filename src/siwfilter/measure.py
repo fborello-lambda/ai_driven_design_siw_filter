@@ -24,12 +24,14 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from . import palette as P
 from .config import FilterSpec, data_path, out_data, out_img, out_s2p  # noqa: F401  (out_data re-exported for the CLI)
 
 DEFAULT_DATASET = data_path("measurements", "2026-10-14_vna")
 _GOLDEN_STEM = ("golden/cascade_N3/l_cav133.94_l_cav235.5_l_taper15.74_w_ext13.96_"
                 "w_iris14.42_w_ms1.66_cpwg_taoglas")
 DEFAULT_PALACE = data_path(_GOLDEN_STEM + ".s11s21.json")
+DEFAULT_PALACE_S2P = data_path("golden/cascade_N3/palace_fine_trimmed_2026-09-23.s2p")   # same run, with phase
 DEFAULT_PALACE_BB = data_path("golden/cascade_N3/l_cav134.24_l_cav235.5_l_taper15.74_"
                               "w_ext13.96_w_iris14.42_w_ms1.66_cpwg_taoglas_broadband.s11s21.json")
 DEFAULT_CST = data_path("golden/cascade_N3/cst/cst_fd_fixed_pretrim_2026-09-06.s2p")
@@ -378,6 +380,12 @@ def build_curves(ds: Dataset, cal: SoftwareCal, palace=DEFAULT_PALACE, palace_bb
     c: dict[str, Curve] = {}
     if palace and os.path.exists(palace):
         c["palace"] = curve_from_golden("Palace", palace, "fine mesh, trimmed (fabricated) geometry")
+        if palace == DEFAULT_PALACE and os.path.exists(DEFAULT_PALACE_S2P):
+            # same solve, complex values: needed for the group delay. S22 = S11 was assumed
+            # (mirror symmetry), so it is not reported as a result.
+            c["palace"] = curve_from_s2p("Palace", DEFAULT_PALACE_S2P, "sim",
+                                         "fine mesh, trimmed (fabricated) geometry")
+            c["palace"].s22_db = None
     if palace_bb and os.path.exists(palace_bb):
         c["palace_bb"] = curve_from_golden("Palace 0-8 GHz", palace_bb, "pre-trim geometry")
     if cst and os.path.exists(cst):
@@ -754,19 +762,70 @@ def loss_sweep(fit: dict, qus=(1e6, 270, 229, 180, 150, 130, 100), spec: FilterS
 
 
 # --------------------------------------------------------------------------
+# quality factors read from the plots
+# --------------------------------------------------------------------------
+def group_delay_ns(net, aperture_mhz: float = 10.0) -> tuple[np.ndarray, np.ndarray]:
+    """Group delay of S21 (ns) over a frequency aperture, like a VNA's smoothing: a local
+    quadratic fit of the unwrapped phase, so measurement noise does not dominate."""
+    from scipy.signal import savgol_filter
+    f = np.asarray(net.f, float)
+    df = float(np.median(np.diff(f)))
+    win = max(5, int(round(aperture_mhz * 1e6 / df)) | 1)
+    ph = np.unwrap(np.angle(net.s[:, 1, 0]))
+    tau = -savgol_filter(ph, win, 2, deriv=1, delta=df) / (2 * np.pi)
+    return f / 1e9, tau * 1e9
+
+
+def q_delay(c: Curve, spec: FilterSpec | None = None) -> dict:
+    """Second, independent estimate of the effective unloaded Q, from the S21 phase.
+
+    In the time ``tau0`` a signal spends in the filter, the stored energy decays by
+    exp(-w0 tau0 / Qu), which is 4.343 w0 tau0 / Qu dB. Setting that equal to the power that
+    is neither reflected nor transmitted, ``L_diss = -10 log10(|S21|^2 / (1 - |S11|^2))``,
+    gives ``Qu = 4.343 w0 tau0 / L_diss``. No g-values and no coupling matrix are needed.
+    The feed lines are inside both tau0 and L_diss, so (like ``qu_eff``) it is the Q of the
+    whole board. Needs the phase, so it is None for curves without a network."""
+    spec = spec or FilterSpec(N=3)
+    m = metrics(c, spec)
+    fp = m["f_peak_ghz"]
+    s11 = 10 ** (np.interp(fp, c.f_ghz, c.s11_db) / 20)
+    s21 = 10 ** (m["s21_peak_db"] / 20)
+    ld = float(-10 * np.log10(s21 ** 2 / (1 - s11 ** 2)))
+    out = {"f0_ghz": m["fc_ghz"], "il_peak_db": -m["s21_peak_db"], "l_diss_db": ld,
+           "qu_eff_cohn": m.get("qu_eff")}
+    if c.net is not None:
+        fg, tau = group_delay_ns(c.net)
+        t0 = float(np.interp(fp, fg, tau)) * 1e-9
+        out.update(tau_ns=t0 * 1e9, w0_tau=2 * np.pi * fp * 1e9 * t0,
+                   qu_delay=float(4.343 * 2 * np.pi * fp * 1e9 * t0 / ld))
+    return out
+
+
+def q_delay_table(curves: dict[str, Curve], spec: FilterSpec | None = None) -> dict:
+    from .config import QC_COPPER_EST
+    out = {k: q_delay(curves[k], spec) for k in ("palace", "cst", "SC", "UC", "SW_S", "SW_U") if k in curves}
+    if "qu_delay" in out.get("palace", {}):
+        qd = out["palace"]["qu_delay"]
+        out["palace_plus_copper"] = {"qu_delay": 1 / (1 / qd + 1 / QC_COPPER_EST), "q_c": QC_COPPER_EST,
+                                     "note": "Palace qu_delay (lossy dielectric, perfect-conductor walls) in series with Qc"}
+    return out
+
+
+# --------------------------------------------------------------------------
 # figures
 # --------------------------------------------------------------------------
-STYLE = {"palace": ("k", "-", "Palace (fine mesh)"), "cst": ("C2", "-", "CST FD"),
-         "SC": ("C3", "-", "VNA, soldered (instrument cal.)"),
-         "UC": ("C1", "-", "VNA, unsoldered (instrument cal.)"),
-         "SW_S": ("C0", "--", "VNA, soldered (software cal.)"),
-         "SW_U": ("C9", "--", "VNA, unsoldered (software cal.)")}
+STYLE = {"palace": (P.NAVY, "-", "Palace (fine mesh)"), "cst": (P.TURQUOISE, "-", "CST FD"),
+         "SC": (P.PINK, "-", "VNA, soldered (instrument cal.)"),
+         "UC": (P.ORANGE, "-", "VNA, unsoldered (instrument cal.)"),
+         "SW_S": (P.VIOLET, "--", "VNA, soldered (software cal.)"),
+         "SW_U": (P.AZURE, "--", "VNA, unsoldered (software cal.)")}
 
 
 def plot_comparison(curves: dict[str, Curve], spec: FilterSpec, path: str) -> str:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    P.apply()
     b0, b1 = spec.f1 / 1e9, spec.f2 / 1e9
     fig, ax = plt.subplots(1, 3, figsize=(14, 4.2), gridspec_kw={"width_ratios": [1, 1, 1.15]})
     for key, (col, ls, lab) in STYLE.items():
@@ -776,14 +835,14 @@ def plot_comparison(curves: dict[str, Curve], spec: FilterSpec, path: str) -> st
         for a, y, win in ((ax[0], c.s21_db, (2.6, 3.2)), (ax[1], c.s11_db, (2.6, 3.2))):
             m = (c.f_ghz >= win[0]) & (c.f_ghz <= win[1])
             a.plot(c.f_ghz[m], y[m], color=col, ls=ls, lw=1.6, label=lab)
-    for key, wide, col in (("SC", "SC", "C3"), ("palace_bb", "palace_bb", "k"), ("cst_bb", "cst_bb", "C2")):
+    for key, wide, col in (("SC", "SC", P.PINK), ("palace_bb", "palace_bb", P.NAVY), ("cst_bb", "cst_bb", P.TURQUOISE)):
         if wide in curves:
             c = curves[wide]
             m = c.f_ghz <= 5.05
             ax[2].plot(c.f_ghz[m], c.s21_db[m], color=col, lw=1.2,
                        label={"SC": "VNA (soldered)", "palace_bb": "Palace", "cst_bb": "CST"}[key])
     for a in ax[:2]:
-        a.axvspan(b0, b1, color="#2ca02c", alpha=0.08, label="specified band")
+        a.axvspan(b0, b1, color=P.TURQUOISE, alpha=0.10, label="specified band")
         a.set_xlabel("Frequency (GHz)"); a.grid(alpha=.3)
     ax[0].set(ylabel="|S21| (dB)", ylim=(-40, 1), title="(a) transmission")
     ax[1].set(ylabel="|S11| (dB)", ylim=(-35, 0), title="(b) reflection")
@@ -800,18 +859,70 @@ def plot_comparison(curves: dict[str, Curve], spec: FilterSpec, path: str) -> st
     return path
 
 
+DELAY_TEXT = {
+    "en": {"tau": "group delay of S21 (ns)", "t_tau": r"(a) stored energy $\omega_0\tau_0$",
+           "peak": "at the peak", "qu": "effective unloaded $Q_u$", "t_qu": r"(b) $Q_u = 4.343\,\omega_0\tau_0/L_\mathrm{diss}$",
+           "freq": "Frequency (GHz)", "diel": "dielectric alone",
+           "bars": {"palace": "Palace", "palace_plus_copper": "Palace +\ncopper", "SC": "VNA S\n(instr.)",
+                    "UC": "VNA U\n(instr.)", "SW_S": "VNA S\n(sw cal.)", "SW_U": "VNA U\n(sw cal.)"}},
+    "es": {"tau": "retardo de grupo de S21 (ns)", "t_tau": r"(a) energía almacenada $\omega_0\tau_0$",
+           "peak": "en el pico", "qu": "$Q_u$ efectivo", "t_qu": r"(b) $Q_u = 4.343\,\omega_0\tau_0/L_\mathrm{diss}$",
+           "freq": "Frecuencia (GHz)", "diel": "solo dieléctrico",
+           "bars": {"palace": "Palace", "palace_plus_copper": "Palace +\ncobre", "SC": "VNA S\n(instr.)",
+                    "UC": "VNA U\n(instr.)", "SW_S": "VNA S\n(cal. sw)", "SW_U": "VNA U\n(cal. sw)"}},
+}
+
+
+def plot_q_delay(curves: dict[str, Curve], qt: dict, path: str, lang: str = "en") -> str:
+    """(a) group delay of S21, (b) effective unloaded Q from the delay and the dissipated power."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from .config import QC_COPPER_EST
+    P.apply()
+    T = DELAY_TEXT[lang]
+    fig, ax = plt.subplots(1, 2, figsize=(10, 3.9), gridspec_kw={"width_ratios": [1, 0.9]})
+    for key in ("palace", "SC", "SW_S"):
+        c = curves.get(key)
+        if c is None or c.net is None or key not in qt:
+            continue
+        col, ls, lab = STYLE[key]
+        f, tau = group_delay_ns(c.net)
+        m = (f >= 2.7) & (f <= 3.1)
+        ax[0].plot(f[m], tau[m], color=col, ls=ls, lw=1.8, label=f"{lab}: {qt[key]['tau_ns']:.1f} ns {T['peak']}")
+    ax[0].set(xlabel=T["freq"], ylabel=T["tau"], ylim=(0, 9), title=T["t_tau"])
+    ax[0].legend(fontsize=7.5, loc="upper left"); ax[0].grid(alpha=.4)
+    colors = {"palace": P.NAVY, "palace_plus_copper": P.SLATE, "SC": P.PINK, "UC": P.ORANGE,
+              "SW_S": P.VIOLET, "SW_U": P.AZURE}
+    keys = [k for k in T["bars"] if k in qt and "qu_delay" in qt[k]]
+    vals = [qt[k]["qu_delay"] for k in keys]
+    ax[1].bar(range(len(vals)), vals, color=[colors[k] for k in keys], width=0.7)
+    for i, v in enumerate(vals):
+        ax[1].text(i, v + 4, f"{v:.0f}", ha="center", fontsize=8)
+    qd = 1 / 0.0037
+    ax[1].axhline(qd, color=P.SLATE, ls="--", lw=1.2)
+    ax[1].text(len(vals) - 0.5, qd + 4, f"{T['diel']} ({qd:.0f})", ha="right", fontsize=7.5, color="#444a66")
+    ax[1].set_xticks(range(len(vals))); ax[1].set_xticklabels([T["bars"][k] for k in keys], fontsize=7.5)
+    ax[1].set(ylabel=T["qu"], ylim=(0, 300), title=T["t_qu"]); ax[1].grid(alpha=.4, axis="y")
+    fig.tight_layout()
+    fig.savefig(path, dpi=170, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 def plot_calibration_check(ds: Dataset, cal: SoftwareCal, path: str) -> str:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    P.apply()
     fig, ax = plt.subplots(1, 3, figsize=(14, 3.8))
     raw, sw, ref = ds.dut["SU"], cal.apply(ds.dut["SU"]), ds.dut["SC"]
     f = ref.f / 1e9
     m = (f >= 2.4) & (f <= 3.4)
     for a, (i, j), t in zip(ax, ((1, 0), (0, 0), (1, 1)), ("S21", "S11", "S22")):
-        a.plot(f[m], _db(raw.s[m, i, j]), color="0.6", lw=1, label="raw (uncalibrated)")
-        a.plot(f[m], _db(ref.s[m, i, j]), "C3", lw=1.6, label="instrument calibration")
-        a.plot(f[m], _db(sw.s[m, i, j]), "C0--", lw=1.6, label="software calibration")
+        a.plot(f[m], _db(raw.s[m, i, j]), color=P.SLATE, lw=1, label="raw (uncalibrated)")
+        a.plot(f[m], _db(ref.s[m, i, j]), color=P.PINK, lw=1.6, label="instrument calibration")
+        a.plot(f[m], _db(sw.s[m, i, j]), color=P.VIOLET, ls="--", lw=1.6, label="software calibration")
         a.set(xlabel="Frequency (GHz)", ylabel=f"|{t}| (dB)", title=f"{t}, soldered board")
         a.grid(alpha=.3)
     ax[0].set_ylim(-45, 2); ax[1].set_ylim(-35, 1); ax[2].set_ylim(-35, 1)
@@ -839,7 +950,7 @@ Q_TEXT = {
            "t_ql": "(a) Q cargado", "t_qu": r"(b) $Q_u$ efectivo",
            "freq": "Frecuencia (GHz)", "peak": "pico"},
 }
-_Q_COLORS = {"palace": "k", "cst": "C2", "SC": "C3", "SW_S": "C0"}
+_Q_COLORS = {"palace": P.NAVY, "cst": P.TURQUOISE, "SC": P.PINK, "SW_S": P.VIOLET}
 
 
 def plot_q_comparison(cm: dict, spec: FilterSpec, path: str, lang: str = "en") -> str:
@@ -847,6 +958,7 @@ def plot_q_comparison(cm: dict, spec: FilterSpec, path: str, lang: str = "en") -
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    P.apply()
     T, th = Q_TEXT[lang], q_theory(spec)
     keys = [k for k in Q_SOURCES if k in cm and cm[k].get("q_loaded")]
     fig, axs = plt.subplots(1, 2, figsize=(11, 4))
@@ -856,7 +968,7 @@ def plot_q_comparison(cm: dict, spec: FilterSpec, path: str, lang: str = "en") -
     for a, key, theo, ylab, title, fmt in panels:
         labs = [t[0] for t in theo] + [T["src"][k] for k in keys]
         vals = [t[1] for t in theo] + [cm[k][key] for k in keys]
-        bars = a.bar(range(len(vals)), vals, color=["0.55"] * len(theo) + [_Q_COLORS[k] for k in keys])
+        bars = a.bar(range(len(vals)), vals, color=[P.LILAC] * len(theo) + [_Q_COLORS[k] for k in keys])
         for b in bars[:len(theo)]:
             b.set_hatch("//"); b.set_edgecolor("w")
         for i, v in enumerate(vals):
@@ -874,6 +986,7 @@ def plot_q_zoom(curves: dict[str, Curve], cm: dict, path: str, lang: str = "en")
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    P.apply()
     T = Q_TEXT[lang]
     keys = [k for k in ("palace", "cst", "SC") if k in curves and k in cm]
     fig, ax = plt.subplots(1, len(keys), figsize=(4.7 * len(keys), 4.2), sharey=True, squeeze=False)
@@ -921,6 +1034,7 @@ def run(dataset: str = DEFAULT_DATASET, kit: str = "nominal", fit: bool = False,
     cm = comparison_metrics(curves, spec)
     res = {"dataset": os.path.relpath(ds.root, data_path()), "software_cal_model": kit,
            "calibration_check": calibration_report(ds, cal, spec), "metrics": cm}
+    res["q_factors"] = q_delay_table(curves, spec)
     other = "ideal" if kit == "nominal" else "nominal"
     try:   # how much does the choice of standard model matter? (magnitudes only: the
         # model mainly moves the reference plane, i.e. the phase)
@@ -953,7 +1067,8 @@ def run(dataset: str = DEFAULT_DATASET, kit: str = "nominal", fit: bool = False,
             plot_calibration_check(ds, cal, out_img(f"{out_name}_calibration_check.png"))]
     for lang, sfx in (("en", ""), ("es", "_es")):
         figs += [plot_q_comparison(cm, spec, out_img(f"{out_name}_q_comparison{sfx}.png"), lang),
-                 plot_q_zoom(curves, cm, out_img(f"{out_name}_q_zoom{sfx}.png"), lang)]
+                 plot_q_zoom(curves, cm, out_img(f"{out_name}_q_zoom{sfx}.png"), lang),
+                 plot_q_delay(curves, res["q_factors"], out_img(f"{out_name}_q_delay{sfx}.png"), lang)]
     res["q_theory"] = q_theory(spec)
     res["figures"] = figs
     if paper:
@@ -984,6 +1099,12 @@ def run(dataset: str = DEFAULT_DATASET, kit: str = "nominal", fit: bool = False,
                         vu, vt = u["vs_instrument"], t2["vs_instrument"]
                         print(f"    vs instrument cal: mean dS21 {vu['s21_mean_diff_db']:+.2f}/{vt['s21_mean_diff_db']:+.2f} dB, "
                               f"mean |dGamma| S11 {vu['s11_mean_dgamma']:.3f}/{vt['s11_mean_dgamma']:.3f}")
+        for k, v in res["q_factors"].items():
+            if "tau_ns" in v:
+                print(f"Q {k}: L_diss {v['l_diss_db']:.2f} dB, tau {v['tau_ns']:.2f} ns, Qu(delay) {v['qu_delay']:.0f}"
+                      f", Qu(Cohn, ripple band) {v['qu_eff_cohn']:.0f}")
+            elif "qu_delay" in v:
+                print(f"Q {k}: Qu(delay) {v['qu_delay']:.0f} ({v['note']})")
         for k, v in res.get("coupling_fit", {}).items():
             print(f"CM fit {k}: Qu={v['Qu']:.0f} k12 {v['k12_fitted']:.4f} (target {v['k12_target']:.4f}) "
                   f"Qe {v['Qe_fitted']:.1f} (target {v['Qe_target']:.1f}) "
@@ -1005,7 +1126,7 @@ def _write_paper_artifacts(ds, cal, curves, cm, res, spec, out_name) -> None:
     shutil.copy2(out_img(f"{out_name}_comparison.png"), os.path.join(figs, "fig_measured_vs_sim.png"))
     shutil.copy2(out_img(f"{out_name}_calibration_check.png"), os.path.join(figs, "fig_calibration_check.png"))
     for sfx in ("", "_es"):
-        for kind in ("q_comparison", "q_zoom"):
+        for kind in ("q_comparison", "q_zoom", "q_delay"):
             shutil.copy2(out_img(f"{out_name}_{kind}{sfx}.png"), os.path.join(figs, f"fig_{kind}{sfx}.png"))
     json.dump({k: v for k, v in res.items() if k != "figures"},
               open(os.path.join(data, "measurement_metrics.json"), "w"), indent=2)

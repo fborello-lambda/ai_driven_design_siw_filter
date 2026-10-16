@@ -1,0 +1,287 @@
+{
+ "upto": "4d570ac",
+ "commits": 220,
+ "first": "2026-06-07",
+ "last": "2026-10-15",
+ "with_agent_trailer": 125,
+ "by_model": {
+  "Sonnet 5": 64,
+  "Opus 5": 43,
+  "Opus 5.5": 12,
+  "Sonnet 5.5": 5,
+  "Fable 5": 1
+ },
+ "by_type": {
+  "feat": 78,
+  "docs": 70,
+  "fix": 47,
+  "data": 7,
+  "refactor": 5,
+  "paper": 3,
+  "perf": 2,
+  "revert": 2,
+  "chore": 2,
+  "first": 1,
+  "sma": 1,
+  "results": 1,
+  "cleanup": 1
+ },
+ "fix_by_model": {
+  "Sonnet 5": 16,
+  "Opus 5": 14
+ },
+ "per_day": {
+  "2026-06-07": {
+   "all": 1,
+   "agent": 0,
+   "models": {}
+  },
+  "2026-06-17": {
+   "all": 1,
+   "agent": 0,
+   "models": {}
+  },
+  "2026-06-18": {
+   "all": 1,
+   "agent": 0,
+   "models": {}
+  },
+  "2026-06-23": {
+   "all": 2,
+   "agent": 0,
+   "models": {}
+  },
+  "2026-08-22": {
+   "all": 2,
+   "agent": 2,
+   "models": {
+    "Sonnet 5": 1,
+    "Opus 5": 1
+   }
+  },
+  "2026-08-23": {
+   "all": 10,
+   "agent": 10,
+   "models": {
+    "Opus 5": 10
+   }
+  },
+  "2026-08-24": {
+   "all": 9,
+   "agent": 9,
+   "models": {
+    "Opus 5": 9
+   }
+  },
+  "2026-08-25": {
+   "all": 8,
+   "agent": 3,
+   "models": {
+    "Opus 5": 3
+   }
+  },
+  "2026-08-26": {
+   "all": 15,
+   "agent": 0,
+   "models": {}
+  },
+  "2026-08-27": {
+   "all": 9,
+   "agent": 0,
+   "models": {}
+  },
+  "2026-08-28": {
+   "all": 16,
+   "agent": 4,
+   "models": {
+    "Fable 5": 1,
+    "Sonnet 5": 3
+   }
+  },
+  "2026-08-29": {
+   "all": 37,
+   "agent": 33,
+   "models": {
+    "Sonnet 5": 33
+   }
+  },
+  "2026-08-30": {
+   "all": 12,
+   "agent": 0,
+   "models": {}
+  },
+  "2026-08-31": {
+   "all": 10,
+   "agent": 10,
+   "models": {
+    "Sonnet 5": 10
+   }
+  },
+  "2026-09-01": {
+   "all": 12,
+   "agent": 8,
+   "models": {
+    "Sonnet 5": 8
+   }
+  },
+  "2026-09-02": {
+   "all": 24,
+   "agent": 0,
+   "models": {}
+  },
+  "2026-09-03": {
+   "all": 8,
+   "agent": 3,
+   "models": {
+    "Opus 5": 3
+   }
+  },
+  "2026-09-04": {
+   "all": 11,
+   "agent": 11,
+   "models": {
+    "Opus 5": 11
+   }
+  },
+  "2026-09-05": {
+   "all": 3,
+   "agent": 3,
+   "models": {
+    "Opus 5": 3
+   }
+  },
+  "2026-09-06": {
+   "all": 11,
+   "agent": 11,
+   "models": {
+    "Opus 5": 3,
+    "Sonnet 5": 8
+   }
+  },
+  "2026-09-07": {
+   "all": 1,
+   "agent": 1,
+   "models": {
+    "Sonnet 5": 1
+   }
+  },
+  "2026-09-23": {
+   "all": 5,
+   "agent": 5,
+   "models": {
+    "Opus 5.5": 5
+   }
+  },
+  "2026-09-29": {
+   "all": 7,
+   "agent": 7,
+   "models": {
+    "Opus 5.5": 7
+   }
+  },
+  "2026-10-15": {
+   "all": 5,
+   "agent": 5,
+   "models": {
+    "Sonnet 5.5": 5
+   }
+  }
+ },
+ "active_days": 24,
+ "code_lines_added": 16136,
+ "code_lines_deleted": 5861,
+ "median_files_per_commit": 2,
+ "sessions": {
+  "main_turns": {
+   "claude-opus-5-5": 922,
+   "claude-sonnet-5": 9287,
+   "claude-opus-5": 3673,
+   "claude-fable-5": 48,
+   "claude-sonnet-5-5": 437
+  },
+  "subagent_turns": {
+   "claude-sonnet-5": 1362,
+   "claude-sonnet-5-5": 200,
+   "claude-opus-5": 65
+  },
+  "output_tokens": {
+   "claude-opus-5-5": 732243,
+   "claude-sonnet-5": 8405135,
+   "claude-opus-5": 3571975,
+   "claude-fable-5": 56255,
+   "claude-sonnet-5-5": 660742
+  },
+  "model_span_main_thread": {
+   "claude-opus-5-5": [
+    "2026-09-23",
+    "2026-09-29"
+   ],
+   "claude-sonnet-5": [
+    "2026-08-22",
+    "2026-09-10"
+   ],
+   "claude-opus-5": [
+    "2026-08-22",
+    "2026-09-04"
+   ],
+   "claude-fable-5": [
+    "2026-08-28",
+    "2026-08-28"
+   ],
+   "claude-sonnet-5-5": [
+    "2026-10-15",
+    "2026-10-15"
+   ]
+  },
+  "tool_calls": {
+   "Bash": 3816,
+   "ScheduleWakeup": 874,
+   "Edit": 620,
+   "sub:Bash": 577,
+   "Read": 556,
+   "Write": 244,
+   "Monitor": 214,
+   "sub:Read": 202,
+   "SendUserFile": 129,
+   "sub:Edit": 118,
+   "TaskStop": 107,
+   "TaskUpdate": 75,
+   "WebSearch": 59,
+   "TaskCreate": 49,
+   "ToolSearch": 40,
+   "WebFetch": 39,
+   "Agent": 27,
+   "sub:WebFetch": 16,
+   "AskUserQuestion": 15,
+   "sub:WebSearch": 15
+  },
+  "engineer_messages": 499,
+  "subagent_sessions": 27,
+  "main_sessions": 6,
+  "active_hours": 135.4,
+  "active_hours_per_day": {
+   "2026-08-22": 5.78,
+   "2026-08-23": 6.62,
+   "2026-08-24": 13.72,
+   "2026-08-25": 6.4,
+   "2026-08-26": 10.35,
+   "2026-08-27": 7.37,
+   "2026-08-28": 14.92,
+   "2026-08-29": 11.26,
+   "2026-08-30": 10.49,
+   "2026-08-31": 14.31,
+   "2026-09-01": 7.92,
+   "2026-09-02": 4.63,
+   "2026-09-03": 5.76,
+   "2026-09-04": 2.76,
+   "2026-09-05": 0.81,
+   "2026-09-06": 4.45,
+   "2026-09-07": 1.11,
+   "2026-09-10": 0.06,
+   "2026-09-23": 2.69,
+   "2026-09-29": 1.85,
+   "2026-10-15": 2.15
+  },
+  "idle_gap_minutes": 20
+ }
+}

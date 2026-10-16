@@ -23,6 +23,10 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
 import numpy as np
 
+from siwfilter import palette as P
+
+P.apply()
+
 ROOT = Path(__file__).resolve().parents[3]
 OUT = Path(__file__).resolve().parent
 G = ROOT / "golden"
@@ -37,7 +41,7 @@ GOLDEN = {
 }
 BOARD_MM = {"Dual-mode N=2 (1 cavity)": 119.0, "Cascade N=3 (fabricated)": 165.8,
             "Cascade N=4": 211.0}
-COLORS = ["#1f77b4", "#2ca02c", "#d62728"]
+COLORS = [P.AZURE, P.TURQUOISE, P.PINK]
 BAND = (2.87 - 0.07175, 2.87 + 0.07175)
 
 COPIES = {
@@ -56,6 +60,7 @@ PHASES = [
     ("2026-08-30", "2026-09-03", "calibrate-and-invert"),
     ("2026-09-04", "2026-09-07", "fab files,\nCST audit"),
     ("2026-09-23", "2026-09-29", "fine-mesh final,\nJLCPCB"),
+    ("2026-10-14", "2026-10-15", "VNA measurement,\npapers, cleanup"),
 ]
 
 
@@ -66,7 +71,7 @@ def _save(fig, name):
 
 
 def fig_timeline():
-    log = subprocess.run(["git", "log", "b06bf63", "--format=%ad|%s", "--date=short"],
+    log = subprocess.run(["git", "log", "--format=%ad|%s", "--date=short"],
                          cwd=ROOT, capture_output=True, text=True).stdout.splitlines()
     kinds = {"feat": "feature", "fix": "fix", "revert": "fix", "docs": "docs / results",
              "data": "docs / results", "results": "docs / results"}
@@ -77,13 +82,14 @@ def fig_timeline():
         per_day[dt.date.fromisoformat(d)][kinds.get(k, "other")] += 1
     days = sorted(per_day)
     cats = ["feature", "fix", "docs / results", "other"]
-    cols = {"feature": "#1f77b4", "fix": "#d62728", "docs / results": "#7f7f7f",
-            "other": "#bcbd22"}
+    cols = {"feature": P.AZURE, "fix": P.PINK, "docs / results": P.SLATE,
+            "other": P.GOLD}
     # broken x axis: June prototype | Aug-Sep agent-driven work
     spans = [(dt.date(2026, 6, 5), dt.date(2026, 6, 25)),
-             (dt.date(2026, 8, 20), dt.date(2026, 10, 1))]
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.4), sharey=True,
-                             gridspec_kw={"width_ratios": [1, 2.4], "wspace": 0.04})
+             (dt.date(2026, 8, 20), dt.date(2026, 9, 9)),
+             (dt.date(2026, 9, 21), dt.date(2026, 10, 17))]
+    fig, axes = plt.subplots(1, 3, figsize=(11, 3.4), sharey=True,
+                             gridspec_kw={"width_ratios": [1, 1.4, 1.4], "wspace": 0.04})
     ymax = max(sum(per_day[d].values()) for d in days)
     for ax, (lo, hi) in zip(axes, spans):
         ds = [d for d in days if lo <= d <= hi]
@@ -104,17 +110,66 @@ def fig_timeline():
         ax.set_xticks([lo + dt.timedelta(d) for d in range(2, (hi - lo).days - 1, 7)])
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
         ax.tick_params(axis="x", labelsize=8)
-    axes[1].spines["left"].set_visible(False)
-    axes[1].tick_params(axis="y", left=False)
+    for ax in axes[1:]:
+        ax.spines["left"].set_visible(False)
+        ax.tick_params(axis="y", left=False)
     axes[0].set_ylim(0, ymax * 1.15)
     axes[0].set_ylabel("commits / day")
     axes[0].legend(loc="center", fontsize=8, ncol=1, frameon=False)
     legend = "   ".join(f"P{i}: {lab.replace(chr(10), ' ')}"
                         for i, (_, _, lab) in enumerate(PHASES, start=1))
-    fig.text(0.5, -0.1, legend, ha="center", fontsize=7.5, wrap=True)
+    fig.text(0.5, -0.14, legend, ha="center", fontsize=7, wrap=True)
     fig.suptitle(f"Project history: {len(log)} commits, "
                  f"{days[0]:%d %b} – {days[-1]:%d %b %Y}", fontsize=10)
     _save(fig, "fig_timeline.png")
+
+
+def fig_effort():
+    """Agent-active hours per day (session logs) and commits per day by model (trailers)."""
+    st = json.load(open(ROOT / "docs/paper/data/process_stats.json"))
+    hours = {dt.date.fromisoformat(k): v for k, v in st.get("sessions", {}).get("active_hours_per_day", {}).items()}
+    per_day = {dt.date.fromisoformat(k): v for k, v in st["per_day"].items()}
+    models = ["Sonnet 5", "Opus 5", "Fable 5", "Opus 5.5", "Sonnet 5.5"]
+    cols = {"Sonnet 5": P.AZURE, "Opus 5": P.ORANGE, "Fable 5": P.TURQUOISE, "Opus 5.5": P.VIOLET,
+            "Sonnet 5.5": P.PINK, "no trailer": P.LILAC}
+    spans = [(dt.date(2026, 6, 5), dt.date(2026, 6, 25)), (dt.date(2026, 8, 20), dt.date(2026, 9, 11)),
+             (dt.date(2026, 9, 21), dt.date(2026, 10, 17))]
+    fig, axes = plt.subplots(2, 3, figsize=(11, 4.6), sharey="row", sharex="col",
+                             gridspec_kw={"width_ratios": [1, 1.4, 1.4], "wspace": 0.04, "hspace": 0.12})
+    for j, (lo, hi) in enumerate(spans):
+        a = axes[0, j]
+        ds = [d for d in sorted(hours) if lo <= d <= hi]
+        a.bar(ds, [hours[d] for d in ds], color=P.NAVY, width=0.8)
+        b = axes[1, j]
+        ds = [d for d in sorted(per_day) if lo <= d <= hi]
+        bottom = np.zeros(len(ds))
+        for m in models + ["no trailer"]:
+            if m == "no trailer":
+                # commits with a trailer are split by model; commits without one are the remainder
+                v = np.array([per_day[d]["all"] - per_day[d]["agent"] for d in ds], float)
+            else:
+                v = np.array([per_day[d]["models"].get(m, 0) for d in ds], float)
+            b.bar(ds, v, bottom=bottom, color=cols[m], width=0.8, label=m)
+            bottom += v
+        for a_ in (a, b):
+            a_.set_xlim(lo, hi)
+            a_.spines[["top", "right"]].set_visible(False)
+            if j:
+                a_.spines["left"].set_visible(False)
+                a_.tick_params(axis="y", left=False)
+        b.set_xticks([lo + dt.timedelta(d) for d in range(2, (hi - lo).days - 1, 7)])
+        b.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
+        b.tick_params(axis="x", labelsize=8)
+    axes[0, 0].set_ylabel("agent-active\nhours / day")
+    axes[1, 0].set_ylabel("commits / day")
+    axes[1, 0].legend(loc="upper left", fontsize=7.5, frameon=False)
+    axes[0, 0].text(0.5, 0.5, "no session logs\n(prototype)", transform=axes[0, 0].transAxes, ha="center",
+                    va="center", fontsize=8, color="0.5")
+    tot = st.get("sessions", {}).get("active_hours")
+    fig.suptitle(f"Effort: {tot:.0f} agent-active hours (gaps over "
+                 f"{st['sessions']['idle_gap_minutes']} min excluded), {st['commits']} commits, "
+                 f"{st['with_agent_trailer']} with an agent trailer", fontsize=10)
+    _save(fig, "fig_effort.png")
 
 
 def fig_flow():
@@ -130,13 +185,13 @@ def fig_flow():
     ax.set_xlim(-0.2, 6.1); ax.set_ylim(-1.35, 1.1); ax.axis("off")
     for text, i in boxes:
         ax.add_patch(FancyBboxPatch((i + 0.02, -0.45), 0.84, 1.0,
-                     boxstyle="round,pad=0.03", fc="#e8f0fa", ec="#1f4e79", lw=1.2))
+                     boxstyle="round,pad=0.03", fc="#e6f0f9", ec=P.AZURE, lw=1.2))
         ax.text(i + 0.44, 0.05, text, ha="center", va="center", fontsize=8.2)
         if i < 5:
             ax.annotate("", xy=(i + 1.0, 0.05), xytext=(i + 0.88, 0.05),
-                        arrowprops=dict(arrowstyle="-|>", color="#1f4e79"))
+                        arrowprops=dict(arrowstyle="-|>", color=P.AZURE))
     ax.add_patch(FancyBboxPatch((0.02, -1.25), 5.84, 0.5, boxstyle="round,pad=0.03",
-                 fc="#fdf2e3", ec="#b36b00", lw=1.2))
+                 fc="#fbeee3", ec=P.ORANGE, lw=1.2))
     ax.text(2.94, -1.0, "LLM coding agent (Claude Code): writes and runs every stage "
             "through the `siw` CLI, reads solver logs, diagnoses, commits to git.\n"
             "Human: specification, topology and fab decisions, CST GUI runs, "
@@ -160,7 +215,7 @@ def fig_designs():
         axes[0].plot(f, s21, color=c, lw=1.8, label=lab)
         axes[1].plot(f, s11, color=c, lw=1.8)
     for ax, t in zip(axes, ("|S21| (dB)", "|S11| (dB)")):
-        ax.axvspan(*BAND, color="#2ca02c", alpha=0.08)
+        ax.axvspan(*BAND, color=P.TURQUOISE, alpha=0.10)
         ax.axhline(-16, color="0.5", ls=":", lw=1)
         ax.set_ylabel(t); ax.set_xlabel("Frequency (GHz)")
         ax.set_xlim(2.6, 3.15); ax.set_ylim(-40, 1); ax.grid(alpha=0.3)
@@ -215,7 +270,7 @@ def fig_calib():
         axes[0].axvline(inv["w_iris"], color="0.5", ls=":")
     axes[0].set_xlabel(r"$w_{\mathrm{iris}}$ (mm)"); axes[0].set_ylabel("k")
     axes[0].set_title("(a) internal coupling, 2-cavity eigenmode", fontsize=9)
-    axes[1].plot(*zip(*qp), "o-", color="#ff7f0e")
+    axes[1].plot(*zip(*qp), "o-", color=P.ORANGE)
     axes[1].axhline(c["targets"]["Qe"], color="0.5", ls=":")
     if "w_ext" in inv:
         axes[1].axvline(inv["w_ext"], color="0.5", ls=":")
@@ -224,7 +279,7 @@ def fig_calib():
     axes[1].set_title("(b) external Q, one driven cavity", fontsize=9)
     pts = sorted((float(w), v) for w, v in s["points"].items() if v.get("ok"))
     x = [w for w, _ in pts]; bw = [v["bw"] for _, v in pts]
-    axes[2].plot(x, bw, "o-", color="#d62728")
+    axes[2].plot(x, bw, "o-", color=P.PINK)
     for xi, (_, v) in zip(x, pts):
         axes[2].annotate(f"{v['poles']}", (xi, v["bw"]), fontsize=7,
                          xytext=(0, 5), textcoords="offset points", ha="center")
@@ -299,7 +354,7 @@ def fig_quantization():
     for lang, t in txt.items():
         fig, ax = plt.subplots(1, 3, figsize=(13, 3.8), gridspec_kw={"width_ratios": [1.2, 1.2, 1]})
         for a, fn, title in ((ax[0], before, t["a"]), (ax[1], after, t["b"])):
-            for row, (w, col) in enumerate(((6, "C0"), (9, "C3"))):
+            for row, (w, col) in enumerate(((6, P.AZURE), (9, P.PINK))):
                 y0 = 4.0 - 4.0 * row
                 for y in fn(w):
                     a.add_patch(plt.Circle((y, y0), d / 2, color=col, alpha=0.85))
@@ -312,8 +367,8 @@ def fig_quantization():
         ax[0].plot([], [], "k--", lw=0.9, label=t["edge"]); ax[0].legend(fontsize=7.5, loc="lower right", frameon=False)
         w = np.linspace(4, 22, 400)
         eff = [2 * before(x)[0] if len(before(x)) else np.nan for x in w]
-        ax[2].plot(w, w, color="C2", lw=2, label=t["new"])
-        ax[2].plot(w, eff, color="C1", lw=2, label=t["old"])
+        ax[2].plot(w, w, color=P.TURQUOISE, lw=2, label=t["new"])
+        ax[2].plot(w, eff, color=P.ORANGE, lw=2, label=t["old"])
         for (w1, w2), lab in (((6, 9), t["note"]), ((12, 15), t["note2"]), ((18, 21), t["note3"])):
             e = 2 * before(w1)[0]
             ax[2].plot([w1, w2], [e, e], "o-", color="k", ms=4, lw=0.8)
@@ -338,6 +393,7 @@ def copies():
 if __name__ == "__main__":
     copies()
     fig_timeline()
+    fig_effort()
     fig_flow()
     fig_designs()
     fig_layouts()
