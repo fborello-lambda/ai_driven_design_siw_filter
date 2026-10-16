@@ -707,9 +707,10 @@ handheld vector network analyzer (18 GHz), from 100 MHz to 5 GHz with 10 001
 points, 10 kHz IF bandwidth and −15 dBm source power. The instrument was
 calibrated at the ends of the two test cables in full two-port SOLR
 (short-open-load-reciprocal) mode with a generic SMA kit. The short, open and
-load were connected on each port; for the thru, the ends of the port 1 and
-port 2 cables were connected to each other, which the instrument treats as a
-reciprocal thru of unknown length. Isolation was omitted. The generic
+load were connected on each port. Both cables end in SMA plugs and cannot mate
+with each other, so the thru was a female-female SMA adapter of unknown length
+and loss; SOLR is meant for exactly that (the R stands for a reciprocal,
+unknown thru). Isolation was omitted. The generic
 standards are not a characterised vendor kit; the instrument was set to the
 definitions of the 3.5 mm 85033D/E kit, the nearest it offers, so the true
 offset delays, open capacitance and load return loss are unknown. The
@@ -735,7 +736,46 @@ definitions selected, full two-port SOLR with unknown thru).}
 correction. We solved the eight-term error model in software, with a one-port
 short-open-load calibration on each port and the unknown-thru step for the
 transmission terms [@ferrero1992unknownthru], using scikit-rf
-[@arsenovic2022scikitrf], and applied it to the two uncalibrated boards. The
+[@arsenovic2022scikitrf], and applied it to the two uncalibrated boards.
+
+*How it works, in short.* The analyzer does not see the board directly:
+between its receivers and each connector face sit cables, the switch and the
+instrument's own electronics. That path is modelled at each port as an
+*error box*, an unknown two-port (the eight-term model, seven independent
+terms per frequency). Calibrating means measuring known standards to solve for
+the two boxes; correcting means removing them from the filter measurement.
+Per frequency, in three steps:
+
+1. *One port at a time (SOL).* At port 1 the measured reflection
+   $\Gamma_m$ and the true $\Gamma$ are related by
+   $$ \Gamma_m = e_{00} + \frac{e_{10}e_{01}\,\Gamma}{1 - e_{11}\Gamma}, $$
+   with $e_{00}$ the directivity, $e_{11}$ the source match and $e_{10}e_{01}$
+   the reflection tracking. Multiplying out the denominator makes it linear,
+   $\Gamma_m = e_{00} + \Gamma\,\Gamma_m\,e_{11} - \Gamma\,\Delta_e$ with
+   $\Delta_e = e_{00}e_{11} - e_{10}e_{01}$, and the three standards of known
+   $\Gamma$ (short $\approx -1$, open $\approx +1$, load $\approx 0$) give a
+   $3\times3$ system. Port 2 gives $e_{33}$, $e_{22}$ and $e_{23}e_{32}$ the
+   same way.
+2. *Transmission from the unknown thru.* One term is left, the transmission
+   tracking $e_{10}e_{32}$ that links the two boxes. Classic SOLT takes it from
+   a zero-length thru, which does not exist here because the female-female
+   adapter has a length and loss we do not know. The unknown-thru method
+   [@ferrero1992unknownthru] only uses that the adapter is reciprocal,
+   $S_{21} = S_{12}$. With the boxes of step 1 known, that condition gives
+   $$ (e_{10}e_{32})^2 = e_{10}e_{01}\; e_{23}e_{32}\;
+      \frac{S_{21,m}}{S_{12,m}}, $$
+   where $S_{21,m}$ and $S_{12,m}$ are the adapter's measured transmissions.
+   The root has two solutions of opposite sign; at each frequency we keep the
+   one that leaves the corrected adapter's phase closer to an ideal thru
+   (within $\pm 90^\circ$). The sign only changes the phase of $S_{21}$, not
+   the magnitude we report.
+3. *Correction.* With both boxes known, each filter measurement is converted
+   to transfer parameters $T$, in which a cascade is a product:
+   $T_m = T_A\,T_{\text{DUT}}\,T_B$, so
+   $T_{\text{DUT}} = T_A^{-1}\,T_m\,T_B^{-1}$, then back to $S$.
+
+The instrument's switch terms were not measured, so the switch is assumed
+matched, as isolation is assumed negligible. The
 open and short follow the definitions the instrument was set to: a model of the
 85033D/E (about 30 ps offset delay and 49 fF fringing capacitance; typical
 values, not read from the instrument). The result agrees with the instrument-corrected files to a mean $|\Delta\Gamma|$ of
@@ -747,7 +787,11 @@ $+1/-1/0$ standards changes the magnitudes by less than 0.03 dB ($S_{21}$) and
 Both corrections assume the same standard definitions, so their agreement
 checks the implementation and the saved raw files, not the standards. The
 offsets and the open's capacitance mostly move the reference plane, and the
-test above bounds their effect on the magnitudes. The load is different: a
+test above bounds their effect on the magnitudes. The adapter itself shows
+it: corrected with the 85033D/E definitions it has less than 1 ps of delay,
+and with ideal standards $-64$ ps; the reference plane moves by about 32 ps per
+port with the assumed definitions, while the magnitudes change by less than
+0.09 dB. The load is different: a
 general-purpose SMA load with a 25 dB return loss, which we did not measure,
 would leave a directivity error of 0.056, comparable to the dips we want to
 read. The check thru sets an empirical bound. After the instrument calibration

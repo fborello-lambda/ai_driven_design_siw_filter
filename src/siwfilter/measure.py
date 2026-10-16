@@ -139,8 +139,9 @@ def _reflection_standard(kind: str, f_hz: np.ndarray, model: str) -> np.ndarray:
 class SoftwareCal:
     """SOL on each port + reciprocal unknown thru (Ferrero-Pisani), 8-term model.
 
-    The instrument used SOLR with an unknown thru and "omit isolation", so
-    isolation is not corrected here either.
+    The instrument used SOLR with an unknown thru (a female-female SMA adapter)
+    and "omit isolation", so isolation is not corrected here either. No switch
+    terms were saved, so the switch is assumed matched.
     """
 
     def __init__(self, ds: Dataset, model: str = "nominal"):

@@ -1142,10 +1142,11 @@ portátil Keysight FieldFox N9917A (18 GHz), entre 100 MHz y 5 GHz con 10 001
 puntos, 10 kHz de ancho de banda de FI y $-15$ dBm de potencia de la fuente.
 Calibramos el instrumento en los extremos de los dos cables de prueba en modo
 SOLR (*short-open-load-reciprocal*) completo de dos puertos, con un kit SMA
-genérico. En cada puerto conectamos el corto, el abierto y la carga; como thru
-conectamos entre sí los extremos de los cables de los puertos 1 y 2, que el
-instrumento trata como un thru recíproco de longitud desconocida. Omitimos el
-aislamiento. Los estándares del kit genérico no son un kit comercial
+genérico. En cada puerto conectamos el corto, el abierto y la carga. Los dos
+cables terminan en SMA macho y no se pueden enchufar entre sí, así que como
+thru los unimos con un adaptador SMA hembra-hembra, de longitud y pérdida
+desconocidas; SOLR está pensado justamente para eso (la R es de *reciprocal*,
+thru recíproco desconocido). Omitimos el aislamiento. Los estándares del kit genérico no son un kit comercial
 caracterizado; configuramos el instrumento con las definiciones del kit
 85033D/E de 3.5 mm, las más cercanas que ofrece, de modo que los retardos de
 desplazamiento, la capacidad del abierto y la pérdida de retorno de la carga
@@ -1177,7 +1178,48 @@ Resolvimos por software el modelo de error de ocho términos, con una
 calibración de un puerto corto-abierto-carga (SOL) en cada puerto y el paso del
 thru desconocido para los términos de transmisión [@ferrero1992unknownthru], con
 scikit-rf [@arsenovic2022scikitrf], y la aplicamos a las dos placas sin
-calibrar. El abierto y el corto siguen las definiciones con que configuramos el
+calibrar.
+
+**Cómo funciona, en términos simples.** El analizador no ve la placa
+directamente: entre su receptor y la cara de cada conector hay cables, el
+conmutador y la electrónica del propio equipo. Ese tramo se modela en cada
+puerto como una *caja de error*, un cuadripolo desconocido (modelo de ocho
+términos, siete independientes por frecuencia). Calibrar es medir patrones
+conocidos para despejar las dos cajas; corregir es quitarlas de la medición
+del filtro. Lo hicimos en tres pasos, frecuencia por frecuencia:
+
+1. *Un puerto por vez (SOL).* En el puerto 1, el coeficiente de reflexión
+   medido $\Gamma_m$ y el verdadero $\Gamma$ se relacionan por
+   $$ \Gamma_m = e_{00} + \frac{e_{10}e_{01}\,\Gamma}{1 - e_{11}\Gamma}, $$
+   con $e_{00}$ la directividad, $e_{11}$ la adaptación de fuente y
+   $e_{10}e_{01}$ el seguimiento de reflexión. Son tres incógnitas. Multiplicando
+   por el denominador la ecuación queda lineal,
+   $\Gamma_m = e_{00} + \Gamma\,\Gamma_m\,e_{11} - \Gamma\,\Delta_e$ con
+   $\Delta_e = e_{00}e_{11} - e_{10}e_{01}$, y los tres patrones de $\Gamma$
+   conocido (corto $\approx -1$, abierto $\approx +1$, carga $\approx 0$) dan
+   un sistema de $3\times3$. Lo mismo en el puerto 2 da $e_{33}$, $e_{22}$ y
+   $e_{23}e_{32}$.
+2. *Transmisión con el thru desconocido.* Falta un solo término, el
+   seguimiento de transmisión $e_{10}e_{32}$, que vincula las dos cajas. Un
+   SOLT clásico lo saca de un thru de longitud cero, que acá no existe porque
+   el adaptador hembra-hembra tiene longitud y pérdida que no conocemos. El
+   método de thru desconocido [@ferrero1992unknownthru] solo usa que el
+   adaptador es recíproco, $S_{21} = S_{12}$. Con las cajas del paso 1 ya
+   conocidas, esa condición da
+   $$ (e_{10}e_{32})^2 = e_{10}e_{01}\; e_{23}e_{32}\;
+      \frac{S_{21,m}}{S_{12,m}}, $$
+   donde $S_{21,m}$ y $S_{12,m}$ son las transmisiones medidas del adaptador.
+   La raíz tiene dos soluciones de signo opuesto; en cada frecuencia
+   elegimos la que deja la fase del adaptador corregido más cerca de la de un
+   thru ideal (dentro de $\pm 90^\circ$). El signo cambia solo la fase de
+   $S_{21}$, no su módulo, que es lo que informamos.
+3. *Corrección.* Con las dos cajas conocidas, cada medición del filtro se pasa
+   a parámetros de transferencia $T$, en los que una cascada es un producto:
+   $T_m = T_A\,T_{\text{filtro}}\,T_B$, de modo que
+   $T_{\text{filtro}} = T_A^{-1}\,T_m\,T_B^{-1}$, y se vuelve a parámetros $S$.
+
+No medimos los términos de conmutación del instrumento (*switch terms*), así
+que suponemos el conmutador adaptado, igual que el aislamiento omitido. El abierto y el corto siguen las definiciones con que configuramos el
 instrumento: un modelo del 85033D/E (unos 30 ps de retardo de desplazamiento y
 49 fF de capacidad de borde; valores típicos, no leídos del instrumento). El
 resultado coincide con los archivos corregidos por el instrumento con un
@@ -1191,6 +1233,10 @@ Ambas correcciones suponen las mismas definiciones de los estándares, de modo
 que su coincidencia verifica la implementación y los archivos crudos, no los
 estándares. Los retardos y la capacidad del abierto desplazan sobre todo el
 plano de referencia, y la prueba anterior acota su efecto sobre las magnitudes.
+El propio adaptador lo muestra: corregido con las definiciones del 85033D/E
+tiene un retardo de menos de 1 ps, y con patrones ideales, de $-64$ ps; el
+plano de referencia se corre unos 32 ps por puerto según la definición
+supuesta, mientras que las magnitudes cambian menos de 0.09 dB.
 La carga es distinta: una carga SMA de uso general con 25 dB de pérdida de
 retorno, que no medimos, dejaría un error de directividad de 0.056, comparable
 a los mínimos que queremos leer. El thru de verificación nos da una cota
