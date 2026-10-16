@@ -98,7 +98,8 @@ contamos la evolución hasta el diseño que mandamos a fabricar: el conector SMA
 real, las otras topologías (ya con vías de 1.5 mm y paso de 3.0 mm), la
 calibración con inversión y la verificación final (Secciones \ref{sec:fab} y
 \ref{sec:fabricacion}). La Sección \ref{sec:vna} presenta las mediciones de la
-placa fabricada y la Sección \ref{sec:concl} cierra con las conclusiones.
+placa fabricada, la Sección \ref{sec:q} analiza el factor de calidad cargado y
+descargado, y la Sección \ref{sec:concl} cierra con las conclusiones.
 
 ```{=latex}
 \begin{table}[t]
@@ -984,7 +985,8 @@ $l_{\text{taper}} = 15.738$ y $W_{\text{ms}} = 1.6636$ mm, sobre una placa de
 165.78 $\times$ 45.79 mm. La simulación con malla fina (2.5/0.45 mm, puertos
 coaxiales de 0.15 mm, 61 puntos) da una frecuencia central de 2.876 GHz, un
 ancho de banda de $-3$ dB de 182.3 MHz, un peor $|S_{11}|$ en banda de
-$-11.15$ dB (objetivo: 143.5 MHz y $-16$ dB) y una pérdida de inserción de
+$-11.15$ dB (objetivo: $-16$ dB y 143.5 MHz de ancho de rizado, que a $-3$ dB
+equivalen a unos 199 MHz; Sección \ref{sec:q}) y una pérdida de inserción de
 1.70 dB en el pico y 2.58 dB en el peor punto de la banda. La Tabla
 \ref{tab:comparison} (Sección \ref{sec:vna}) compara estos valores con la
 especificación y con la medición.
@@ -1220,23 +1222,24 @@ medición, porque no teníamos un kit de calibración caracterizado.
 Medimos la placa (Fig. \ref{fig:setup}) con un analizador vectorial de redes
 portátil Keysight FieldFox N9917A (18 GHz), entre 100 MHz y 5 GHz con 10 001
 puntos, 10 kHz de ancho de banda de FI y $-15$ dBm de potencia de la fuente.
-Calibramos el instrumento en los extremos de los dos cables de prueba en modo
-SOLR (*short-open-load-reciprocal*) completo de dos puertos, con un kit SMA
-genérico. En cada puerto conectamos el corto, el abierto y la carga. Los dos
+Calibramos el instrumento en los extremos de los dos cables de prueba, con una
+calibración SOLR (*short-open-load-reciprocal*) completa de dos puertos y un kit
+SMA genérico. En cada puerto conectamos el corto, el abierto y la carga. Los dos
 cables terminan en SMA macho y no se pueden enchufar entre sí, así que como
 thru los unimos con un adaptador SMA hembra-hembra, de longitud y pérdida
-desconocidas; SOLR está pensado justamente para eso (la R es de *reciprocal*,
-thru recíproco desconocido). Omitimos el aislamiento. Los estándares del kit genérico no son un kit comercial
-caracterizado; configuramos el instrumento con las definiciones del kit
-85033D/E de 3.5 mm, las más cercanas que ofrece, de modo que los retardos de
-desplazamiento, la capacidad del abierto y la pérdida de retorno de la carga
-reales son desconocidos. Los cables terminan en conectores SMA que se acoplan
-directamente con los de la placa, de modo que el plano de referencia es la cara
-del conector, como en las simulaciones. Guardamos cuatro mediciones de la misma
-placa: con los conectores soldados o apoyados contra la placa sin soldar, y en
-cada caso con la calibración del instrumento aplicada y sin ella. También
-guardamos los datos crudos del abierto, el corto, la carga y el thru, en el
-mismo plano.
+desconocidas. SOLR está pensado justamente para ese caso (la R es de
+*reciprocal*: thru recíproco y desconocido). Omitimos el aislamiento.
+
+Los estándares del kit genérico no son los de un kit comercial caracterizado.
+Configuramos el instrumento con las definiciones del kit 85033D/E de 3.5 mm, las
+más cercanas que ofrece, de modo que los retardos de desplazamiento, la
+capacidad del abierto y la pérdida de retorno de la carga reales son
+desconocidos. Como los cables, con sus conectores macho, se acoplan directamente
+con los de la placa, el plano de referencia es la cara del conector, como en las
+simulaciones. Guardamos cuatro mediciones de la misma placa: con los conectores
+soldados y con los conectores apoyados contra la placa sin soldar, y en cada
+caso con la calibración del instrumento aplicada y sin ella. También guardamos,
+en el mismo plano, los datos crudos del abierto, el corto, la carga y el thru.
 
 ```{=latex}
 \begin{figure}[t]
@@ -1253,19 +1256,19 @@ seleccionadas, SOLR completo de dos puertos con thru desconocido).}
 
 ## Recalibración por software
 
-Como los estándares nos dejaban dudas, guardamos los archivos crudos y con
-ellos hicimos una segunda corrección, independiente de la del instrumento.
-Resolvimos por software el modelo de error de ocho términos, con una
-calibración de un puerto corto-abierto-carga (SOL) en cada puerto y el paso del
-thru desconocido para los términos de transmisión [@ferrero1992unknownthru], con
-scikit-rf [@arsenovic2022scikitrf], y la aplicamos a las dos placas sin
-calibrar.
+Como los estándares nos dejaban dudas, usamos esos archivos crudos para hacer
+una segunda corrección, independiente de la del instrumento. Resolvimos por
+software el modelo de error de ocho términos: una calibración
+corto-abierto-carga (SOL) de un puerto, en cada puerto, y el método del thru
+desconocido para los términos de transmisión [@ferrero1992unknownthru]. Lo
+hicimos con scikit-rf [@arsenovic2022scikitrf] y aplicamos la corrección a las
+dos mediciones sin calibrar (con los conectores soldados y sin soldar).
 
 **Cómo funciona, en términos simples.** El analizador no ve la placa
 directamente: entre su receptor y la cara de cada conector hay cables, el
 conmutador y la electrónica del propio equipo. Ese tramo se modela en cada
 puerto como una *caja de error*, un cuadripolo desconocido (modelo de ocho
-términos, siete independientes por frecuencia). Calibrar es medir patrones
+términos, siete independientes por frecuencia). Calibrar es medir estándares
 conocidos para despejar las dos cajas; corregir es quitarlas de la medición
 del filtro. Lo hicimos en tres pasos, frecuencia por frecuencia:
 
@@ -1276,74 +1279,80 @@ del filtro. Lo hicimos en tres pasos, frecuencia por frecuencia:
    $e_{10}e_{01}$ el seguimiento de reflexión. Son tres incógnitas. Multiplicando
    por el denominador la ecuación queda lineal,
    $\Gamma_m = e_{00} + \Gamma\,\Gamma_m\,e_{11} - \Gamma\,\Delta_e$ con
-   $\Delta_e = e_{00}e_{11} - e_{10}e_{01}$, y los tres patrones de $\Gamma$
-   conocido (corto $\approx -1$, abierto $\approx +1$, carga $\approx 0$) dan
+   $\Delta_e = e_{00}e_{11} - e_{10}e_{01}$, y los tres estándares, de $\Gamma$
+   conocido (corto $\approx -1$, abierto $\approx +1$, carga $\approx 0$), dan
    un sistema de $3\times3$. Lo mismo en el puerto 2 da $e_{33}$, $e_{22}$ y
    $e_{23}e_{32}$.
 2. *Transmisión con el thru desconocido.* Falta un solo término, el
-   seguimiento de transmisión $e_{10}e_{32}$, que vincula las dos cajas. Un
-   SOLT clásico lo saca de un thru de longitud cero, que acá no existe porque
-   el adaptador hembra-hembra tiene longitud y pérdida que no conocemos. El
-   método de thru desconocido [@ferrero1992unknownthru] solo usa que el
-   adaptador es recíproco, $S_{21} = S_{12}$. Con las cajas del paso 1 ya
-   conocidas, esa condición da
+   seguimiento de transmisión $e_{10}e_{32}$, que vincula las dos cajas. Una
+   calibración SOLT clásica lo obtiene de un thru de longitud cero, que acá no
+   existe: el adaptador hembra-hembra tiene una longitud y una pérdida que no
+   conocemos. El método de thru desconocido [@ferrero1992unknownthru] solo usa
+   el hecho de que el adaptador es recíproco, $S_{21} = S_{12}$. Con las cajas
+   del paso 1 ya conocidas, esa condición da
    $$ (e_{10}e_{32})^2 = e_{10}e_{01}\; e_{23}e_{32}\;
       \frac{S_{21,m}}{S_{12,m}}, $$
    donde $S_{21,m}$ y $S_{12,m}$ son las transmisiones medidas del adaptador.
-   La raíz tiene dos soluciones de signo opuesto; en cada frecuencia
+   La raíz cuadrada tiene dos soluciones, de signo opuesto. En cada frecuencia
    elegimos la que deja la fase del adaptador corregido más cerca de la de un
    thru ideal (dentro de $\pm 90^\circ$). El signo cambia solo la fase de
-   $S_{21}$, no su módulo, que es lo que informamos.
+   $S_{21}$ y no su módulo, que es lo que informamos.
 3. *Corrección.* Con las dos cajas conocidas, cada medición del filtro se pasa
    a parámetros de transferencia $T$, en los que una cascada es un producto:
    $T_m = T_A\,T_{\text{filtro}}\,T_B$, de modo que
    $T_{\text{filtro}} = T_A^{-1}\,T_m\,T_B^{-1}$, y se vuelve a parámetros $S$.
 
 No medimos los términos de conmutación del instrumento (*switch terms*), así
-que suponemos el conmutador adaptado, igual que el aislamiento omitido. El abierto y el corto siguen las definiciones con que configuramos el
-instrumento: un modelo del 85033D/E (unos 30 ps de retardo de desplazamiento y
-49 fF de capacidad de borde; valores típicos, no leídos del instrumento). El
-resultado coincide con los archivos corregidos por el instrumento con un
-$|\Delta\Gamma|$ medio de 0.03 en $S_{11}$ y 0.04 en $S_{22}$, y de 0.17 dB en
-$S_{21}$, entre 2.6 y 3.2 GHz (Fig. \ref{fig:calcheck}). Reemplazar el modelo
-del kit por estándares ideales $+1/-1/0$ cambia las magnitudes en menos de
-0.03 dB ($S_{21}$) y 0.09 dB ($S_{11}$), y solo desplaza el plano de
-referencia.
+que supusimos el conmutador adaptado, igual que al omitir el aislamiento. El
+abierto y el corto siguen las definiciones con que configuramos el instrumento:
+un modelo del 85033D/E (unos 30 ps de retardo de desplazamiento y 49 fF de
+capacidad de borde; valores típicos, no leídos del instrumento). El resultado
+coincide con los archivos corregidos por el instrumento: el $|\Delta\Gamma|$
+medio es de 0.03 en $S_{11}$ y 0.04 en $S_{22}$, y la diferencia media en
+$S_{21}$ es de 0.17 dB, entre 2.6 y 3.2 GHz (Fig. \ref{fig:calcheck}).
+Reemplazar el modelo del kit por estándares ideales $+1/-1/0$ cambia las
+magnitudes en menos de 0.03 dB ($S_{21}$) y 0.09 dB ($S_{11}$), y solo desplaza
+el plano de referencia.
 
 **Comparación con TOSM.** La calibración clásica TOSM (*thru-open-short-match*,
-el SOLT de Keysight) usa los mismos patrones y es idéntica en los pasos 1 y 3;
-solo cambia el paso 2. TOSM declara el thru ideal, de longitud cero
+el SOLT de Keysight) usa los mismos estándares y es idéntica en los pasos 1 y 3;
+solo cambia el paso 2. TOSM declara que el thru es ideal, de longitud cero
 ($S_{11} = S_{22} = 0$, $S_{21} = S_{12} = 1$), y con esa hipótesis la medición
 del thru da el término de transmisión directamente:
 $$ S_{21,m} = \frac{e_{10}e_{32}}{1 - e_{11}\,e_{22}'}
    \;\Rightarrow\; e_{10}e_{32} = S_{21,m}\,(1 - e_{11}\,e_{22}'), $$
 $$ e_{22}' = \frac{S_{11,m} - e_{00}}{S_{11,m}\,e_{11} - \Delta_e}, $$
 donde $e_{22}'$ es la adaptación de carga del puerto 2 vista desde el puerto 1
-a través del thru, que se obtiene invirtiendo la ecuación del paso 1 (modelo de
-12 términos; el sentido inverso es análogo). Con thru desconocido, en cambio,
+a través del thru; sale de invertir la ecuación del paso 1 (modelo de 12
+términos; el sentido inverso es análogo). Con thru desconocido, en cambio,
 $S_{21,m}$ y $S_{12,m}$ tienen el mismo denominador, y su cociente lo cancela
-junto con la transmisión propia del adaptador; por eso UOSM (SOLR) no necesita
-conocer el thru y TOSM sí. Si el thru no es ideal, TOSM le carga a los términos
-de error su pérdida, su fase y su desadaptación.
+junto con la transmisión propia del adaptador. Por eso la calibración con thru
+desconocido (SOLR, también llamada UOSM) no necesita conocer el thru y TOSM sí.
+Si el thru no es ideal, TOSM atribuye a los términos de error su pérdida, su
+fase y su desadaptación.
 
-Para medir esa discrepancia calibramos los mismos archivos crudos de las dos
-formas, con las mismas definiciones de los patrones (Tabla \ref{tab:tosm}). TOSM
-cambia el término de transmisión en $+0.33$ dB y $-3.4^\circ$ en 2.87 GHz, y
-por construcción deja el adaptador corregido en 0 dB y $0^\circ$; con thru
-desconocido el adaptador queda en $+0.27$ dB y $-3.1^\circ$, y el instrumento
-lo lee en $+0.18$ dB y $-2.2^\circ$. Sobre la placa soldada, TOSM sube la
-pérdida de inserción de 2.04 a 2.39 dB, angosta la banda en 2.3 MHz y corre
-$f_c$ en 2 MHz; el peor $S_{11}$ en banda casi no cambia, y el mejor se
-profundiza 4 dB, porque en TOSM $e_{22}'$ sale del $S_{11}$ del thru y al
-declarar nula la reflexión del adaptador ($-22$ dB después de la corrección por
-thru desconocido) esa reflexión pasa a $e_{22}'$. Que la pérdida de TOSM
-coincida con la del instrumento (2.38 dB) es casual: el instrumento no trató el
-adaptador como ideal, como muestra su lectura de $+0.18$ dB, y en el resto de la
-banda TOSM no se acerca más al instrumento en transmisión ($\Delta S_{21}$
-medio $+0.14$ frente a $+0.17$ dB) y se aleja en reflexión ($|\Delta\Gamma|$
-medio 0.041 frente a 0.030). La diferencia entre los dos métodos, unos 0.35 dB
-en la pérdida de inserción, es del orden de la incertidumbre de 0.3 dB que
-asignamos a $S_{21}$ más abajo.
+Para cuantificar esa diferencia calibramos los mismos archivos crudos de las dos
+formas, con las mismas definiciones de los estándares (Tabla \ref{tab:tosm}).
+Respecto del thru desconocido, TOSM cambia el término de transmisión en
+$+0.33$ dB y $-3.4^\circ$ en 2.87 GHz, y por construcción deja el adaptador
+corregido en 0 dB y $0^\circ$. Con thru desconocido el adaptador queda en
+$+0.27$ dB y $-3.1^\circ$, y el instrumento lo lee en $+0.18$ dB y
+$-2.2^\circ$.
+
+Sobre la placa soldada, TOSM sube la pérdida de inserción de 2.04 a 2.39 dB,
+angosta la banda en 2.3 MHz y corre $f_c$ en 2 MHz. El peor $S_{11}$ en banda
+casi no cambia, y el mejor se profundiza 4 dB. La razón es que TOSM calcula
+$e_{22}'$ a partir del $S_{11}$ del thru: al declarar nula la reflexión del
+adaptador ($-22$ dB después de la corrección por thru desconocido), esa
+reflexión pasa a $e_{22}'$.
+
+Que la pérdida de TOSM coincida con la del instrumento (2.38 dB) es una
+casualidad. El instrumento no trató el adaptador como ideal, como muestra su
+lectura de $+0.18$ dB, y en el resto de la banda TOSM se acerca apenas al
+instrumento en transmisión ($\Delta S_{21}$ medio $+0.14$ frente a $+0.17$ dB) y
+se aleja en reflexión ($|\Delta\Gamma|$ medio 0.041 frente a 0.030). La
+diferencia entre los dos métodos, unos 0.35 dB en la pérdida de inserción, es
+del orden de la incertidumbre de 0.3 dB que asignamos a $S_{21}$ más abajo.
 
 <!-- BEGIN siw-table:tosm -->
 ```{=latex}
@@ -1351,7 +1360,7 @@ asignamos a $S_{21}$ más abajo.
 \centering
 \footnotesize
 \setlength{\tabcolsep}{6pt}
-\caption{Calibración por software de los mismos archivos crudos con thru desconocido (la informada) y con TOSM, que declara el adaptador hembra-hembra thru ideal de longitud cero. Placa soldada; la última columna es la calibración del propio instrumento (SOLR, thru desconocido). La fila del adaptador es el propio thru después de la corrección, en 2.87\,GHz. Diferencias medias entre 2.6 y 3.2\,GHz.}
+\caption{Calibración por software de los mismos archivos crudos con thru desconocido (la que informamos) y con TOSM, que declara ideal, de longitud cero, el thru (el adaptador hembra-hembra). Placa soldada; la última columna es la calibración del propio instrumento (SOLR, thru desconocido). La fila del adaptador es el propio thru después de la corrección, en 2.87\,GHz. Diferencias medias entre 2.6 y 3.2\,GHz.}
 \label{tab:tosm}
 \begin{tabular}{lccc}
 \hline
@@ -1372,24 +1381,26 @@ $|\Delta\Gamma|$ medio en $S_{11}$ frente al instrumento & 0.030 & 0.041 & -- \\
 ```
 <!-- END siw-table:tosm -->
 
-Ambas correcciones suponen las mismas definiciones de los estándares, de modo
-que su coincidencia verifica la implementación y los archivos crudos, no los
-estándares. Los retardos y la capacidad del abierto desplazan principalmente el
-plano de referencia, y la prueba anterior acota su efecto sobre las magnitudes.
-El propio adaptador lo muestra: corregido con las definiciones del 85033D/E
-tiene un retardo de menos de 1 ps, y con patrones ideales, de $-64$ ps; el
-plano de referencia se corre unos 32 ps por puerto según la definición
-supuesta, mientras que las magnitudes cambian menos de 0.09 dB.
-La carga es distinta: una carga SMA de uso general con 25 dB de pérdida de
-retorno, que no medimos, dejaría un error de directividad de 0.056, comparable
-a los mínimos que queremos leer. El thru de verificación nos da una cota
-empírica. Después de la calibración del instrumento devuelve +0.18 dB en
-$S_{21}$ y, en el peor caso entre 2.6 y 3.2 GHz, $-18.4$ dB en $S_{11}$; la
-calibración por software aplicada al thru crudo da +0.26 dB y $-17.6$ dB. Un
-thru pasivo no puede tener ganancia, de modo que ambas correcciones son
-optimistas en $S_{21}$, y tomamos su incertidumbre como unos 0.3 dB. Las
-reflexiones por debajo de unos $-18$ dB no se resuelven; el peor $S_{11}$ en
-banda es confiable a unos $\pm 2$ dB.
+La corrección por software y la del instrumento suponen las mismas definiciones
+de los estándares, de modo que su coincidencia verifica la implementación y los
+archivos crudos, no los estándares. Los retardos y la capacidad del abierto
+desplazan principalmente el plano de referencia, y la prueba con estándares
+ideales acota su efecto sobre las magnitudes. El propio adaptador lo muestra:
+corregido con las definiciones del 85033D/E tiene un retardo de menos de 1 ps, y
+con estándares ideales, de $-64$ ps. El plano de referencia se corre entonces
+unos 32 ps por puerto según la definición supuesta, mientras que las magnitudes
+cambian menos de 0.09 dB.
+
+Con la carga el efecto es distinto. No medimos su pérdida de retorno, y una
+carga SMA de uso general con 25 dB dejaría un error de directividad de 0.056,
+comparable a los mínimos que queremos leer. El thru de verificación (el propio
+adaptador, ya corregido) nos da una cota empírica. Después de la calibración del
+instrumento devuelve +0.18 dB en $S_{21}$ y, en el peor caso entre 2.6 y
+3.2 GHz, $-18.4$ dB en $S_{11}$; la calibración por software aplicada al thru
+crudo da +0.26 dB y $-17.6$ dB. Un thru pasivo no puede tener ganancia, de modo
+que ambas correcciones son optimistas en $S_{21}$, y tomamos su incertidumbre
+como unos 0.3 dB. Las reflexiones por debajo de unos $-18$ dB no se resuelven;
+el peor $S_{11}$ en banda es confiable a unos $\pm 2$ dB.
 
 ```{=latex}
 \begin{figure*}[t]
@@ -1410,16 +1421,17 @@ cuatro mediciones corregidas, todos procesados con el mismo código. La Fig.
 
 **Cómo obtenemos $f_c$ y el ancho de banda.** Usamos la misma definición en
 todo el informe y para todas las fuentes. En cada curva tomamos el máximo de
-$|S_{21}|$ y trazamos una línea 3 dB por debajo. Los dos cruces de esa línea a
-cada lado del pico, interpolados linealmente entre puntos del barrido, son los
-bordes de la banda $f_1$ y $f_2$. El ancho de banda es $f_2 - f_1$, y la
-frecuencia central es el punto medio, $f_c = (f_1 + f_2)/2$, no la frecuencia
-del máximo. Con rizado en la banda pasante el máximo cae sobre uno de los polos
-y puede estar lejos del centro: en Palace el máximo está en 2.860 GHz y
-$f_c$ = 2.876 GHz; en la placa soldada los dos coinciden en 2.894 GHz. Solo cuentan los
-cruces que rodean la región contigua del pico, de modo que una banda partida
-en dos no se informa como una sola banda ancha. La Fig. \ref{fig:qzoom}
-muestra la construcción sobre las curvas.
+$|S_{21}|$ y trazamos una línea 3 dB por debajo. Los dos cruces de esa línea con
+la curva, uno a cada lado del pico y calculados por interpolación lineal entre
+puntos del barrido, son los bordes de la banda, $f_1$ y $f_2$. El ancho de banda
+es $f_2 - f_1$, y la frecuencia central es el punto medio,
+$f_c = (f_1 + f_2)/2$, no la frecuencia del máximo. Con rizado en la banda de
+paso el máximo cae sobre uno de los polos y puede estar lejos del centro: en
+Palace el máximo está en 2.860 GHz y $f_c$ = 2.876 GHz; en la placa soldada los
+dos coinciden en 2.894 GHz. Solo cuentan los cruces que rodean la región
+contigua del pico, de modo que una banda partida en dos no se informa como una
+sola banda ancha. La Fig. \ref{fig:qzoom} muestra la construcción sobre las
+curvas.
 
 <!-- BEGIN siw-table:comparison -->
 ```{=latex}
@@ -1427,7 +1439,7 @@ muestra la construcción sobre las curvas.
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\caption{Filtro N=3 en cascada fabricado: especificación, simulación y medición. Todas las columnas se procesan con el mismo código: $f_c$ es el punto medio de los dos cruces 3\,dB por debajo del pico de $S_{21}$, y el ancho de banda su distancia. La banda es $2.870\pm1.4\%$\,GHz (la banda especificada del 5\,\%). CST corresponde a la geometría previa al recorte. Las cifras de Palace en banda son de la geometría fabricada; su $S_{21}$ en 2.45/3.5\,GHz y la espuria provienen del barrido de 0--8\,GHz previo al recorte. La espuria es el mayor $S_{21}$ entre 3.6 y 5.0\,GHz. Columnas medidas: VNA = calibración del instrumento, SW = recalibración por software de los archivos sin calibrar (Sec.~\ref{sec:vna}); S = conectores soldados, U = sin soldar (\emph{unsoldered}), C = calibrado. $Q_L$ y $Q_u$ efectivo se definen en la Sec.~\ref{sec:q}. El ancho de banda especificado es el de rizado de 0.1\,dB; el $Q_L$ de la especificación es el del prototipo ideal a $-3$\,dB (199\,MHz), no $1/\mathrm{FBW} = 20$.}
+\caption{Filtro N=3 en cascada fabricado: especificación, simulación y medición. Todas las columnas se procesan con el mismo código: $f_c$ es el punto medio de los dos cruces 3\,dB por debajo del pico de $S_{21}$, y el ancho de banda su distancia. La banda es $2.870\pm2.5\%$\,GHz, es decir 2.798--2.942\,GHz (la banda especificada del 5\,\%). CST corresponde a la geometría previa al recorte. Las cifras de Palace en banda son de la geometría fabricada; su $S_{21}$ en 2.45/3.5\,GHz y la espuria provienen del barrido de 0--8\,GHz previo al recorte. La espuria es el mayor $S_{21}$ entre 3.6 y 5.0\,GHz. Columnas medidas: VNA = calibración del instrumento, SW = recalibración por software de los archivos sin calibrar (Sec.~\ref{sec:vna}); S = conectores soldados, U = sin soldar (\emph{unsoldered}), C = calibrado. $Q_L$ y $Q_u$ efectivo se definen en la Sec.~\ref{sec:q}. El ancho de banda especificado es el de rizado de 0.1\,dB; el $Q_L$ de la especificación es el del prototipo ideal a $-3$\,dB (199\,MHz), no $1/\mathrm{FBW} = 20$.}
 \label{tab:comparison}
 \begin{tabular}{lccccccc}
 \hline
@@ -1471,7 +1483,7 @@ medida está centrada en 2.894 GHz (soldada) y 2.898 GHz (sin soldar), frente a
 (0.6 %) respecto de la simulación corresponde a una permitividad efectiva
 alrededor de 1.3 % menor que el 3.66 usado en el diseño, bien dentro de la
 dispersión entre los valores de diseño y de proceso de un laminado; no lo
-verificamos. El ancho de banda de $-3$ dB es de 171 a 174 MHz, entre 5 y 6 %
+verificamos. El ancho de banda de $-3$ dB es de 171 a 174 MHz, entre 4 y 6 %
 menor que en Palace.
 
 Después miramos la pérdida de inserción. El pico de $S_{21}$ es $-2.38$ y
@@ -1486,8 +1498,8 @@ efectivo. Manteniendo los acoplamientos ajustados en Palace y variando solo
 $Q_u$, el modelo da 1.1 dB y tres ceros de reflexión con $Q_u$ = 270, 1.7 dB y
 dos ceros con 180, y 2.3 dB y un cero con 130 (la Fig. \ref{fig:measvsim}b
 muestra uno). La pérdida medida corresponde entonces a un $Q_u$ de
-aproximadamente 130 a 185 con ese modelo. La subsección siguiente lo lee
-directamente de las curvas. No pudimos separar los efectos de la rugosidad del
+aproximadamente 130 a 185 con ese modelo. La Sección \ref{sec:q} lo lee
+directamente de las curvas, con dos estimaciones. No pudimos separar los efectos de la rugosidad del
 cobre, la fuga por la fila de vías, las soldaduras, el conector y el acabado
 ENIG en las líneas de alimentación.
 
@@ -1563,7 +1575,7 @@ bandas espurias, pero no en adaptación.
 \includegraphics[width=0.85\textwidth]{figures/fig_q_zoom_es.png}
 \caption{Q cargado leído de $|S_{21}|$. La línea punteada está 3\,dB por
 debajo del pico de cada curva y va de borde a borde de la banda; la flecha
-marca el ancho de banda y el recuadro, $Q_L = f_c/\mathrm{BW}$.}
+marca el ancho de banda y el recuadro indica $Q_L = f_c/\mathrm{BW}$.}
 \label{fig:qzoom}
 \vspace{0.6em}
 \includegraphics[width=0.72\textwidth]{figures/fig_q_comparison_es.png}
@@ -1571,15 +1583,15 @@ marca el ancho de banda y el recuadro, $Q_L = f_c/\mathrm{BW}$.}
 (barras rayadas). (a) Q cargado: el valor comparable es el del prototipo ideal
 a $-3$\,dB (14.4), no $1/\mathrm{FBW}$ (20, banda de rizado). (b) $Q_u$
 efectivo despejado de la pérdida de inserción, frente al límite del dieléctrico
-(270) y al de dieléctrico más cobre liso (180). Rombos: el mismo $Q_u$ desde el
-retardo de grupo, Ec. (\ref{eq:qdelay}).}
+(270) y al del dieléctrico más cobre liso (180). Rombos: el mismo $Q_u$ estimado
+a partir del retardo de grupo, Ec. (\ref{eq:qdelay}).}
 \label{fig:qcomp}
 \end{figure*}
 ```
 
 La respuesta se puede resumir con dos factores de calidad. El **Q cargado** del
-filtro, $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$, dice qué tan angosta es la
-banda pasante con los puertos conectados. Lo leímos directamente de $|S_{21}|$:
+filtro, $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$, indica qué tan angosta es la
+banda de paso con los puertos conectados. Lo leímos directamente de $|S_{21}|$:
 la línea punteada de la Fig. \ref{fig:qzoom} está 3 dB por debajo del pico de
 cada curva, y sus extremos son los bordes de la banda. El **Q descargado**
 $Q_u$ mide la pérdida propia de cada resonador y fija la pérdida de inserción
@@ -1591,7 +1603,7 @@ En el filtro completo los dos cumplen papeles distintos:
 
 - $Q_L$ lo fijan los acoplamientos ($k$ y $Q_e$). Define el ancho de banda y
   casi no depende de $Q_u$ mientras $Q_u \gg Q_L$.
-- $Q_u$ no cambia el ancho de banda, pero fija la pérdida de inserción.
+- $Q_u$ casi no cambia el ancho de banda, pero fija la pérdida de inserción.
   Escribiendo la Ec. \ref{eq:il} en términos del $Q$ cargado de la banda de
   rizado, $Q_{L,\text{rizado}} = 1/\mathrm{FBW}$,
   $$ \mathrm{IL}_0 \approx 4.343 \sum_i g_i \, \frac{Q_{L,\text{rizado}}}{Q_u}\ \text{dB}. $$
@@ -1602,15 +1614,15 @@ En el filtro completo los dos cumplen papeles distintos:
 de banda de *rizado* de 0.1 dB, 143.5 MHz, y su $Q$ es
 $1/\mathrm{FBW} = 20$. A $-3$ dB el prototipo de Chebyshev ideal de orden 3 es
 $\cosh\!\big(\tfrac{1}{N}\operatorname{arccosh}\sqrt{(10^{0.3}-1)/(10^{0.01}-1)}\big)
-= 1.39$ veces más ancho: 199 MHz, es decir $Q_L = 14.4$. Ese es el valor
-comparable con lo que medimos, porque todas las cifras de ancho de banda de este
-informe son a $-3$ dB. Palace da 15.8, CST 16.0 y la placa 16.9 (16.8 con la
-calibración por software). Con esa referencia la banda a $-3$ dB no es más
-ancha que la del diseño sino entre 9 % (Palace) y 14 % (placa) más angosta, lo
-que coincide con un acoplamiento interno algo menor que el objetivo en el
-ajuste de matriz ($k_{12} = 0.042$ en Palace y 0.044 en la placa, frente a
-0.046). Las comparaciones anteriores contra 143.5 MHz mezclan las dos
-definiciones de ancho de banda.
+= 1.39$ veces más ancho que el de rizado: 199 MHz, es decir $Q_L = 14.4$. Ese
+es el valor comparable con lo que medimos, porque todas las cifras de ancho de
+banda medidas y simuladas de este informe son a $-3$ dB. Palace da 15.8, CST
+16.0 y la placa 16.9 (16.8 con la calibración por software). Con esa referencia
+la banda a $-3$ dB no es más ancha que la del diseño sino entre 9 % (Palace) y
+14 % (placa) más angosta. Eso coincide con un acoplamiento interno algo menor
+que el objetivo en el ajuste de matriz ($k_{12} = 0.042$ en Palace y 0.044 en
+la placa, frente a 0.046). Las comparaciones anteriores contra 143.5 MHz mezclan
+las dos definiciones de ancho de banda.
 
 **$Q_u$ efectivo.** Despejamos $Q_u$ de la Ec. \ref{eq:il} con la pérdida
 medida en el pico. El FBW de esa ecuación es el de rizado, así que dividimos el
@@ -1618,22 +1630,23 @@ FBW medido a $-3$ dB por 1.39. Probamos el procedimiento sobre el prototipo
 ideal con pérdidas: con $Q_u = 270$ devuelve 270, y con 180 devuelve 181. Como
 toda la pérdida (desadaptación, alimentación, radiación, conector) se carga a
 los resonadores, el resultado es un $Q_u$ *efectivo*, una cota inferior del
-propio del resonador. Palace da 179 y CST 173. Las dos simulaciones tienen
-paredes de conductor perfecto, cuyo techo es el dieléctrico, $Q_d = 270$; la
-diferencia es la desadaptación y la alimentación del balance de la Tabla
-\ref{tab:lossbudget}. La placa da 138 con la calibración del instrumento y 159
-con la de software, dentro del rango de 130 a 185 que dio el modelo directo de
-la matriz de acoplamiento (Sección \ref{sec:vna}). La placa queda entre 0.77 y
-0.89 veces el valor de Palace; esa diferencia es lo que suman el cobre, el
-acabado ENIG y el conector real, que las simulaciones no tienen. La referencia
-con cobre liso, $1/Q_u = 1/Q_d + 1/Q_c$ con $Q_c \approx 540$, da 180 para el
-resonador solo.
+$Q_u$ propio del resonador. Palace da 179 y CST 173. Las dos simulaciones tienen
+paredes de conductor perfecto, así que su techo es el del dieléctrico,
+$Q_d = 270$. La diferencia con ese valor es la desadaptación y la alimentación
+del balance de la Tabla \ref{tab:lossbudget}. La placa da 138 con la calibración
+del instrumento y 159 con la de software, dentro del rango de 130 a 185 que dio
+el modelo directo de la matriz de acoplamiento (Sección \ref{sec:vna}). La placa
+queda entre 0.77 y 0.89 veces el valor de Palace. Esa diferencia es compatible
+con las pérdidas que suman el cobre, el acabado ENIG y el conector real, que las
+simulaciones no incluyen; no pudimos separarlas (Sección \ref{sec:vna}). La
+referencia con cobre liso, $1/Q_u = 1/Q_d + 1/Q_c$ con $Q_c \approx 540$, da 180
+para el resonador solo.
 
 **Una segunda estimación, desde el retardo de grupo.** La Ec. \ref{eq:il} necesita
 los valores $g$ y el ancho de banda. Esta segunda estimación no necesita ninguno
-de los dos. En el tiempo $\tau_0$ que una señal pasa dentro del filtro, la
-energía almacenada decae en el factor $\exp(-\omega_0\tau_0/Q_u)$, que son
-$4.343\,\omega_0\tau_0/Q_u$ dB. Igualando esto a la pérdida disipada,
+de los dos. Durante el tiempo $\tau_0$ que una señal pasa dentro del filtro, la
+energía almacenada decae según el factor $\exp(-\omega_0\tau_0/Q_u)$, que
+equivale a $4.343\,\omega_0\tau_0/Q_u$ dB. Igualando esto a la pérdida disipada,
 
 ```{=latex}
 \begin{equation}
@@ -1645,20 +1658,22 @@ L_\mathrm{diss} = -10\log_{10}\frac{|S_{21}|^2}{1-|S_{11}|^2}.
 ```
 
 $\tau_0$ es el retardo de grupo de $S_{21}$ en el máximo de transmisión (la
-pendiente de la fase en una apertura de 10 MHz) y $L_\mathrm{diss}$ es la
-potencia que no se refleja ni se transmite. Sobre el prototipo ideal con
-pérdidas, la Ec. \ref{eq:qdelay} devuelve 270 para $Q_u = 270$ y 180 para 180;
-la Ec. \ref{eq:il} devuelve 277 y 187. Palace da 222 y la placa 156 (calibración
-del instrumento) y 183 (calibración por software); son los rombos de la Fig. \ref{fig:qcomp}b, y la
-Fig. \ref{fig:qdelay} muestra el retardo. Los
-dos métodos tratan distinto las líneas de alimentación. La Ec. \ref{eq:il} carga
-toda la pérdida a los resonadores, así que es una cota inferior de su $Q_u$. La
-Ec. \ref{eq:qdelay} cuenta además el retardo de las líneas y de la transición
-como energía almacenada, así que da valores mayores. Para Palace, cuyas
-cavidades tienen exactamente $Q_u = 270$, dan 179 y 222. Coinciden en lo
-principal: la placa queda entre 11 y 30 % por debajo de Palace. Sumar cobre liso
-en serie al valor de Palace da $1/(1/222 + 1/540) \approx 158$, que es donde está la
-placa (156 a 183).
+pendiente de la fase en una ventana de 10 MHz) y $L_\mathrm{diss}$ es la
+pérdida disipada, es decir, la potencia que no se refleja ni se transmite.
+Sobre el prototipo ideal con pérdidas, la Ec. \ref{eq:qdelay} devuelve 270 para
+$Q_u = 270$ y 180 para 180, y la Ec. \ref{eq:il} devuelve entre 270 y 277, y entre 181 y 187, con menos de 4 % de error. Palace da
+222 y la placa 156 (calibración del instrumento) y 183 (calibración por
+software); son los rombos de la Fig. \ref{fig:qcomp}b, y la Fig.
+\ref{fig:qdelay} muestra el retardo.
+
+Los dos métodos tratan de forma distinta las líneas de alimentación. La
+Ec. \ref{eq:il} carga toda la pérdida a los resonadores, así que da una cota
+inferior de su $Q_u$. La Ec. \ref{eq:qdelay} cuenta además el retardo de las
+líneas y de la transición como energía almacenada, así que da valores mayores.
+Para Palace, cuyas cavidades tienen exactamente $Q_u = 270$, las dos ecuaciones
+dan 179 y 222, respectivamente. Coinciden en lo principal: la placa queda entre
+11 y 30 % por debajo de Palace. Sumar cobre liso en serie al valor de Palace da
+$1/(1/222 + 1/540) \approx 158$, que es donde está la placa (156 a 183).
 
 ```{=latex}
 \begin{figure}[t]
@@ -1694,11 +1709,15 @@ Medimos el filtro N=3 fabricado con un analizador vectorial de redes (Sección
 \ref{sec:vna}). La banda medida queda centrada en 2.894 GHz, 18 MHz por encima
 de la simulación y 24 MHz por encima del objetivo, con 171 MHz de ancho de
 banda. La pérdida de inserción es de 2.0 a 2.4 dB, entre 0.3 y 0.7 dB mayor que
-la de Palace, lo que equivale a un factor de calidad descargado efectivo de 130
-a 185. En el modelo de matriz, esa pérdida fusiona los tres ceros de reflexión
-simulados en uno, y el peor $|S_{11}|$ en banda es de $-5$ dB, frente a $-11$ dB
-simulados y $-16$ dB especificados: no alcanzamos la especificación de
-adaptación ni de ancho de banda. Los estándares de calibración genéricos
+la de Palace, lo que equivale a un factor de calidad descargado efectivo de 138
+a 159 si se despeja de la pérdida de inserción, y de 156 a 183 si se lee del
+retardo de grupo (Palace da 179 y 222; Sección \ref{sec:q}). En el modelo de
+matriz, esa pérdida fusiona los tres ceros de reflexión simulados en uno, y el
+peor $|S_{11}|$ en banda es de $-5$ dB, frente a $-11$ dB simulados y $-16$ dB
+especificados: no alcanzamos la especificación de adaptación. El ancho de banda
+medido, 171 MHz a $-3$ dB, no se compara con los 143.5 MHz de la especificación,
+que son de rizado: frente a los 199 MHz del prototipo ideal a $-3$ dB, la banda
+queda 14 % más angosta (Sección \ref{sec:q}). Los estándares de calibración genéricos
 limitan la lectura de los ceros (piso de unos $-18$ dB), pero no la del peor
 punto de $-5$ dB. La recalibración por software de los archivos crudos coincide
 con la del instrumento en promedio dentro de 0.2 dB en $S_{21}$ (hasta 1 dB en

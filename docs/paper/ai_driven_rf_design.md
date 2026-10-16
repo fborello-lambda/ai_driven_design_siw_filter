@@ -13,7 +13,7 @@ abstract: |
   substrate integrated waveguide bandpass filter. A large-language-model
   coding agent wrote and operated the entire toolchain: Chebyshev synthesis,
   parametric geometry, finite-element simulation with the open-source solver
-  Palace, Bayesian optimization, and the export of fabrication files. One
+  Palace, Bayesian optimization, and exporting fabrication files. One
   engineer set the specification, took the design decisions and ran the
   commercial-solver cross-checks. Three results stand out. First, a
   Gaussian-process optimizer applied to the assembled filter never reached a
@@ -28,9 +28,9 @@ abstract: |
   It is centred at 2.894 GHz with 171 MHz bandwidth, 2.0 to 2.4 dB insertion loss and
   one broad reflection minimum near -18 dB. This is the floor of the calibration
   check. The simulation predicted 2.876 GHz, 182 MHz, 1.7 dB and three zeros.
-  The measured loss matches an effective unloaded Q of 150 to 185, as expected
-  once the copper loss is added to the simulation. The -16 dB specification is
-  not met.
+  The measured loss matches an effective unloaded Q of about 140 to 185,
+  depending on the estimator, as expected once copper loss is added to the
+  simulation. The -16 dB specification is not met.
 bibliography: references.bib
 csl: ieee-jestpe.csl
 link-citations: true
@@ -113,7 +113,8 @@ The contributions are:
    specification by coupling-matrix extraction. This item also covers a
    documented dual-mode negative result, an insertion-loss budget, a launch
    study and the manufacturing path. It ends with the measurement of the
-   fabricated board with a vector network analyzer (VNA) (Secs. VI to VIII).
+   fabricated board with a vector network analyzer (VNA), and the quality
+   factors read from it (Secs. VI to IX).
 
 # Filter specification and synthesis
 
@@ -845,22 +846,22 @@ measurement cannot exclude it on the feed lines (Sec. VIII).
 ## Setup and calibration
 
 The board (Fig. \ref{fig:setup}) was measured with a Keysight FieldFox N9917A
-handheld vector network analyzer (18 GHz), from 100 MHz to 5 GHz with 10 001
-points, 10 kHz IF bandwidth and −15 dBm source power. The instrument was
-calibrated at the ends of the two test cables in full two-port SOLR
-(short-open-load-reciprocal) mode with a generic SMA kit. The short, open and
-load were connected on each port. Both cables end in SMA plugs and cannot mate
-with each other, so the thru was a female-female SMA adapter of unknown length
-and loss; SOLR is meant for exactly that (the R stands for a reciprocal,
-unknown thru). Isolation was omitted. The generic
-standards are not a characterised vendor kit; the instrument was set to the
-definitions of the 3.5 mm 85033D/E kit, the nearest it offers, so the true
-offset delays, open capacitance and load return loss are unknown. The
-cables end in SMA plugs that mate directly with the board's jacks, so the
-reference plane is the connector face, as in the simulations. Four states of
-the same board were saved: connectors soldered, or seated against the board
-without solder, each with the instrument calibration applied and without it.
-The raw open, short, match and thru were saved as well, at the same plane.
+handheld vector network analyzer (18 GHz). The sweep ran from 100 MHz to 5 GHz
+with 10 001 points, 10 kHz IF bandwidth and −15 dBm source power. We calibrated
+the instrument at the ends of the two test cables. The mode was full two-port
+SOLR (short-open-load-reciprocal), with a generic SMA kit. The short, open and
+load were connected on each port. Both cables end in SMA plugs, so they cannot
+mate with each other. The thru was therefore a female-female SMA adapter of
+unknown length and loss. SOLR is meant for exactly this case: the R stands for
+a reciprocal, unknown thru. We omitted isolation. The generic standards are not
+a characterised vendor kit. We set the instrument to the definitions of the
+3.5 mm 85033D/E kit, the nearest it offers. The true offset delays, open
+capacitance and load return loss are therefore unknown. The plugs mate directly
+with the board's jacks, so the reference plane is the connector face, as in the
+simulations. We saved four states of the same board: connectors soldered, or
+seated against the board without solder, each with the instrument calibration
+applied and without it. We also saved the raw open, short, match and thru, at
+the same plane.
 
 ```{=latex}
 \begin{figure}[t]
@@ -875,91 +876,93 @@ definitions selected, full two-port SOLR with unknown thru).}
 ```
 
 **Software recalibration.** The raw standards allow a second, independent
-correction. We solved the eight-term error model in software, with a one-port
-short-open-load calibration on each port and the unknown-thru step for the
-transmission terms [@ferrero1992unknownthru], using scikit-rf
-[@arsenovic2022scikitrf], and applied it to the two uncalibrated boards.
+correction. We solved the eight-term error model in software with scikit-rf
+[@arsenovic2022scikitrf]. Each port gets a one-port short-open-load
+calibration. The unknown-thru step gives the transmission terms
+[@ferrero1992unknownthru]. We applied the result to the two uncalibrated
+boards.
 
-*How it works, in short.* The analyzer does not see the board directly:
-between its receivers and each connector face sit cables, the switch and the
-instrument's own electronics. That path is modelled at each port as an
-*error box*, an unknown two-port (the eight-term model, seven independent
-terms per frequency). Calibrating means measuring known standards to solve for
-the two boxes; correcting means removing them from the filter measurement.
-Per frequency, in three steps:
+*How it works, in short.* The analyzer does not see the board directly.
+Between its receivers and each connector face sit cables, the switch and the
+instrument's own electronics. We model that path at each port as an
+*error box*, an unknown two-port. This is the eight-term model, with seven
+independent terms per frequency. To calibrate, we measure known standards and
+solve for the two boxes. To correct, we remove the boxes from the filter
+measurement. At each frequency there are three steps:
 
-1. *One port at a time (SOL).* At port 1 the measured reflection
-   $\Gamma_m$ and the true $\Gamma$ are related by
+1. *One port at a time (SOL).* At port 1, the measured reflection
+   $\Gamma_m$ and the true reflection $\Gamma$ are related by
    $$ \Gamma_m = e_{00} + \frac{e_{10}e_{01}\,\Gamma}{1 - e_{11}\Gamma}, $$
-   with $e_{00}$ the directivity, $e_{11}$ the source match and $e_{10}e_{01}$
-   the reflection tracking. Multiplying out the denominator makes it linear,
+   where $e_{00}$ is the directivity, $e_{11}$ is the source match and
+   $e_{10}e_{01}$ is the reflection tracking. Multiplying out the denominator
+   makes the relation linear:
    $\Gamma_m = e_{00} + \Gamma\,\Gamma_m\,e_{11} - \Gamma\,\Delta_e$ with
-   $\Delta_e = e_{00}e_{11} - e_{10}e_{01}$, and the three standards of known
-   $\Gamma$ (short $\approx -1$, open $\approx +1$, load $\approx 0$) give a
-   $3\times3$ system. Port 2 gives $e_{33}$, $e_{22}$ and $e_{23}e_{32}$ the
-   same way.
-2. *Transmission from the unknown thru.* One term is left, the transmission
-   tracking $e_{10}e_{32}$ that links the two boxes. Classic SOLT takes it from
-   a zero-length thru, which does not exist here because the female-female
-   adapter has a length and loss we do not know. The unknown-thru method
-   [@ferrero1992unknownthru] only uses that the adapter is reciprocal,
+   $\Delta_e = e_{00}e_{11} - e_{10}e_{01}$. The three standards have known
+   $\Gamma$ (short $\approx -1$, open $\approx +1$, load $\approx 0$). They
+   give a $3\times3$ system. Port 2 gives $e_{33}$, $e_{22}$ and $e_{23}e_{32}$
+   in the same way.
+2. *Transmission from the unknown thru.* One term is left: the transmission
+   tracking $e_{10}e_{32}$, which links the two boxes. Classic SOLT takes it
+   from a zero-length thru. No such thru exists here, because the female-female
+   adapter has an unknown length and loss. The unknown-thru method
+   [@ferrero1992unknownthru] uses only one fact: the adapter is reciprocal,
    $S_{21} = S_{12}$. With the boxes of step 1 known, that condition gives
    $$ (e_{10}e_{32})^2 = e_{10}e_{01}\; e_{23}e_{32}\;
       \frac{S_{21,m}}{S_{12,m}}, $$
    where $S_{21,m}$ and $S_{12,m}$ are the adapter's measured transmissions.
-   The root has two solutions of opposite sign; at each frequency we keep the
+   The root has two solutions of opposite sign. At each frequency we keep the
    one that leaves the corrected adapter's phase closer to an ideal thru
-   (within $\pm 90^\circ$). The sign only changes the phase of $S_{21}$, not
+   (within $\pm 90^\circ$). The sign changes only the phase of $S_{21}$, not
    the magnitude we report.
-3. *Correction.* With both boxes known, each filter measurement is converted
-   to transfer parameters $T$, in which a cascade is a product:
-   $T_m = T_A\,T_{\text{DUT}}\,T_B$, so
-   $T_{\text{DUT}} = T_A^{-1}\,T_m\,T_B^{-1}$, then back to $S$.
+3. *Correction.* With both boxes known, we convert each filter measurement to
+   transfer parameters $T$, in which a cascade is a product:
+   $T_m = T_A\,T_{\text{DUT}}\,T_B$. So
+   $T_{\text{DUT}} = T_A^{-1}\,T_m\,T_B^{-1}$. We then convert back to $S$.
 
-The instrument's switch terms were not measured, so the switch is assumed
-matched, as isolation is assumed negligible. The
-open and short follow the definitions the instrument was set to: a model of the
-85033D/E (about 30 ps offset delay and 49 fF fringing capacitance; typical
-values, not read from the instrument). The result agrees with the instrument-corrected files to a mean $|\Delta\Gamma|$ of
-0.03 for $S_{11}$ and 0.04 for $S_{22}$, and to 0.17 dB for $S_{21}$, over
-2.6–3.2 GHz (Fig. \ref{fig:calcheck}). Replacing the kit model by ideal
-$+1/-1/0$ standards changes the magnitudes by less than 0.03 dB ($S_{21}$) and
-0.09 dB ($S_{11}$) and only moves the reference plane.
+We did not measure the instrument's switch terms. We assume that the switch is
+matched and that isolation is negligible. The open and short follow the
+definitions the instrument was set to. They use a model of the 85033D/E, with
+about 30 ps offset delay and 49 fF fringing capacitance. These are typical
+values, not values read from the instrument. The result agrees with the
+instrument-corrected files over 2.6–3.2 GHz (Fig. \ref{fig:calcheck}). The mean
+$|\Delta\Gamma|$ is 0.03 for $S_{11}$ and 0.04 for $S_{22}$. For $S_{21}$ the
+mean difference is 0.17 dB. If we use ideal $+1/-1/0$ standards instead of the
+kit model, the magnitudes change by less than 0.03 dB ($S_{21}$) and 0.09 dB
+($S_{11}$). The standards only move the reference plane.
 
 *Comparison with TOSM.* Classic TOSM (thru-open-short-match, Keysight's SOLT)
-uses the same standards and is identical in steps 1 and 3; only step 2
-changes. TOSM declares the thru ideal and of zero length
-($S_{11} = S_{22} = 0$, $S_{21} = S_{12} = 1$), and with that assumption the
-thru measurement gives the transmission term directly:
+uses the same standards. It is identical to our method in steps 1 and 3. Only
+step 2 changes. TOSM declares the thru ideal and of zero length
+($S_{11} = S_{22} = 0$, $S_{21} = S_{12} = 1$). With that assumption, the thru
+measurement gives the transmission term directly:
 $$ S_{21,m} = \frac{e_{10}e_{32}}{1 - e_{11}\,e_{22}'}
    \;\Rightarrow\; e_{10}e_{32} = S_{21,m}\,(1 - e_{11}\,e_{22}'), $$
 $$ e_{22}' = \frac{S_{11,m} - e_{00}}{S_{11,m}\,e_{11} - \Delta_e}, $$
-where $e_{22}'$ is the port-2 load match seen from port 1 through the thru,
-found by inverting the step-1 equation (12-term model; the reverse direction is
-analogous). With an unknown thru, by contrast, $S_{21,m}$ and $S_{12,m}$ share
-the same denominator, and their ratio cancels it together with the adapter's
-own transmission; this is why UOSM (SOLR) does not need to know the thru and
-TOSM does. If the thru is not ideal, TOSM loads its loss, phase and mismatch
-into the error terms.
+where $e_{22}'$ is the port-2 load match seen from port 1 through the thru. We
+find it by inverting the step-1 equation (12-term model; the reverse direction
+is analogous). With an unknown thru, $S_{21,m}$ and $S_{12,m}$ share the same
+denominator. Their ratio cancels it, together with the adapter's own
+transmission. This is why the unknown-thru method (UOSM, here SOLR) does not
+need to know the thru, and TOSM does. If the thru is not ideal, TOSM loads its
+loss, phase and mismatch into the error terms.
 
-To size that discrepancy we calibrated the same raw files both ways, with the
-same standard definitions (Table \ref{tab:tosm}). TOSM changes the
-transmission term by $+0.33$ dB and $-3.4^\circ$ at 2.87 GHz and, by
-construction, leaves the corrected adapter at 0 dB and $0^\circ$; with the
-unknown thru the adapter reads $+0.27$ dB and $-3.1^\circ$, and the instrument
-reads it at $+0.18$ dB and $-2.2^\circ$. On the soldered board TOSM raises the
-insertion loss from 2.04 to 2.39 dB, narrows the band by 2.3 MHz and moves
-$f_c$ by 2 MHz; the worst in-band $S_{11}$ barely changes, and the best one
-deepens by 4 dB, because in TOSM $e_{22}'$ comes from the thru's $S_{11}$ and
-declaring the adapter's reflection zero ($-22$ dB after the unknown-thru
-correction) moves that reflection into $e_{22}'$. That the TOSM loss matches the
-instrument's (2.38 dB) is a coincidence: the instrument did not treat the
-adapter as ideal, as its $+0.18$ dB reading shows, and over the rest of the band
-TOSM is no closer to the instrument in transmission (mean $\Delta S_{21}$
-$+0.14$ against $+0.17$ dB) and further in reflection (mean $|\Delta\Gamma|$
-0.041 against 0.030). The difference between the two methods, about 0.35 dB in
-insertion loss, is of the order of the 0.3 dB uncertainty assigned to $S_{21}$
-below.
+To size that discrepancy, we calibrated the same raw files both ways, with the
+same standard definitions (Table \ref{tab:tosm}). At 2.87 GHz, TOSM changes the
+transmission term by $+0.33$ dB and $-3.4^\circ$. By construction, it leaves
+the corrected adapter at 0 dB and $0^\circ$. With the unknown thru, the adapter
+reads $+0.27$ dB and $-3.1^\circ$. The instrument reads it at $+0.18$ dB and
+$-2.2^\circ$. On the soldered board, TOSM raises the insertion loss from 2.04
+to 2.39 dB, narrows the band by 2.3 MHz and moves $f_c$ by 2 MHz. The worst
+in-band $S_{11}$ barely changes, but the best one deepens by 4 dB. The reason
+is that in TOSM $e_{22}'$ comes from the thru's $S_{11}$. Declaring the
+adapter's reflection zero ($-22$ dB after the unknown-thru correction) moves
+that reflection into $e_{22}'$. The TOSM loss matches the instrument's
+(2.38 dB) only by coincidence. The instrument did not treat the adapter as
+ideal, as its $+0.18$ dB reading shows. Over the rest of the band, TOSM is no
+closer to the instrument in transmission (mean $\Delta S_{21}$ $+0.14$ against
+$+0.17$ dB). It is further away in reflection (mean $|\Delta\Gamma|$ 0.041
+against 0.030). The two methods differ by about 0.35 dB in insertion loss. This
+is of the order of the 0.3 dB uncertainty assigned to $S_{21}$ below.
 
 <!-- BEGIN siw-table:tosm -->
 ```{=latex}
@@ -988,23 +991,22 @@ Mean $|\Delta\Gamma|$ $S_{11}$ vs.\ instrument & 0.030 & 0.041 & -- \\
 ```
 <!-- END siw-table:tosm -->
 
-Both corrections assume the same standard definitions, so their agreement
-checks the implementation and the saved raw files, not the standards. The
-offsets and the open's capacitance mostly move the reference plane, and the
-test above bounds their effect on the magnitudes. The adapter itself shows
-it: corrected with the 85033D/E definitions it has less than 1 ps of delay,
-and with ideal standards $-64$ ps; the reference plane moves by about 32 ps per
-port with the assumed definitions, while the magnitudes change by less than
-0.09 dB. The load is different: a
-general-purpose SMA load with a 25 dB return loss, which we did not measure,
-would leave a directivity error of 0.056, comparable to the dips we want to
-read. The check thru sets an empirical bound. After the instrument calibration
-it returns +0.18 dB in $S_{21}$ and −18.4 dB in $S_{11}$ at worst over
-2.6–3.2 GHz, and the software calibration applied to the raw thru gives
-+0.26 dB and −17.6 dB. A passive thru cannot have gain, so both corrections are
-optimistic in $S_{21}$, and we take its uncertainty as about 0.3 dB. Reflections
-below about −18 dB are not resolved; the worst in-band $S_{11}$ is good to about
-±2 dB.
+Both corrections assume the same standard definitions. Their agreement
+therefore checks the implementation and the saved raw files, not the
+standards. The offsets and the open's capacitance mostly move the reference
+plane. The test above bounds their effect on the magnitudes. The adapter itself
+shows this. Corrected with the 85033D/E definitions, it has less than 1 ps of
+delay. Corrected with ideal standards, it has $-64$ ps. The assumed definitions
+move the reference plane by about 32 ps per port, while the magnitudes change
+by less than 0.09 dB. The load is different. A general-purpose SMA load with a
+25 dB return loss, which we did not measure, would leave a directivity error of
+0.056. This is comparable to the dips we want to read. The check thru sets an
+empirical bound. After the instrument calibration, it returns +0.18 dB in
+$S_{21}$ and −18.4 dB in $S_{11}$ at worst over 2.6–3.2 GHz. The software
+calibration applied to the raw thru gives +0.26 dB and −17.6 dB. A passive thru
+cannot have gain, so both corrections are optimistic in $S_{21}$. We take the
+uncertainty of $S_{21}$ as about 0.3 dB. Reflections below about −18 dB are not
+resolved. The worst in-band $S_{11}$ is good to about ±2 dB.
 
 ```{=latex}
 \begin{figure*}[t]
@@ -1025,16 +1027,16 @@ Fig. \ref{fig:measvsim} shows the curves.
 
 *How $f_c$ and the bandwidth are read.* One definition is used throughout the
 paper and for every source. On each curve we take the maximum of $|S_{21}|$
-and draw a line 3 dB below it. The two crossings of that line on either side of
-the peak, linearly interpolated between sweep points, are the band edges $f_1$
-and $f_2$. The bandwidth is $f_2 - f_1$, and the centre frequency is their
-midpoint, $f_c = (f_1 + f_2)/2$, not the frequency of the maximum. With ripple
-in the passband the maximum sits on one of the poles and can be well off
-centre: in Palace the maximum is at 2.860 GHz and $f_c$ = 2.876 GHz; on the
-soldered board the two coincide at 2.894 GHz. Only the crossings bounding the
-contiguous region around the peak count, so a band split in two is not
-reported as one wide band. Fig. \ref{fig:qzoom} shows the construction on the
-curves.
+and draw a line 3 dB below it. The line crosses the curve on each side of the
+peak. We interpolate linearly between sweep points to find the two crossings.
+They are the band edges $f_1$ and $f_2$. The bandwidth is $f_2 - f_1$. The
+centre frequency is their midpoint, $f_c = (f_1 + f_2)/2$, not the frequency
+of the maximum. With ripple in the passband, the maximum sits on one of the
+poles and can be well off centre. In Palace the maximum is at 2.860 GHz and
+$f_c$ = 2.876 GHz. On the soldered board the two coincide at 2.894 GHz. Only
+the crossings that bound the contiguous region around the peak count. A band
+split in two is therefore not reported as one wide band. Fig. \ref{fig:qzoom}
+shows the construction on the curves.
 
 <!-- BEGIN siw-table:comparison -->
 ```{=latex}
@@ -1042,7 +1044,7 @@ curves.
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\caption{Fabricated cascade N=3 filter: specification, simulation and measurement. Every column is processed with the same code: $f_c$ is the midpoint of the two crossings 3\,dB below the peak $S_{21}$, and the bandwidth their distance. In-band is $2.870\pm1.4\%$\,GHz (the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. Measured columns: VNA = instrument calibration, SW = software recalibration of the raw files (Sec.~VIII); S = connectors soldered, U = unsoldered, C = calibrated. $Q_L$ and the effective $Q_u$ are defined in Sec.~IX. The specified bandwidth is the 0.1\,dB ripple bandwidth; the specification $Q_L$ is that of the ideal prototype at $-3$\,dB (199\,MHz), not $1/\mathrm{FBW} = 20$.}
+\caption{Fabricated cascade N=3 filter: specification, simulation and measurement. Every column is processed with the same code: $f_c$ is the midpoint of the two crossings 3\,dB below the peak $S_{21}$, and the bandwidth their distance. In-band is $2.870\pm2.5\%$\,GHz, i.e.\ 2.798--2.942\,GHz (the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. Measured columns: VNA = instrument calibration, SW = software recalibration of the raw files (Sec.~VIII); S = connectors soldered, U = unsoldered, C = calibrated. $Q_L$ and the effective $Q_u$ are defined in Sec.~IX. The specified bandwidth is the 0.1\,dB ripple bandwidth; the specification $Q_L$ is that of the ideal prototype at $-3$\,dB (199\,MHz), not $1/\mathrm{FBW} = 20$.}
 \label{tab:comparison}
 \begin{tabular}{lccccccc}
 \hline
@@ -1092,8 +1094,8 @@ calibration and −2.04 and −2.08 dB with the software one. So the loss is
 2.0–2.4 dB, within the 0.3 dB uncertainty above. Palace gives 1.70 dB. The
 budget of Sec. VII expects 2.3 dB for smooth copper. The first version of the
 budget, written before the measurement, gave 2.1–2.3 dB. The measurement is
-therefore at or just below the expectation. The next subsection turns the loss
-into a quality factor. A second route is the forward model of the fitted
+therefore at or just below the expectation. Sec. IX turns the loss into a
+quality factor. A second route is the forward model of the fitted
 coupling matrix. It can read the measured loss as an effective unloaded Q. We
 kept the Palace-fitted couplings and varied only $Q_u$. The model gives 1.1 dB
 and three reflection zeros at $Q_u$ = 270. It gives 1.7 dB and two zeros at
@@ -1191,11 +1193,11 @@ copper (180). Diamonds: the same $Q_u$ from the group delay, Eq.
 
 Two quality factors summarise the response. The **loaded Q** of the filter,
 $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$, says how narrow the passband is with
-the ports attached. We read it straight off $|S_{21}|$: the dotted line in Fig.
-\ref{fig:qzoom} sits 3 dB below each curve's peak, and its ends are the band
-edges. The **unloaded Q** $Q_u$ measures each resonator's own loss and sets the
-insertion loss (Eq. \ref{eq:il}). The two $Q$ rows of Table
-\ref{tab:comparison} and Fig. \ref{fig:qcomp} come from the same code
+the ports attached. We read it from $|S_{21}|$ as in Sec. VIII: the dotted line
+in Fig. \ref{fig:qzoom} sits 3 dB below each curve's peak, and its ends are the
+band edges. The **unloaded Q**, $Q_u$, measures the loss of each resonator on
+its own. It sets the insertion loss (Eq. \ref{eq:il}). The two $Q$ rows of
+Table \ref{tab:comparison} and Fig. \ref{fig:qcomp} come from the same code
 (`siw measure`) for all four sources.
 
 In the full filter the two play different roles:
@@ -1203,44 +1205,44 @@ In the full filter the two play different roles:
 - $Q_L$ is set by the couplings ($k$ and $Q_e$). It defines the bandwidth and
   barely depends on $Q_u$ as long as $Q_u \gg Q_L$.
 - $Q_u$ does not change the bandwidth, but it sets the insertion loss.
-  Writing Eq. \ref{eq:il} in terms of the loaded Q of the ripple band,
-  $Q_{L,\text{ripple}} = 1/\mathrm{FBW}$,
+  Eq. \ref{eq:il} can be written with the loaded Q of the ripple band,
+  $Q_{L,\text{ripple}} = 1/\mathrm{FBW}$, as
   $$ \mathrm{IL}_0 \approx 4.343 \sum_i g_i \, \frac{Q_{L,\text{ripple}}}{Q_u}\ \text{dB}. $$
-  The narrower the filter (higher $Q_L$) or the lossier each resonator
-  (lower $Q_u$), the higher the loss.
+  The loss is higher when the filter is narrower (higher $Q_L$). It is also
+  higher when each resonator is lossier (lower $Q_u$).
 
 *Theoretical loaded Q.* The specified 5 % is the 0.1 dB *ripple* bandwidth,
-143.5 MHz, whose $Q$ is $1/\mathrm{FBW} = 20$. At $-3$ dB the ideal third-order
+143.5 MHz. Its $Q$ is $1/\mathrm{FBW} = 20$. At $-3$ dB, the ideal third-order
 Chebyshev prototype is
 $\cosh\!\big(\tfrac{1}{N}\operatorname{arccosh}\sqrt{(10^{0.3}-1)/(10^{0.01}-1)}\big)
-= 1.39$ times wider: 199 MHz, or $Q_L = 14.4$. That is the value to compare
-with, because every bandwidth in this paper is a $-3$ dB one. Palace gives
-15.8, CST 16.0 and the board 16.9 (16.8 with the software calibration).
-Against that reference the $-3$ dB band is not wider than designed but
-9 % (Palace) to 14 % (board) narrower, consistent with the internal coupling
-the matrix fit finds slightly below target ($k_{12} = 0.042$ in Palace and 0.044
-on the board, against 0.046). Earlier comparisons against 143.5 MHz mix the
-two bandwidth definitions.
+= 1.39$ times wider. That is 199 MHz, or $Q_L = 14.4$. This is the value to
+compare with, because every bandwidth in this paper is a $-3$ dB one. Palace
+gives 15.8, CST 16.0 and the board 16.9 (16.8 with the software calibration).
+Against this reference, the $-3$ dB band is not wider than designed. It is
+9 % (Palace) to 14 % (board) narrower. This is consistent with the internal
+coupling that the matrix fit finds slightly below target ($k_{12} = 0.042$ in
+Palace and 0.044 on the board, against 0.046). Earlier comparisons against
+143.5 MHz mix the two bandwidth definitions.
 
 *Effective $Q_u$.* We solve Eq. \ref{eq:il} for $Q_u$ with the measured peak
-loss. The FBW in that equation is the ripple one, so the measured $-3$ dB FBW is
-divided by 1.39. On the ideal lossy prototype the procedure returns 270 for
-$Q_u = 270$ and 181 for 180. Because all loss (mismatch, launch, radiation,
-connector) is charged to the resonators, the result is an *effective* $Q_u$,
-a lower bound on the resonator's own. Palace gives 179 and CST 173. Both
-simulations have perfectly conducting walls, whose ceiling is the dielectric,
-$Q_d = 270$; the gap is the mismatch and launch terms of the loss budget
-(Table \ref{tab:lossbudget}). The board gives 138 with the instrument
-calibration and 159 with the software one, inside the 130–185 range the
-coupling-matrix forward model gave in Sec. VIII. The board sits at
-0.77–0.89 of Palace; that is what copper, the ENIG finish and the real
-connector add, none of which the simulations contain. The smooth-copper
+loss. The FBW in that equation is the ripple one, so we divide the measured
+$-3$ dB FBW by 1.39. On the ideal lossy prototype, this procedure returns 270
+for $Q_u = 270$ and 181 for 180. All the loss (mismatch, launch, radiation,
+connector) is charged to the resonators. The result is therefore an
+*effective* $Q_u$, a lower bound on the resonator's own. Palace gives 179 and
+CST 173. Both simulations have perfectly conducting walls, so their ceiling is
+the dielectric, $Q_d = 270$. The gap is the mismatch and launch terms of the
+loss budget (Table \ref{tab:lossbudget}). The board gives 138 with the
+instrument calibration and 159 with the software one. Both lie inside the
+130–185 range that the coupling-matrix forward model gave in Sec. VIII. The
+board sits at 0.77–0.89 of Palace. This is what copper, the ENIG finish and the
+real connector add. None of them is in the simulations. The smooth-copper
 reference, $1/Q_u = 1/Q_d + 1/Q_c$ with $Q_c \approx 540$, gives 180 for the
 resonator alone.
 
 *A second estimate, from the group delay.* Eq. \ref{eq:il} needs the
-$g$-values and the bandwidth. A second estimate needs neither. In the time
-$\tau_0$ that a signal spends in the filter, the stored energy decays by the
+$g$-values and the bandwidth. A second estimate needs neither. A signal spends
+a time $\tau_0$ in the filter. In that time, the stored energy decays by the
 factor $\exp(-\omega_0\tau_0/Q_u)$, which is $4.343\,\omega_0\tau_0/Q_u$ dB.
 Setting this equal to the dissipated loss gives
 
@@ -1254,19 +1256,20 @@ L_\mathrm{diss} = -10\log_{10}\frac{|S_{21}|^2}{1-|S_{11}|^2}.
 ```
 
 Here $\tau_0$ is the group delay of $S_{21}$ at the transmission peak (the
-phase slope over a 10 MHz aperture), and $L_\mathrm{diss}$ is the power that
-is neither reflected nor transmitted. On the ideal lossy prototype, Eq.
+phase slope over a 10 MHz aperture). $L_\mathrm{diss}$ is the power that is
+neither reflected nor transmitted. On the ideal lossy prototype, Eq.
 \ref{eq:qdelay} returns 270 for $Q_u = 270$ and 180 for 180. Eq. \ref{eq:il}
-returns 277 and 187. Palace gives 222 and the board 156 (instrument
-calibration) and 183 (software calibration); they are the diamonds in Fig. \ref{fig:qcomp}b, and
-Fig. \ref{fig:qdelay} shows the delay. The two
-estimators charge the feed lines differently. Eq. \ref{eq:il} puts all the loss
-on the resonators, so it is a lower bound on their $Q_u$. Eq. \ref{eq:qdelay}
-also counts the delay of the feed lines and the launch as stored energy, so it
-reads higher. For Palace, whose cavities have exactly $Q_u = 270$, they give
-179 and 222. They agree on the main point: the board is 11 to 30 % below
-Palace. Adding smooth copper in series to the Palace value gives
-$1/(1/222 + 1/540) \approx 158$, which is where the board lies (156 to 183).
+returns 270 to 277 and 181 to 187, within 4 %. Palace gives 222. The board gives 156 (instrument
+calibration) and 183 (software calibration). These are the diamonds in Fig.
+\ref{fig:qcomp}b, and Fig. \ref{fig:qdelay} shows the delay.
+
+The two estimators charge the feed lines differently. Eq. \ref{eq:il} puts all
+the loss on the resonators, so it is a lower bound on their $Q_u$. Eq.
+\ref{eq:qdelay} also counts the delay of the feed lines and the launch as
+stored energy, so it reads higher. For Palace, whose cavities have exactly
+$Q_u = 270$, the two give 179 and 222. They agree on the main point: the board
+is 11 to 30 % below Palace. Adding smooth copper in series to the Palace value
+gives $1/(1/222 + 1/540) \approx 158$. The board lies there (156 to 183).
 
 ```{=latex}
 \begin{figure}[t]
@@ -1316,8 +1319,9 @@ argues for keeping those checks in the loop.
   deeper than that are not resolved, and the worst in-band return loss is
   good to about ±2 dB.
 * The specification is not met: the board measures −5 dB worst in-band return
-  loss against −16 dB (simulated: −11.1 dB), and 171 MHz bandwidth against
-  143.5 MHz.
+  loss against −16 dB (simulated: −11.1 dB). The −3 dB bandwidth is 171 MHz,
+  against 199 MHz for the ideal prototype (the specified 143.5 MHz is the
+  0.1 dB ripple band, Sec. IX).
 * S11 varied by about 5 dB across mesh and port models, while fc, bandwidth
   and IL moved by less than 10 MHz and 0.3 dB. The measurement then differed
   from Palace by +18 MHz in fc, 0.3–0.7 dB in IL and 6 dB in S11, so the

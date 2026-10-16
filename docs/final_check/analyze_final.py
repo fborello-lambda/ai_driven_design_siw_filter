@@ -13,6 +13,8 @@ from pathlib import Path
 import numpy as np
 import matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from siwfilter import palette as P
+P.apply()
 from scipy.optimize import least_squares
 from siwfilter.config import FilterSpec
 from siwfilter.synthesis import chebyshev_g, coupling_matrix
@@ -126,8 +128,8 @@ out = src.parent
 (out / 'analysis.json').write_text(json.dumps(res, indent=2) + '\n')
 
 fig, ax = plt.subplots(1, 2, figsize=(12, 4.5))
-ax[0].plot(f, s11, 'C0', lw=2, label='Palace |S11|'); ax[0].plot(f, s21, 'C1', lw=2, label='Palace |S21|')
-ax[0].plot(fx, m11x, 'C0--', lw=1, label='fitted matrix'); ax[0].plot(fx, m21x, 'C1--', lw=1)
+ax[0].plot(f, s11, P.AZURE, lw=2, label='Palace |S11|'); ax[0].plot(f, s21, P.ORANGE, lw=2, label='Palace |S21|')
+ax[0].plot(fx, m11x, color=P.AZURE, ls='--', lw=1, label='fitted matrix'); ax[0].plot(fx, m21x, color=P.ORANGE, ls='--', lw=1)
 ax[0].plot(fx, t21x, 'k:', lw=1, label='Chebyshev target (Qu=270)')
 ax[0].plot(fx, model([*x0[:7], 1 / 270, 0], fx)[0], 'k:', lw=1)
 ax[0].axhline(-16, color='r', lw=.8, ls='--'); ax[0].text(2.23, -15, 'spec -16 dB', color='r', fontsize=8)
@@ -138,9 +140,9 @@ ax[0].legend(fontsize=8, loc='lower left'); ax[0].grid(alpha=.3)
 names = ['M_S1', 'M_12', 'M_23', 'M_3L']
 sf = res['symmetric_fit']
 xb = np.arange(4)
-ax[1].bar(xb - .2, [table[n]['err_pct'] for n in names], .4, color='C7', label=f'free fit (rms {rms:.2f} dB)')
+ax[1].bar(xb - .2, [table[n]['err_pct'] for n in names], .4, color=P.SLATE, label=f'free fit (rms {rms:.2f} dB)')
 ax[1].bar(xb + .2, [sf['M_ext_err_pct'], sf['M_int_err_pct'], sf['M_int_err_pct'], sf['M_ext_err_pct']], .4,
-          color='C0', label=f"mirror-symmetric fit (rms {sf['fit_rms_db']:.2f} dB)")
+          color=P.AZURE, label=f"mirror-symmetric fit (rms {sf['fit_rms_db']:.2f} dB)")
 ax[1].set_xticks(xb, names); ax[1].axhline(0, color='k', lw=.8); ax[1].legend(fontsize=8)
 ax[1].set(ylabel='fitted vs Chebyshev target (%)',
           title=f"Which coupling is off?  sym. fit: end cavities {sf['end_cavity_detune_mhz']:+.0f} MHz")

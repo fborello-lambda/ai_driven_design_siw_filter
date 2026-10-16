@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 import matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from siwfilter import palette as P
+P.apply()
 
 B0, B1 = 2.87 - .07175, 2.87 + .07175          # 5 % FBW target band
 runs = sorted(Path('output/final_check').glob('final*.json'))
@@ -33,11 +35,11 @@ for i, r in enumerate(runs):
     rows.append(row)
     lab = 'golden' if r.stem == 'final' else r.stem.replace('final_', '')
     thick = r.stem == best
-    c = 'k' if r.stem == 'final' else f'C{i}'
+    c = P.NAVY if r.stem == 'final' else P.CYCLE[i % len(P.CYCLE)]
     ax.plot(f, a, color=c, lw=2.6 if thick else 1.2, alpha=1 if thick or r.stem == 'final' else .75,
             label=f"{lab}{'  (CHOSEN)' if thick else ''}: worst {row['s11w_db']} dB")
     ax.plot(f, b, color=c, lw=1.6 if thick else .8, ls='--', alpha=.8)
-ax.axvspan(B0, B1, color='g', alpha=.08, label='target band (5 % FBW)')
+ax.axvspan(B0, B1, color=P.TURQUOISE, alpha=.10, label='target band (5 % FBW)')
 ax.axhline(-16, color='r', lw=.8, ls='--'); ax.text(2.725, -15.3, 'spec -16 dB', color='r', fontsize=8)
 ax.set(xlim=(2.72, 3.02), ylim=(-40, 1), xlabel='GHz', ylabel='dB',
        title='Cascade N=3 tuning, fine-mesh Palace (solid |S11|, dashed |S21|)')

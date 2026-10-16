@@ -141,6 +141,11 @@ def main(target: str = "arxiv") -> None:
            + "\n\\section*{Acknowledgment}\n" + acknowledgment() + "\n\n"
            + back)
     (build / f"{stem}.tex").write_text(tex)
+    # arXiv asks for only the files the paper needs: drop figures the text does not use
+    # (the Spanish report's variants live in the same folder)
+    for fig in (build / "figures").iterdir():
+        if fig.name not in tex:
+            fig.unlink()
 
     def run(*cmd):
         return subprocess.run(cmd, cwd=build, capture_output=True, text=True,

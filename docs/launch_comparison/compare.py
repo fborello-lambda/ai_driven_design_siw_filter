@@ -17,6 +17,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
+from siwfilter import palette as P
+P.apply()
 import numpy as np
 
 from siwfilter.config import FilterSpec
@@ -32,7 +34,7 @@ LABELS = {
     'cpwg': 'CPWG, no connector',
     'cpwg_sma': 'CPWG + Taoglas SMA (fabricated)',
 }
-COLORS = {'ms': '#1f77b4', 'cpwg': '#ff7f0e', 'cpwg_sma': '#2ca02c'}
+COLORS = {'ms': P.AZURE, 'cpwg': P.ORANGE, 'cpwg_sma': P.TURQUOISE}
 
 
 def load(variant: str) -> dict:

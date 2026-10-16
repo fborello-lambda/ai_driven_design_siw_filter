@@ -446,7 +446,7 @@ LABELS = {
         # it cites them by hand-written numeral: VIII = measured results, IX = Q
         "caption": (r"Fabricated cascade N=3 filter: specification, simulation and measurement. "
                     r"Every column is processed with the same code: $f_c$ is the midpoint of the two "
-                    r"crossings 3\,dB below the peak $S_{21}$, and the bandwidth their distance. In-band is $2.870\pm1.4\%$\,GHz "
+                    r"crossings 3\,dB below the peak $S_{21}$, and the bandwidth their distance. In-band is $2.870\pm2.5\%$\,GHz, i.e.\ 2.798--2.942\,GHz "
                     r"(the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures "
                     r"are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from "
                     r"the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. "
@@ -472,7 +472,7 @@ LABELS = {
         "caption": (r"Filtro N=3 en cascada fabricado: especificación, simulación y medición. "
                     r"Todas las columnas se procesan con el mismo código: $f_c$ es el punto medio de los dos "
                     r"cruces 3\,dB por debajo del pico de $S_{21}$, y el ancho de banda su distancia. La banda es "
-                    r"$2.870\pm1.4\%$\,GHz (la banda especificada del 5\,\%). CST corresponde a la "
+                    r"$2.870\pm2.5\%$\,GHz, es decir 2.798--2.942\,GHz (la banda especificada del 5\,\%). CST corresponde a la "
                     r"geometría previa al recorte. Las cifras de Palace en banda son de la geometría "
                     r"fabricada; su $S_{21}$ en 2.45/3.5\,GHz y la espuria provienen del barrido de "
                     r"0--8\,GHz previo al recorte. La espuria es el mayor $S_{21}$ entre 3.6 y 5.0\,GHz. "
@@ -626,8 +626,8 @@ TOSM_LABELS = {
                     r"$|\Delta\Gamma|$ medio en $S_{11}$ frente al instrumento"],
            "by_def": "por definición",
            "caption": (r"Calibración por software de los mismos archivos crudos con thru desconocido (la "
-                       r"informada) y con TOSM, que declara el adaptador hembra-hembra thru ideal de longitud "
-                       r"cero. Placa soldada; la última columna es la calibración del propio instrumento (SOLR, "
+                       r"que informamos) y con TOSM, que declara ideal, de longitud cero, el thru (el adaptador "
+                       r"hembra-hembra). Placa soldada; la última columna es la calibración del propio instrumento (SOLR, "
                        r"thru desconocido). La fila del adaptador es el propio thru después de la corrección, en "
                        r"2.87\,GHz. Diferencias medias entre 2.6 y 3.2\,GHz."),
            "label": "tab:tosm"},
