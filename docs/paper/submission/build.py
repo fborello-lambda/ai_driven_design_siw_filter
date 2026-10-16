@@ -106,7 +106,10 @@ def yaml_meta() -> dict:
 
 
 def acknowledgment() -> str:
+    """Text of the optional "# Acknowledgment {-}" section ("" when the paper has none)."""
     text = MD.read_text()
+    if "# Acknowledgment {-}" not in text:
+        return ""
     ack = text.split("# Acknowledgment {-}", 1)[1].split("```{=latex}")[0]
     ack = re.sub(r"\s*\[@[^\]]+\]", r"~\\cite{ieee_ai_policy}", ack.strip())
     for k, v in UNICODE.items():
@@ -138,7 +141,7 @@ def main(target: str = "arxiv") -> None:
                   .replace("%%KEYWORDS%%", meta["keywords"]))
     preamble, back = front.split("%%BODY%%")
     tex = (preamble + md_body()
-           + "\n\\section*{Acknowledgment}\n" + acknowledgment() + "\n\n"
+           + (("\n\\section*{Acknowledgment}\n" + acknowledgment() + "\n\n") if acknowledgment() else "\n")
            + back)
     (build / f"{stem}.tex").write_text(tex)
     # arXiv asks for only the files the paper needs: drop figures the text does not use

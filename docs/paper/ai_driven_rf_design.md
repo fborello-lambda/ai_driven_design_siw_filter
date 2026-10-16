@@ -1474,7 +1474,8 @@ the topology, the stopping decision and the doubts that a confident
 explanation did not remove.
 
 **Accountability.** The agent does not want anything and is not answerable for
-its results. The author is, and says so in the acknowledgment [@ieee_ai_policy].
+its results. The author is, and takes full responsibility for the
+results and the text [@ieee_ai_policy].
 
 # Conclusion
 
@@ -1500,15 +1501,6 @@ in the repository. `siw measure` reproduces the measured columns of
 Table \ref{tab:comparison}. The agent made the computation cheap. The idea of
 the feed, the connector, the calibration and the decisions on what to trust
 stayed with the engineer (Sec. XI).
-
-# Acknowledgment {-}
-
-The design software, simulations, figures and a first draft of this text
-were produced with Claude Code (Anthropic) under the author's direction. The
-models were Claude Sonnet 5 and 5.5, Opus 5 and 5.5, and Fable 5. Sec. III
-describes this work. The author reviewed all results and text and takes full responsibility for them
-[@ieee_ai_policy]. The complete history and data are available in the
-project repository.
 
 ```{=latex}
 \FloatBarrier
