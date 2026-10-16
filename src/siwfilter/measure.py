@@ -377,7 +377,8 @@ LABELS = {
         # the English paper's sections are unnumbered (\ref prints nothing), so
         # it cites them by hand-written numeral: VIII = measured results, IX = Q
         "caption": (r"Fabricated cascade N=3 filter: specification, simulation and measurement. "
-                    r"Every column is processed with the same code. In-band is $2.870\pm1.4\%$\,GHz "
+                    r"Every column is processed with the same code: $f_c$ is the midpoint of the two "
+                    r"crossings 3\,dB below the peak $S_{21}$, and the bandwidth their distance. In-band is $2.870\pm1.4\%$\,GHz "
                     r"(the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures "
                     r"are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from "
                     r"the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. "
@@ -401,7 +402,8 @@ LABELS = {
             "rej_2.45_db": r"$S_{21}$ en 2.45\,GHz (dB)", "rej_3.5_db": r"$S_{21}$ en 3.5\,GHz (dB)",
             "spur_db": r"Mayor espuria (dB @ GHz)"},
         "caption": (r"Filtro N=3 en cascada fabricado: especificación, simulación y medición. "
-                    r"Todas las columnas se procesan con el mismo código. La banda es "
+                    r"Todas las columnas se procesan con el mismo código: $f_c$ es el punto medio de los dos "
+                    r"cruces 3\,dB por debajo del pico de $S_{21}$, y el ancho de banda su distancia. La banda es "
                     r"$2.870\pm1.4\%$\,GHz (la banda especificada del 5\,\%). CST corresponde a la "
                     r"geometría previa al recorte. Las cifras de Palace en banda son de la geometría "
                     r"fabricada; su $S_{21}$ en 2.45/3.5\,GHz y la espuria provienen del barrido de "

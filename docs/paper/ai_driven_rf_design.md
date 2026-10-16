@@ -705,10 +705,12 @@ fields; the measurement cannot exclude it on the feed lines (Sec. VIII).
 The board (Fig. \ref{fig:setup}) was measured with a Keysight FieldFox N9917A
 handheld vector network analyzer (18 GHz), from 100 MHz to 5 GHz with 10 001
 points, 10 kHz IF bandwidth and −15 dBm source power. The instrument was
-calibrated at the ends of the two test cables in full two-port SOLR mode: a
-short, an open and a load on each port, plus a reciprocal thru of unknown
-length, with isolation omitted. The standards were a generic SMA short, open
-and load, not a characterised vendor kit; the instrument was set to the
+calibrated at the ends of the two test cables in full two-port SOLR
+(short-open-load-reciprocal) mode with a generic SMA kit. The short, open and
+load were connected on each port; for the thru, the ends of the port 1 and
+port 2 cables were connected to each other, which the instrument treats as a
+reciprocal thru of unknown length. Isolation was omitted. The generic
+standards are not a characterised vendor kit; the instrument was set to the
 definitions of the 3.5 mm 85033D/E kit, the nearest it offers, so the true
 offset delays, open capacitance and load return loss are unknown. The
 cables end in SMA plugs that mate directly with the board's jacks, so the
@@ -773,13 +775,26 @@ Table \ref{tab:comparison} puts the specification, both simulators and the
 four corrected measurements through the same code (`siw measure`). Fig.
 \ref{fig:measvsim} shows the curves.
 
+*How $f_c$ and the bandwidth are read.* One definition is used throughout the
+paper and for every source. On each curve we take the maximum of $|S_{21}|$
+and draw a line 3 dB below it. The two crossings of that line on either side of
+the peak, linearly interpolated between sweep points, are the band edges $f_1$
+and $f_2$. The bandwidth is $f_2 - f_1$, and the centre frequency is their
+midpoint, $f_c = (f_1 + f_2)/2$, not the frequency of the maximum. With ripple
+in the passband the maximum sits on one of the poles and can be well off
+centre: in Palace the maximum is at 2.860 GHz and $f_c$ = 2.876 GHz; on the
+soldered board the two coincide at 2.894 GHz. Only the crossings bounding the
+contiguous region around the peak count, so a band split in two is not
+reported as one wide band. Fig. \ref{fig:qzoom} shows the construction on the
+curves.
+
 <!-- BEGIN siw-table:comparison -->
 ```{=latex}
 \begin{table*}[t]
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\caption{Fabricated cascade N=3 filter: specification, simulation and measurement. Every column is processed with the same code. In-band is $2.870\pm1.4\%$\,GHz (the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. Measured columns: VNA = instrument calibration, SW = software recalibration of the raw files (Sec.~VIII); S = connectors soldered, U = unsoldered, C = calibrated. $Q_L$ and the effective $Q_u$ are defined in Sec.~IX. The specified bandwidth is the 0.1\,dB ripple bandwidth; the specification $Q_L$ is that of the ideal prototype at $-3$\,dB (199\,MHz), not $1/\mathrm{FBW} = 20$.}
+\caption{Fabricated cascade N=3 filter: specification, simulation and measurement. Every column is processed with the same code: $f_c$ is the midpoint of the two crossings 3\,dB below the peak $S_{21}$, and the bandwidth their distance. In-band is $2.870\pm1.4\%$\,GHz (the specified 5\,\% band). CST is the pre-trim geometry. Palace in-band figures are for the fabricated geometry; its $S_{21}$ at 2.45/3.5\,GHz and spur are from the pre-trim 0--8\,GHz sweep. The spur is the largest $S_{21}$ between 3.6 and 5.0\,GHz. Measured columns: VNA = instrument calibration, SW = software recalibration of the raw files (Sec.~VIII); S = connectors soldered, U = unsoldered, C = calibrated. $Q_L$ and the effective $Q_u$ are defined in Sec.~IX. The specified bandwidth is the 0.1\,dB ripple bandwidth; the specification $Q_L$ is that of the ideal prototype at $-3$\,dB (199\,MHz), not $1/\mathrm{FBW} = 20$.}
 \label{tab:comparison}
 \begin{tabular}{lccccccc}
 \hline

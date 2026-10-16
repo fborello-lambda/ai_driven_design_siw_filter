@@ -1141,9 +1141,11 @@ Medimos la placa (Fig. \ref{fig:setup}) con un analizador vectorial de redes
 portátil Keysight FieldFox N9917A (18 GHz), entre 100 MHz y 5 GHz con 10 001
 puntos, 10 kHz de ancho de banda de FI y $-15$ dBm de potencia de la fuente.
 Calibramos el instrumento en los extremos de los dos cables de prueba en modo
-SOLR completo de dos puertos: corto, abierto y carga en cada puerto, más un thru
-recíproco de longitud desconocida, con el aislamiento omitido. Los estándares
-fueron un corto, un abierto y una carga SMA genéricos, no un kit comercial
+SOLR (*short-open-load-reciprocal*) completo de dos puertos, con un kit SMA
+genérico. En cada puerto conectamos el corto, el abierto y la carga; como thru
+conectamos entre sí los extremos de los cables de los puertos 1 y 2, que el
+instrumento trata como un thru recíproco de longitud desconocida. Omitimos el
+aislamiento. Los estándares del kit genérico no son un kit comercial
 caracterizado; configuramos el instrumento con las definiciones del kit
 85033D/E de 3.5 mm, las más cercanas que ofrece, de modo que los retardos de
 desplazamiento, la capacidad del abierto y la pérdida de retorno de la carga
@@ -1217,13 +1219,26 @@ La Tabla \ref{tab:comparison} procesa con el mismo código la especificación,
 ambos simuladores y las cuatro mediciones corregidas. La Fig.
 \ref{fig:measvsim} muestra las curvas.
 
+**Cómo obtenemos $f_c$ y el ancho de banda.** Usamos la misma definición en
+todo el informe y para todas las fuentes. En cada curva tomamos el máximo de
+$|S_{21}|$ y trazamos una línea 3 dB por debajo. Los dos cruces de esa línea a
+cada lado del pico, interpolados linealmente entre puntos del barrido, son los
+bordes de la banda $f_1$ y $f_2$. El ancho de banda es $f_2 - f_1$, y la
+frecuencia central es el punto medio, $f_c = (f_1 + f_2)/2$, no la frecuencia
+del máximo. Con rizado en la banda pasante el máximo cae sobre uno de los polos
+y puede estar lejos del centro: en Palace el máximo está en 2.860 GHz y
+$f_c$ = 2.876 GHz; en la placa soldada los dos coinciden en 2.894 GHz. Solo cuentan los
+cruces que rodean la región contigua del pico, de modo que una banda partida
+en dos no se informa como una sola banda ancha. La Fig. \ref{fig:qzoom}
+muestra la construcción sobre las curvas.
+
 <!-- BEGIN siw-table:comparison -->
 ```{=latex}
 \begin{table*}[t]
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\caption{Filtro N=3 en cascada fabricado: especificación, simulación y medición. Todas las columnas se procesan con el mismo código. La banda es $2.870\pm1.4\%$\,GHz (la banda especificada del 5\,\%). CST corresponde a la geometría previa al recorte. Las cifras de Palace en banda son de la geometría fabricada; su $S_{21}$ en 2.45/3.5\,GHz y la espuria provienen del barrido de 0--8\,GHz previo al recorte. La espuria es el mayor $S_{21}$ entre 3.6 y 5.0\,GHz. Columnas medidas: VNA = calibración del instrumento, SW = recalibración por software de los archivos sin calibrar (Sec.~\ref{sec:vna}); S = conectores soldados, U = sin soldar (\emph{unsoldered}), C = calibrado. $Q_L$ y $Q_u$ efectivo se definen en la Sec.~\ref{sec:q}. El ancho de banda especificado es el de rizado de 0.1\,dB; el $Q_L$ de la especificación es el del prototipo ideal a $-3$\,dB (199\,MHz), no $1/\mathrm{FBW} = 20$.}
+\caption{Filtro N=3 en cascada fabricado: especificación, simulación y medición. Todas las columnas se procesan con el mismo código: $f_c$ es el punto medio de los dos cruces 3\,dB por debajo del pico de $S_{21}$, y el ancho de banda su distancia. La banda es $2.870\pm1.4\%$\,GHz (la banda especificada del 5\,\%). CST corresponde a la geometría previa al recorte. Las cifras de Palace en banda son de la geometría fabricada; su $S_{21}$ en 2.45/3.5\,GHz y la espuria provienen del barrido de 0--8\,GHz previo al recorte. La espuria es el mayor $S_{21}$ entre 3.6 y 5.0\,GHz. Columnas medidas: VNA = calibración del instrumento, SW = recalibración por software de los archivos sin calibrar (Sec.~\ref{sec:vna}); S = conectores soldados, U = sin soldar (\emph{unsoldered}), C = calibrado. $Q_L$ y $Q_u$ efectivo se definen en la Sec.~\ref{sec:q}. El ancho de banda especificado es el de rizado de 0.1\,dB; el $Q_L$ de la especificación es el del prototipo ideal a $-3$\,dB (199\,MHz), no $1/\mathrm{FBW} = 20$.}
 \label{tab:comparison}
 \begin{tabular}{lccccccc}
 \hline
@@ -1354,15 +1369,15 @@ bandas espurias, y no en pérdida de retorno.
 # Factor de calidad: Q cargado y Q descargado {#sec:q}
 
 ```{=latex}
-\begin{figure*}[t]
+\begin{figure*}[!t]
 \centering
-\includegraphics[width=0.95\textwidth]{figures/fig_q_zoom_es.png}
+\includegraphics[width=0.85\textwidth]{figures/fig_q_zoom_es.png}
 \caption{Q cargado leído de $|S_{21}|$. La línea punteada está 3\,dB por
 debajo del pico de cada curva y va de borde a borde de la banda; la flecha
 marca el ancho de banda y el recuadro, $Q_L = f_c/\mathrm{BW}$.}
 \label{fig:qzoom}
 \vspace{0.6em}
-\includegraphics[width=0.85\textwidth]{figures/fig_q_comparison_es.png}
+\includegraphics[width=0.72\textwidth]{figures/fig_q_comparison_es.png}
 \caption{Factores de calidad de las cuatro fuentes frente a la teoría
 (barras rayadas). (a) Q cargado: el valor comparable es el del prototipo ideal
 a $-3$\,dB (14.4), no $1/\mathrm{FBW}$ (20, banda de rizado). (b) $Q_u$
