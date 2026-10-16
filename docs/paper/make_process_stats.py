@@ -39,6 +39,7 @@ def sessions(root: str) -> dict:
     mains = [f for f in glob.glob(os.path.join(root, "*.jsonl")) if "orphaned" not in f]
     subs = glob.glob(os.path.join(root, "*", "subagents", "*.jsonl")) + glob.glob(os.path.join(root, "*", "*", "subagents", "*.jsonl"))
     turns, out_tok = collections.Counter(), collections.Counter()
+    sub_out = 0
     sub_turns = collections.Counter()
     tools, span = collections.Counter(), {}
     day_turns = collections.defaultdict(collections.Counter)
@@ -57,6 +58,8 @@ def sessions(root: str) -> dict:
                 mod = m["model"]
                 (sub_turns if is_sub else turns)[mod] += 1
                 out_tok[mod] += (m.get("usage") or {}).get("output_tokens", 0) or 0
+                if is_sub:
+                    sub_out += (m.get("usage") or {}).get("output_tokens", 0) or 0
                 if not is_sub:
                     lo, hi = span.get(mod, (ts, ts))
                     span[mod] = (min(lo, ts), max(hi, ts))
@@ -75,7 +78,7 @@ def sessions(root: str) -> dict:
         if b - a <= dt.timedelta(minutes=20):
             active += b - a
             per_day[str(a.date())] += (b - a).total_seconds() / 3600
-    return {"main_turns": dict(turns), "subagent_turns": dict(sub_turns), "output_tokens": dict(out_tok),
+    return {"main_turns": dict(turns), "subagent_turns": dict(sub_turns), "output_tokens": dict(out_tok), "output_tokens_subagents": sub_out,
             "model_span_main_thread": {k: [v[0][:10], v[1][:10]] for k, v in span.items()},
             "tool_calls": dict(tools.most_common(20)), "engineer_messages": humans,
             "subagent_sessions": len(subs), "main_sessions": len(mains),
@@ -86,7 +89,7 @@ def sessions(root: str) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--upto", default="4d570ac", help="last commit counted (the paper quotes the history up to here)")
+    ap.add_argument("--upto", default="13a0027", help="last commit counted (the paper quotes the history up to here)")
     ap.add_argument("--sessions", help="directory with the agent's session logs (optional)")
     a = ap.parse_args()
     cs = commits(a.upto)

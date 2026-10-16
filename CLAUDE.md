@@ -16,6 +16,10 @@ calibration standards; −5 dB worst
 in band); spec (−16 dB) not met. `siw measure` reproduces every measured
 number; `siw measure --paper` refreshes the tables/figures in `docs/paper/`
 (both papers carry `<!-- BEGIN siw-table:… -->` markers for that).
+`siw measure` also reads the loaded Q and two estimates of the effective unloaded Q
+(from the insertion loss, and from the S21 group delay with the stored Palace phase in
+`golden/cascade_N3/palace_fine_trimmed_*.s2p`); the papers' loss budget (smooth copper
+plus roughness) shows that the measured 2.0–2.4 dB is the expected loss.
 
 ## 1. Project
 

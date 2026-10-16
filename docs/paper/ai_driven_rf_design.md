@@ -363,7 +363,10 @@ only counts, with no prompts and no file contents.
 \caption{Models used, from the session logs and the commit trailers. Turns are
 assistant messages in the main thread, plus those of sub-agents. Output tokens
 cover both. Fix commits are those whose message starts with \texttt{fix}.
-Commit counts are for the history up to commit \texttt{4d570ac}.}
+Commit counts are for the history up to commit \texttt{13a0027}. Six of the Opus 5.5
+commits and three of the Sonnet 5.5 commits come from a session whose log is not
+included here, so the turn counts of those two rows are lower than their
+commits suggest.}
 \label{tab:models}
 \begin{tabular}{lccccc}
 \hline
@@ -372,10 +375,10 @@ Commit counts are for the history up to commit \texttt{4d570ac}.}
 Sonnet 5   & 22 Aug--10 Sep & 9\,287 + 1\,362 & 8.41 & 64 & 16 \\
 Opus 5     & 22 Aug--4 Sep  & 3\,673 + 65     & 3.57 & 43 & 14 \\
 Fable 5    & 28 Aug         & 48              & 0.06 & 1  & 0 \\
-Opus 5.5   & 23--29 Sep     & 922             & 0.73 & 12 & 0 \\
-Sonnet 5.5 & 15 Oct         & 424 + 200       & 0.63 & 5  & 0 \\
+Opus 5.5   & 23--29 Sep     & 922             & 0.73 & 18 & 0 \\
+Sonnet 5.5 & 15--16 Oct     & 673 + 596       & 1.14 & 10 & 0 \\
 \hline
-\textbf{Total} & & 14\,354 + 1\,627 & 13.39 & 125 & 30 \\
+\textbf{Total} & & 14\,603 + 2\,023 & 13.90 & 136 & 30 \\
 \hline
 \end{tabular}
 \end{table*}
@@ -400,24 +403,24 @@ What the numbers show:
   43) and fixes (16 and 14). Sonnet 5 produced 70 % of the output tokens of
   that period. The logs record the model of every turn but not why it was
   chosen. The later work used Opus 5.5 (23--29 September, the fabrication
-  files and the final checks) and Sonnet 5.5 (15 October, the measurement and
+  files and the final checks) and Sonnet 5.5 (15--16 October, the measurement and
   this text). One 48-turn run on Fable 5 on 28 August produced one commit.
-* *Sub-agents did a small part.* There were 27 sub-agent runs, 26 on Sonnet
-  models and one on Opus 5. They account for 4 % of the output tokens.
-* *Effort was concentrated.* The agent was active for 135 hours on 21 days.
+* *Sub-agents did a small part.* There were 31 sub-agent runs, 30 on Sonnet
+  models and one on Opus 5. They account for 5 % of the output tokens.
+* *Effort was concentrated.* The agent was active for 137 hours on 22 days.
   The busiest days, 24, 28 and 31 August, each had 14--15 hours. The engineer
-  sent about 500 messages, which is 24 per active day.
-* *Most of the work was running things.* The logs hold 4\,393 shell commands
-  (3\,816 in the main thread and 577 in sub-agents), 738 file edits, 758 file
+  sent about 500 messages, which is 23 per active day.
+* *Most of the work was running things.* The logs hold 4\,541 shell commands
+  (3\,916 in the main thread and 625 in sub-agents), 931 file edits, 794 file
   reads and 74 web searches. The agent also called a timer 874 times and a
   monitor 214 times. These calls waited for solver runs that lasted from
   minutes to hours, without holding the conversation.
-* *Fixes were a fifth of the history.* 47 of 220 commits are fixes (21 %).
-  Of the 125 commits with a trailer, 30 are fixes. The trailer is a lower
+* *Fixes were a fifth of the history.* 47 of 231 commits are fixes (20 %).
+  Of the 136 commits with a trailer, 30 are fixes. The trailer is a lower
   bound for agent work. Of the 198 commits between 22 August and 10 September,
   90 have no trailer. The logs show the agent working on every one of those
   days.
-* *Code was rewritten.* The history adds 16.1 k lines of Python and removes 5.9 k,
+* *Code was rewritten.* The history adds 16.9 k lines of Python and removes 6.0 k,
   including the clean-up of 15 October. A typical commit touches two files. The
   package now has 12.4 k lines.
 
@@ -508,7 +511,7 @@ before, a straight line after. Six requested widths fell on only three geometrie
 
 # Silent defects: a taxonomy
 
-As of 15 Oct 2026 (up to commit `4d570ac`) the history holds 220 commits, 125 of
+As of 16 Oct 2026 (up to commit `13a0027`) the history holds 231 commits, 136 of
 them with an agent co-author trailer, and 47 labelled *fix*. Most of the fixes
 corrected defects that never raised an error. The solver converged and the plot
 looked reasonable, but the number was wrong. Table \ref{tab:bugs} groups
