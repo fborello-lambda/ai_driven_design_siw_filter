@@ -82,7 +82,7 @@ If you use the code, the data or the workflow, please cite the paper. GitHub's
                   Integrated Waveguide Filter from Specification to Fabrication},
   year         = {2026},
   howpublished = {Preprint; code and data at
-                  \url{https://github.com/fborello-lambda/siw_filter}},
+                  \url{https://github.com/fborello-lambda/ai_driven_design_siw_filter}},
   note         = {Replace with the arXiv identifier or journal reference when available}
 }
 ```
