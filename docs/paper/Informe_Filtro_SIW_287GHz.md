@@ -1229,6 +1229,68 @@ del kit por estándares ideales $+1/-1/0$ cambia las magnitudes en menos de
 0.03 dB ($S_{21}$) y 0.09 dB ($S_{11}$), y solo desplaza el plano de
 referencia.
 
+**Comparación con TOSM.** La calibración clásica TOSM (*thru-open-short-match*,
+el SOLT de Keysight) usa los mismos patrones y es idéntica en los pasos 1 y 3;
+solo cambia el paso 2. TOSM declara el thru ideal, de longitud cero
+($S_{11} = S_{22} = 0$, $S_{21} = S_{12} = 1$), y con esa hipótesis la medición
+del thru da el término de transmisión directamente:
+$$ S_{21,m} = \frac{e_{10}e_{32}}{1 - e_{11}\,e_{22}'}
+   \;\Rightarrow\; e_{10}e_{32} = S_{21,m}\,(1 - e_{11}\,e_{22}'), $$
+$$ e_{22}' = \frac{S_{11,m} - e_{00}}{S_{11,m}\,e_{11} - \Delta_e}, $$
+donde $e_{22}'$ es la adaptación de carga del puerto 2 vista desde el puerto 1
+a través del thru, que se obtiene invirtiendo la ecuación del paso 1 (modelo de
+12 términos; el sentido inverso es análogo). Con thru desconocido, en cambio,
+$S_{21,m}$ y $S_{12,m}$ tienen el mismo denominador, y su cociente lo cancela
+junto con la transmisión propia del adaptador; por eso UOSM (SOLR) no necesita
+conocer el thru y TOSM sí. Si el thru no es ideal, TOSM le carga a los términos
+de error su pérdida, su fase y su desadaptación.
+
+Para medir esa discrepancia calibramos los mismos archivos crudos de las dos
+formas, con las mismas definiciones de los patrones (Tabla \ref{tab:tosm}). TOSM
+cambia el término de transmisión en $+0.33$ dB y $-3.4^\circ$ en 2.87 GHz, y
+por construcción deja el adaptador corregido en 0 dB y $0^\circ$; con thru
+desconocido el adaptador queda en $+0.27$ dB y $-3.1^\circ$, y el instrumento
+lo lee en $+0.18$ dB y $-2.2^\circ$. Sobre la placa soldada, TOSM sube la
+pérdida de inserción de 2.04 a 2.39 dB, angosta la banda en 2.3 MHz y corre
+$f_c$ en 2 MHz; el peor $S_{11}$ en banda casi no cambia, y el mejor se
+profundiza 4 dB, porque en TOSM $e_{22}'$ sale del $S_{11}$ del thru y al
+declarar nula la reflexión del adaptador ($-22$ dB después de la corrección por
+thru desconocido) esa reflexión pasa a $e_{22}'$. Que la pérdida de TOSM
+coincida con la del instrumento (2.38 dB) es casual: el instrumento no trató el
+adaptador como ideal, como muestra su lectura de $+0.18$ dB, y en el resto de la
+banda TOSM no se acerca más al instrumento en transmisión ($\Delta S_{21}$
+medio $+0.14$ frente a $+0.17$ dB) y se aleja en reflexión ($|\Delta\Gamma|$
+medio 0.041 frente a 0.030). La diferencia entre los dos métodos, unos 0.35 dB
+en la pérdida de inserción, es del orden de la incertidumbre de 0.3 dB que
+asignamos a $S_{21}$ más abajo.
+
+<!-- BEGIN siw-table:tosm -->
+```{=latex}
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\caption{Calibración por software de los mismos archivos crudos con thru desconocido (la informada) y con TOSM, que declara el adaptador hembra-hembra thru ideal de longitud cero. Placa soldada; la última columna es la calibración del propio instrumento (SOLR, thru desconocido). La fila del adaptador es el propio thru después de la corrección, en 2.87\,GHz. Diferencias medias entre 2.6 y 3.2\,GHz.}
+\label{tab:tosm}
+\begin{tabular}{lccc}
+\hline
+ & \textbf{Thru desconocido} & \textbf{TOSM} & \textbf{Instrumento} \\
+\hline
+$e_{10}e_{32}$ en 2.87\,GHz & $-$12.04 dB $\angle$81.7$^\circ$ & $-$11.71 dB $\angle$78.3$^\circ$ & -- \\
+$S_{21}$ del adaptador corregido & +0.27 dB $\angle$$-$3.1$^\circ$ & 0 dB $\angle$0$^\circ$ (por definición) & +0.18 dB $\angle$$-$2.2$^\circ$ \\
+$f_c$ (GHz) & 2.8945 & 2.8926 & 2.8943 \\
+BW (MHz) & 172.5 & 170.2 & 171.2 \\
+IL pico (dB) & 2.04 & 2.39 & 2.38 \\
+Mejor $S_{11}$ (dB) & $-$18.8 & $-$22.8 & $-$16.8 \\
+Peor $S_{11}$ en banda (dB) & $-$4.6 & $-$4.5 & $-$5.3 \\
+$\Delta S_{21}$ medio frente al instrumento (dB) & +0.17 & +0.14 & -- \\
+$|\Delta\Gamma|$ medio en $S_{11}$ frente al instrumento & 0.030 & 0.041 & -- \\
+\hline
+\end{tabular}
+\end{table*}
+```
+<!-- END siw-table:tosm -->
+
 Ambas correcciones suponen las mismas definiciones de los estándares, de modo
 que su coincidencia verifica la implementación y los archivos crudos, no los
 estándares. Los retardos y la capacidad del abierto desplazan sobre todo el

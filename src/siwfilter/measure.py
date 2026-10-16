@@ -142,11 +142,15 @@ class SoftwareCal:
     The instrument used SOLR with an unknown thru (a female-female SMA adapter)
     and "omit isolation", so isolation is not corrected here either. No switch
     terms were saved, so the switch is assumed matched.
+
+    ``thru="flush"`` instead runs a 12-term TOSM/SOLT that DECLARES the adapter an
+    ideal zero-length thru. It is only the comparison quoted in the papers (what
+    a TOSM would have done with the same files), never the reported result.
     """
 
-    def __init__(self, ds: Dataset, model: str = "nominal"):
+    def __init__(self, ds: Dataset, model: str = "nominal", thru: str = "unknown"):
         import skrf as rf
-        from skrf.calibration import UnknownThru
+        from skrf.calibration import SOLT, UnknownThru
         s = ds.std
         missing = [k for k in STD_FILES if k not in s]
         if missing:
@@ -170,14 +174,69 @@ class SoftwareCal:
         ideals.append(thru_ideal)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.cal = UnknownThru(measured=measured, ideals=ideals)
+            if thru == "unknown":
+                self.cal = UnknownThru(measured=measured, ideals=ideals)
+            elif thru == "flush":
+                self.cal = SOLT(measured=measured, ideals=ideals[:-1] + [None])
+            else:
+                raise ValueError(f"thru must be 'unknown' or 'flush', not {thru!r}")
             self.cal.run()
-        self.model = model
+        self.model, self.thru = model, thru
+
+    def transmission_tracking(self) -> np.ndarray:
+        """Forward transmission tracking e10e32 (12-term form, switch assumed matched)."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return np.asarray(self.cal.coefs_12term["forward transmission tracking"]).flatten()
 
     def apply(self, net):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             return self.cal.apply_cal(net)
+
+
+def tosm_comparison(ds: Dataset, cal: SoftwareCal, spec: FilterSpec | None = None) -> dict:
+    """What a TOSM would have reported from the same raw files.
+
+    Same SOL standards and definitions; the only change is the thru step: TOSM
+    declares the female-female adapter an ideal zero-length thru, the reported
+    calibration (``cal``) only assumes it reciprocal."""
+    spec = spec or FilterSpec(N=3)
+    tosm = SoftwareCal(ds, cal.model, thru="flush")
+    f = ds.std["thru"].f
+    i0 = int(np.argmin(np.abs(f - spec.f0)))
+    out = {"model": cal.model, "f0_ghz": float(f[i0] / 1e9)}
+    t_u, t_t = cal.transmission_tracking()[i0], tosm.transmission_tracking()[i0]
+    out["e10e32_unknown_thru"] = {"db": float(_db(t_u)), "deg": float(np.degrees(np.angle(t_u)))}
+    out["e10e32_tosm"] = {"db": float(_db(t_t)), "deg": float(np.degrees(np.angle(t_t)))}
+    out["e10e32_tosm_minus_unknown"] = {"db": float(_db(t_t) - _db(t_u)),
+                                        "deg": float(np.degrees(np.angle(t_t / t_u)))}
+    if ds.check_thru is not None:      # the same adapter, measured after the instrument's calibration
+        a = ds.check_thru.s[int(np.argmin(np.abs(ds.check_thru.f - spec.f0)))]
+        out["adapter_instrument"] = {"s21_db": float(_db(a[1, 0])), "s21_deg": float(np.degrees(np.angle(a[1, 0]))),
+                                     "s11_db": float(_db(a[0, 0]))}
+    for name, c in (("unknown_thru", cal), ("tosm", tosm)):
+        a = c.apply(ds.std["thru"]).s[i0]
+        out[f"adapter_{name}"] = {"s21_db": float(_db(a[1, 0])), "s21_deg": float(np.degrees(np.angle(a[1, 0]))),
+                                  "s11_db": float(_db(a[0, 0]))}
+    keys = ("fc_ghz", "bw_mhz", "s21_peak_db", "s11_inband_worst_db", "s11_best_db", "q_loaded", "qu_eff")
+    for raw_k, label in (("SU", "soldered"), ("UU", "unsoldered")):
+        if raw_k not in ds.dut:
+            continue
+        mu = metrics(curve_from_network("u", cal.apply(ds.dut[raw_k]), "swcal"), spec)
+        mt = metrics(curve_from_network("t", tosm.apply(ds.dut[raw_k]), "swcal"), spec)
+        out[label] = {"unknown_thru": {k: mu.get(k) for k in keys}, "tosm": {k: mt.get(k) for k in keys}}
+        ref_k = {"SU": "SC", "UU": "UC"}[raw_k]
+        if ref_k in ds.dut:      # distance of each software method to the instrument's own calibration
+            ref = ds.dut[ref_k]
+            fr = ref.f / 1e9
+            mm = (fr >= FIT_RANGE_GHZ[0]) & (fr <= FIT_RANGE_GHZ[1])
+            for name, c in (("unknown_thru", cal), ("tosm", tosm)):
+                x = c.apply(ds.dut[raw_k])
+                out[label][name]["vs_instrument"] = {
+                    "s21_mean_diff_db": float(np.mean(_db(x.s[mm, 1, 0]) - _db(ref.s[mm, 1, 0]))),
+                    "s11_mean_dgamma": float(np.mean(np.abs(x.s[mm, 0, 0] - ref.s[mm, 0, 0])))}
+    return out
 
 
 def calibration_report(ds: Dataset, cal: SoftwareCal, spec: FilterSpec | None = None) -> dict:
@@ -540,6 +599,67 @@ def launch_table_latex(cm: dict, lang: str = "en", summary: str = LAUNCH_SUMMARY
     return "\n".join(lines)
 
 
+TOSM_LABELS = {
+    "en": {"head": ["", "Unknown thru", "TOSM", "Instrument"],
+           "rows": ["$e_{10}e_{32}$ at 2.87\\,GHz", "Corrected adapter $S_{21}$", r"$f_c$ (GHz)", "BW (MHz)",
+                    "Peak IL (dB)", r"Best $S_{11}$ (dB)", r"Worst in-band $S_{11}$ (dB)",
+                    r"Mean $\Delta S_{21}$ vs.\ instrument (dB)", r"Mean $|\Delta\Gamma|$ $S_{11}$ vs.\ instrument"],
+           "by_def": "by definition",
+           "caption": (r"Software calibration of the same raw files with an unknown thru (the reported one) "
+                       r"and with TOSM, which declares the female-female adapter an ideal zero-length thru. "
+                       r"Soldered board; the last column is the instrument's own calibration (SOLR, unknown "
+                       r"thru). The adapter row is the thru itself after correction, at 2.87\,GHz. Mean "
+                       r"differences over 2.6--3.2\,GHz."),
+           "label": "tab:tosm"},
+    "es": {"head": ["", "Thru desconocido", "TOSM", "Instrumento"],
+           "rows": ["$e_{10}e_{32}$ en 2.87\\,GHz", "$S_{21}$ del adaptador corregido", r"$f_c$ (GHz)", "BW (MHz)",
+                    "IL pico (dB)", r"Mejor $S_{11}$ (dB)", r"Peor $S_{11}$ en banda (dB)",
+                    r"$\Delta S_{21}$ medio frente al instrumento (dB)",
+                    r"$|\Delta\Gamma|$ medio en $S_{11}$ frente al instrumento"],
+           "by_def": "por definición",
+           "caption": (r"Calibración por software de los mismos archivos crudos con thru desconocido (la "
+                       r"informada) y con TOSM, que declara el adaptador hembra-hembra thru ideal de longitud "
+                       r"cero. Placa soldada; la última columna es la calibración del propio instrumento (SOLR, "
+                       r"thru desconocido). La fila del adaptador es el propio thru después de la corrección, en "
+                       r"2.87\,GHz. Diferencias medias entre 2.6 y 3.2\,GHz."),
+           "label": "tab:tosm"},
+}
+
+
+def tosm_table_latex(res: dict, lang: str = "en") -> str | None:
+    tc, cm = res.get("tosm_comparison", {}), res.get("metrics", {})
+    if "soldered" not in tc:
+        return None
+    L, u, t, ins = TOSM_LABELS[lang], tc["soldered"]["unknown_thru"], tc["soldered"]["tosm"], cm.get("SC", {})
+    m = _tex_minus
+    eu, et = tc["e10e32_unknown_thru"], tc["e10e32_tosm"]
+    au, ai = tc["adapter_unknown_thru"], tc.get("adapter_instrument")
+
+    def ang(a):  # "+0.27 dB ∠−3.1°"
+        return m(f"{a['s21_db']:+.2f}") + r" dB $\angle$" + m(f"{a['s21_deg']:.1f}") + r"$^\circ$"
+    rows = [
+        (m(f"{eu['db']:.2f}") + rf" dB $\angle${eu['deg']:.1f}$^\circ$",
+         m(f"{et['db']:.2f}") + rf" dB $\angle${et['deg']:.1f}$^\circ$", "--"),
+        (ang(au), rf"0 dB $\angle$0$^\circ$ ({L['by_def']})", ang(ai) if ai else "--"),
+        (f"{u['fc_ghz']:.4f}", f"{t['fc_ghz']:.4f}", f"{ins.get('fc_ghz', float('nan')):.4f}"),
+        (f"{u['bw_mhz']:.1f}", f"{t['bw_mhz']:.1f}", f"{ins.get('bw_mhz', float('nan')):.1f}"),
+        (f"{-u['s21_peak_db']:.2f}", f"{-t['s21_peak_db']:.2f}", f"{-ins.get('s21_peak_db', float('nan')):.2f}"),
+        (m(f"{u['s11_best_db']:.1f}"), m(f"{t['s11_best_db']:.1f}"), m(f"{ins.get('s11_best_db', float('nan')):.1f}")),
+        (m(f"{u['s11_inband_worst_db']:.1f}"), m(f"{t['s11_inband_worst_db']:.1f}"),
+         m(f"{ins.get('s11_inband_worst_db', float('nan')):.1f}")),
+        (m(f"{u['vs_instrument']['s21_mean_diff_db']:+.2f}"), m(f"{t['vs_instrument']['s21_mean_diff_db']:+.2f}"), "--"),
+        (f"{u['vs_instrument']['s11_mean_dgamma']:.3f}", f"{t['vs_instrument']['s11_mean_dgamma']:.3f}", "--"),
+    ]
+    lines = [r"\begin{table*}[t]", r"\centering", r"\footnotesize", r"\setlength{\tabcolsep}{6pt}",
+             r"\caption{" + L["caption"] + "}", r"\label{" + L["label"] + "}",
+             r"\begin{tabular}{lccc}", r"\hline",
+             " & ".join(f"\\textbf{{{h}}}" if h else "" for h in L["head"]) + r" \\", r"\hline"]
+    for lab, row in zip(L["rows"], rows):
+        lines.append(" & ".join([lab, *row]) + r" \\")
+    lines += [r"\hline", r"\end{tabular}", r"\end{table*}"]
+    return "\n".join(lines)
+
+
 def update_marked_block(path: str, name: str, content: str) -> bool:
     """Replace the text between ``<!-- BEGIN siw-table:NAME -->`` / ``<!-- END ... -->``
     in a Markdown file with a raw-LaTeX fenced block. Returns True if the marker exists."""
@@ -815,6 +935,10 @@ def run(dataset: str = DEFAULT_DATASET, kit: str = "nominal", fit: bool = False,
             "mean_dGamma_S11": float(np.abs(a.s[mm, 0, 0] - b.s[mm, 0, 0]).mean())}
     except Exception as e:   # noqa: BLE001 - sensitivity is informational
         res["standard_model_sensitivity"] = {"error": str(e)}
+    try:
+        res["tosm_comparison"] = tosm_comparison(ds, cal, spec)
+    except Exception as e:   # noqa: BLE001 - comparison is informational
+        res["tosm_comparison"] = {"error": str(e)}
     if fit:
         res["coupling_fit"] = {k: fit_coupling_matrix(curves[k], spec)
                                for k in ("palace", "SC", "UC") if k in curves}
@@ -844,6 +968,22 @@ def run(dataset: str = DEFAULT_DATASET, kit: str = "nominal", fit: bool = False,
             t = cc["thru_check"]
             print(f"thru check: instrument S21 {t['instrument_s21_db_mean']:+.2f} dB, "
                   f"software {t['software_s21_db_mean']:+.2f} dB (ideal 0)")
+        tc = res.get("tosm_comparison", {})
+        if "soldered" in tc:
+            d = tc["e10e32_tosm_minus_unknown"]
+            print(f"TOSM (adapter as ideal thru) vs unknown thru at {tc['f0_ghz']:.3f} GHz: "
+                  f"e10e32 {d['db']:+.2f} dB {d['deg']:+.1f} deg")
+            for lab in ("soldered", "unsoldered"):
+                if lab in tc:
+                    u, t2 = tc[lab]["unknown_thru"], tc[lab]["tosm"]
+                    print(f"  {lab}: fc {u['fc_ghz']:.4f}/{t2['fc_ghz']:.4f} GHz, BW {u['bw_mhz']:.1f}/{t2['bw_mhz']:.1f} MHz, "
+                          f"IL {-u['s21_peak_db']:.2f}/{-t2['s21_peak_db']:.2f} dB, "
+                          f"worst S11 {u['s11_inband_worst_db']:.1f}/{t2['s11_inband_worst_db']:.1f} dB, "
+                          f"best S11 {u['s11_best_db']:.1f}/{t2['s11_best_db']:.1f} dB  (unknown/TOSM)")
+                    if "vs_instrument" in u:
+                        vu, vt = u["vs_instrument"], t2["vs_instrument"]
+                        print(f"    vs instrument cal: mean dS21 {vu['s21_mean_diff_db']:+.2f}/{vt['s21_mean_diff_db']:+.2f} dB, "
+                              f"mean |dGamma| S11 {vu['s11_mean_dgamma']:.3f}/{vt['s11_mean_dgamma']:.3f}")
         for k, v in res.get("coupling_fit", {}).items():
             print(f"CM fit {k}: Qu={v['Qu']:.0f} k12 {v['k12_fitted']:.4f} (target {v['k12_target']:.4f}) "
                   f"Qe {v['Qe_fitted']:.1f} (target {v['Qe_target']:.1f}) "
@@ -880,6 +1020,9 @@ def _write_paper_artifacts(ds, cal, curves, cm, res, spec, out_name) -> None:
         if os.path.exists(p):
             ok1 = update_marked_block(p, "comparison", comparison_table_latex(cm, spec, lang))
             ok2 = update_marked_block(p, "launch", launch_table_latex(cm, lang))
+            tt = tosm_table_latex(res, lang)
+            if tt is not None:
+                update_marked_block(p, "tosm", tt)
             print(f"{fn}: comparison table {'updated' if ok1 else 'no marker'}, "
                   f"launch table {'updated' if ok2 else 'no marker'}")
 

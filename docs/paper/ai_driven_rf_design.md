@@ -784,6 +784,68 @@ values, not read from the instrument). The result agrees with the instrument-cor
 $+1/-1/0$ standards changes the magnitudes by less than 0.03 dB ($S_{21}$) and
 0.09 dB ($S_{11}$) and only moves the reference plane.
 
+*Comparison with TOSM.* Classic TOSM (thru-open-short-match, Keysight's SOLT)
+uses the same standards and is identical in steps 1 and 3; only step 2
+changes. TOSM declares the thru ideal and of zero length
+($S_{11} = S_{22} = 0$, $S_{21} = S_{12} = 1$), and with that assumption the
+thru measurement gives the transmission term directly:
+$$ S_{21,m} = \frac{e_{10}e_{32}}{1 - e_{11}\,e_{22}'}
+   \;\Rightarrow\; e_{10}e_{32} = S_{21,m}\,(1 - e_{11}\,e_{22}'), $$
+$$ e_{22}' = \frac{S_{11,m} - e_{00}}{S_{11,m}\,e_{11} - \Delta_e}, $$
+where $e_{22}'$ is the port-2 load match seen from port 1 through the thru,
+found by inverting the step-1 equation (12-term model; the reverse direction is
+analogous). With an unknown thru, by contrast, $S_{21,m}$ and $S_{12,m}$ share
+the same denominator, and their ratio cancels it together with the adapter's
+own transmission; this is why UOSM (SOLR) does not need to know the thru and
+TOSM does. If the thru is not ideal, TOSM loads its loss, phase and mismatch
+into the error terms.
+
+To size that discrepancy we calibrated the same raw files both ways, with the
+same standard definitions (Table \ref{tab:tosm}). TOSM changes the
+transmission term by $+0.33$ dB and $-3.4^\circ$ at 2.87 GHz and, by
+construction, leaves the corrected adapter at 0 dB and $0^\circ$; with the
+unknown thru the adapter reads $+0.27$ dB and $-3.1^\circ$, and the instrument
+reads it at $+0.18$ dB and $-2.2^\circ$. On the soldered board TOSM raises the
+insertion loss from 2.04 to 2.39 dB, narrows the band by 2.3 MHz and moves
+$f_c$ by 2 MHz; the worst in-band $S_{11}$ barely changes, and the best one
+deepens by 4 dB, because in TOSM $e_{22}'$ comes from the thru's $S_{11}$ and
+declaring the adapter's reflection zero ($-22$ dB after the unknown-thru
+correction) moves that reflection into $e_{22}'$. That the TOSM loss matches the
+instrument's (2.38 dB) is a coincidence: the instrument did not treat the
+adapter as ideal, as its $+0.18$ dB reading shows, and over the rest of the band
+TOSM is no closer to the instrument in transmission (mean $\Delta S_{21}$
+$+0.14$ against $+0.17$ dB) and further in reflection (mean $|\Delta\Gamma|$
+0.041 against 0.030). The difference between the two methods, about 0.35 dB in
+insertion loss, is of the order of the 0.3 dB uncertainty assigned to $S_{21}$
+below.
+
+<!-- BEGIN siw-table:tosm -->
+```{=latex}
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\caption{Software calibration of the same raw files with an unknown thru (the reported one) and with TOSM, which declares the female-female adapter an ideal zero-length thru. Soldered board; the last column is the instrument's own calibration (SOLR, unknown thru). The adapter row is the thru itself after correction, at 2.87\,GHz. Mean differences over 2.6--3.2\,GHz.}
+\label{tab:tosm}
+\begin{tabular}{lccc}
+\hline
+ & \textbf{Unknown thru} & \textbf{TOSM} & \textbf{Instrument} \\
+\hline
+$e_{10}e_{32}$ at 2.87\,GHz & $-$12.04 dB $\angle$81.7$^\circ$ & $-$11.71 dB $\angle$78.3$^\circ$ & -- \\
+Corrected adapter $S_{21}$ & +0.27 dB $\angle$$-$3.1$^\circ$ & 0 dB $\angle$0$^\circ$ (by definition) & +0.18 dB $\angle$$-$2.2$^\circ$ \\
+$f_c$ (GHz) & 2.8945 & 2.8926 & 2.8943 \\
+BW (MHz) & 172.5 & 170.2 & 171.2 \\
+Peak IL (dB) & 2.04 & 2.39 & 2.38 \\
+Best $S_{11}$ (dB) & $-$18.8 & $-$22.8 & $-$16.8 \\
+Worst in-band $S_{11}$ (dB) & $-$4.6 & $-$4.5 & $-$5.3 \\
+Mean $\Delta S_{21}$ vs.\ instrument (dB) & +0.17 & +0.14 & -- \\
+Mean $|\Delta\Gamma|$ $S_{11}$ vs.\ instrument & 0.030 & 0.041 & -- \\
+\hline
+\end{tabular}
+\end{table*}
+```
+<!-- END siw-table:tosm -->
+
 Both corrections assume the same standard definitions, so their agreement
 checks the implementation and the saved raw files, not the standards. The
 offsets and the open's capacitance mostly move the reference plane, and the
@@ -965,15 +1027,15 @@ All figures in this section are regenerated from the files in
 # Quality factor: loaded and unloaded Q {#sec:q}
 
 ```{=latex}
-\begin{figure*}[t]
+\begin{figure*}[!t]
 \centering
-\includegraphics[width=0.95\textwidth]{figures/fig_q_zoom.png}
+\includegraphics[width=0.85\textwidth]{figures/fig_q_zoom.png}
 \caption{Loaded Q read from $|S_{21}|$. The dotted line is 3\,dB below each
 curve's peak and runs edge to edge; the arrow marks the bandwidth and the box
 gives $Q_L = f_c/\mathrm{BW}$.}
 \label{fig:qzoom}
 \vspace{0.6em}
-\includegraphics[width=0.85\textwidth]{figures/fig_q_comparison.png}
+\includegraphics[width=0.72\textwidth]{figures/fig_q_comparison.png}
 \caption{Quality factors of the four sources against theory (hatched bars).
 (a) Loaded Q: the comparable value is the ideal prototype at $-3$\,dB (14.4),
 not $1/\mathrm{FBW}$ (20, ripple band). (b) Effective $Q_u$ solved from the
