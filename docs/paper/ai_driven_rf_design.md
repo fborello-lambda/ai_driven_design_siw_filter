@@ -1183,7 +1183,8 @@ gives $Q_L = f_c/\mathrm{BW}$.}
 (a) Loaded Q: the comparable value is the ideal prototype at $-3$\,dB (14.4),
 not $1/\mathrm{FBW}$ (20, ripple band). (b) Effective $Q_u$ solved from the
 insertion loss, against the dielectric limit (270) and dielectric plus smooth
-copper (180).}
+copper (180). Diamonds: the same $Q_u$ from the group delay, Eq.
+(\ref{eq:qdelay}).}
 \label{fig:qcomp}
 \end{figure*}
 ```
@@ -1257,7 +1258,8 @@ phase slope over a 10 MHz aperture), and $L_\mathrm{diss}$ is the power that
 is neither reflected nor transmitted. On the ideal lossy prototype, Eq.
 \ref{eq:qdelay} returns 270 for $Q_u = 270$ and 180 for 180. Eq. \ref{eq:il}
 returns 277 and 187. Palace gives 222 and the board 156 (instrument
-calibration) and 183 (software calibration), Fig. \ref{fig:qdelay}. The two
+calibration) and 183 (software calibration); they are the diamonds in Fig. \ref{fig:qcomp}b, and
+Fig. \ref{fig:qdelay} shows the delay. The two
 estimators charge the feed lines differently. Eq. \ref{eq:il} puts all the loss
 on the resonators, so it is a lower bound on their $Q_u$. Eq. \ref{eq:qdelay}
 also counts the delay of the feed lines and the launch as stored energy, so it
@@ -1267,14 +1269,13 @@ Palace. Adding smooth copper in series to the Palace value gives
 $1/(1/222 + 1/540) \approx 158$, which is where the board lies (156 to 183).
 
 ```{=latex}
-\begin{figure*}[!t]
+\begin{figure}[t]
 \centering
-\includegraphics[width=0.78\textwidth]{figures/fig_q_delay.png}
-\caption{Effective unloaded $Q$ from the group delay. (a) Group delay of
-$S_{21}$ for Palace and the soldered board. (b) $Q_u$ from Eq. (\ref{eq:qdelay}).
-The grey bar is the Palace value with smooth copper added in series.}
+\includegraphics[width=0.85\columnwidth]{figures/fig_q_delay.png}
+\caption{Group delay of $S_{21}$ for Palace and the soldered board. The value at
+the transmission peak is $\tau_0$ in Eq. (\ref{eq:qdelay}).}
 \label{fig:qdelay}
-\end{figure*}
+\end{figure}
 ```
 
 ```{=latex}

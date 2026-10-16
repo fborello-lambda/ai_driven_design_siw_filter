@@ -1571,7 +1571,8 @@ marca el ancho de banda y el recuadro, $Q_L = f_c/\mathrm{BW}$.}
 (barras rayadas). (a) Q cargado: el valor comparable es el del prototipo ideal
 a $-3$\,dB (14.4), no $1/\mathrm{FBW}$ (20, banda de rizado). (b) $Q_u$
 efectivo despejado de la pérdida de inserción, frente al límite del dieléctrico
-(270) y al de dieléctrico más cobre liso (180).}
+(270) y al de dieléctrico más cobre liso (180). Rombos: el mismo $Q_u$ desde el
+retardo de grupo, Ec. (\ref{eq:qdelay}).}
 \label{fig:qcomp}
 \end{figure*}
 ```
@@ -1648,7 +1649,8 @@ pendiente de la fase en una apertura de 10 MHz) y $L_\mathrm{diss}$ es la
 potencia que no se refleja ni se transmite. Sobre el prototipo ideal con
 pérdidas, la Ec. \ref{eq:qdelay} devuelve 270 para $Q_u = 270$ y 180 para 180;
 la Ec. \ref{eq:il} devuelve 277 y 187. Palace da 222 y la placa 156 (calibración
-del instrumento) y 183 (calibración por software), Fig. \ref{fig:qdelay}. Los
+del instrumento) y 183 (calibración por software); son los rombos de la Fig. \ref{fig:qcomp}b, y la
+Fig. \ref{fig:qdelay} muestra el retardo. Los
 dos métodos tratan distinto las líneas de alimentación. La Ec. \ref{eq:il} carga
 toda la pérdida a los resonadores, así que es una cota inferior de su $Q_u$. La
 Ec. \ref{eq:qdelay} cuenta además el retardo de las líneas y de la transición
@@ -1659,14 +1661,13 @@ en serie al valor de Palace da $1/(1/222 + 1/540) \approx 158$, que es donde est
 placa (156 a 183).
 
 ```{=latex}
-\begin{figure*}[!t]
+\begin{figure}[t]
 \centering
-\includegraphics[width=0.78\textwidth]{figures/fig_q_delay_es.png}
-\caption{$Q$ descargado efectivo desde el retardo de grupo. (a) Retardo de grupo
-de $S_{21}$ para Palace y la placa soldada. (b) $Q_u$ de la Ec. (\ref{eq:qdelay}).
-La barra gris es el valor de Palace con cobre liso sumado en serie.}
+\includegraphics[width=0.85\columnwidth]{figures/fig_q_delay_es.png}
+\caption{Retardo de grupo de $S_{21}$ para Palace y la placa soldada. El valor en
+el máximo de transmisión es $\tau_0$ de la Ec. (\ref{eq:qdelay}).}
 \label{fig:qdelay}
-\end{figure*}
+\end{figure}
 ```
 
 ```{=latex}

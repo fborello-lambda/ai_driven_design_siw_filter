@@ -860,28 +860,21 @@ def plot_comparison(curves: dict[str, Curve], spec: FilterSpec, path: str) -> st
 
 
 DELAY_TEXT = {
-    "en": {"tau": "group delay of S21 (ns)", "t_tau": r"(a) stored energy $\omega_0\tau_0$",
-           "peak": "at the peak", "qu": "effective unloaded $Q_u$", "t_qu": r"(b) $Q_u = 4.343\,\omega_0\tau_0/L_\mathrm{diss}$",
-           "freq": "Frequency (GHz)", "diel": "dielectric alone",
-           "bars": {"palace": "Palace", "palace_plus_copper": "Palace +\ncopper", "SC": "VNA S\n(instr.)",
-                    "UC": "VNA U\n(instr.)", "SW_S": "VNA S\n(sw cal.)", "SW_U": "VNA U\n(sw cal.)"}},
-    "es": {"tau": "retardo de grupo de S21 (ns)", "t_tau": r"(a) energía almacenada $\omega_0\tau_0$",
-           "peak": "en el pico", "qu": "$Q_u$ efectivo", "t_qu": r"(b) $Q_u = 4.343\,\omega_0\tau_0/L_\mathrm{diss}$",
-           "freq": "Frecuencia (GHz)", "diel": "solo dieléctrico",
-           "bars": {"palace": "Palace", "palace_plus_copper": "Palace +\ncobre", "SC": "VNA S\n(instr.)",
-                    "UC": "VNA U\n(instr.)", "SW_S": "VNA S\n(cal. sw)", "SW_U": "VNA U\n(cal. sw)"}},
+    "en": {"tau": "group delay of S21 (ns)", "peak": "at the peak", "freq": "Frequency (GHz)",
+           "title": r"Stored energy: group delay $\tau_0$ of $S_{21}$"},
+    "es": {"tau": "retardo de grupo de S21 (ns)", "peak": "en el pico", "freq": "Frecuencia (GHz)",
+           "title": r"Energía almacenada: retardo de grupo $\tau_0$ de $S_{21}$"},
 }
 
 
 def plot_q_delay(curves: dict[str, Curve], qt: dict, path: str, lang: str = "en") -> str:
-    """(a) group delay of S21, (b) effective unloaded Q from the delay and the dissipated power."""
+    """Group delay of S21 for the sources that have a phase (the input of ``q_delay``)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from .config import QC_COPPER_EST
     P.apply()
     T = DELAY_TEXT[lang]
-    fig, ax = plt.subplots(1, 2, figsize=(10, 3.9), gridspec_kw={"width_ratios": [1, 0.9]})
+    fig, ax = plt.subplots(figsize=(5.6, 3.8))
     for key in ("palace", "SC", "SW_S"):
         c = curves.get(key)
         if c is None or c.net is None or key not in qt:
@@ -889,21 +882,9 @@ def plot_q_delay(curves: dict[str, Curve], qt: dict, path: str, lang: str = "en"
         col, ls, lab = STYLE[key]
         f, tau = group_delay_ns(c.net)
         m = (f >= 2.7) & (f <= 3.1)
-        ax[0].plot(f[m], tau[m], color=col, ls=ls, lw=1.8, label=f"{lab}: {qt[key]['tau_ns']:.1f} ns {T['peak']}")
-    ax[0].set(xlabel=T["freq"], ylabel=T["tau"], ylim=(0, 9), title=T["t_tau"])
-    ax[0].legend(fontsize=7.5, loc="upper left"); ax[0].grid(alpha=.4)
-    colors = {"palace": P.NAVY, "palace_plus_copper": P.SLATE, "SC": P.PINK, "UC": P.ORANGE,
-              "SW_S": P.VIOLET, "SW_U": P.AZURE}
-    keys = [k for k in T["bars"] if k in qt and "qu_delay" in qt[k]]
-    vals = [qt[k]["qu_delay"] for k in keys]
-    ax[1].bar(range(len(vals)), vals, color=[colors[k] for k in keys], width=0.7)
-    for i, v in enumerate(vals):
-        ax[1].text(i, v + 4, f"{v:.0f}", ha="center", fontsize=8)
-    qd = 1 / 0.0037
-    ax[1].axhline(qd, color=P.SLATE, ls="--", lw=1.2)
-    ax[1].text(len(vals) - 0.5, qd + 4, f"{T['diel']} ({qd:.0f})", ha="right", fontsize=7.5, color="#444a66")
-    ax[1].set_xticks(range(len(vals))); ax[1].set_xticklabels([T["bars"][k] for k in keys], fontsize=7.5)
-    ax[1].set(ylabel=T["qu"], ylim=(0, 300), title=T["t_qu"]); ax[1].grid(alpha=.4, axis="y")
+        ax.plot(f[m], tau[m], color=col, ls=ls, lw=1.8, label=f"{lab}: {qt[key]['tau_ns']:.1f} ns {T['peak']}")
+    ax.set(xlabel=T["freq"], ylabel=T["tau"], ylim=(0, 9), title=T["title"])
+    ax.legend(fontsize=7.5, loc="upper left"); ax.grid(alpha=.4)
     fig.tight_layout()
     fig.savefig(path, dpi=170, bbox_inches="tight")
     plt.close(fig)
@@ -935,26 +916,29 @@ def plot_calibration_check(ds: Dataset, cal: SoftwareCal, path: str) -> str:
 
 Q_SOURCES = ("palace", "cst", "SC", "SW_S")
 Q_TEXT = {
-    "en": {"src": {"palace": "Palace", "cst": "CST", "SC": "VNA soldered\n(instrument cal.)",
-                   "SW_S": "VNA soldered\n(software cal.)"},
+    "en": {"src": {"palace": "Palace", "cst": "CST", "SC": "VNA soldered\n(instrument\ncal.)",
+                   "SW_S": "VNA soldered\n(software\ncal.)"},
            "zoom_src": {"palace": "Palace (fine mesh)", "cst": "CST (FD)", "SC": "VNA, soldered, instrument cal."},
            "th_qlr": "Ripple band\n(1/FBW)", "th_ql": "Theory\n(ideal, -3 dB)", "th_qd": "Theory\n(dielectric,\nPEC walls)", "th_qdc": "Theory\n(dielectric\n+ copper)",
            "ql": r"Loaded $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$", "qu": r"Effective $Q_u$ (from IL)",
            "t_ql": "(a) loaded Q", "t_qu": r"(b) effective unloaded $Q_u$",
-           "freq": "Frequency (GHz)", "peak": "peak"},
-    "es": {"src": {"palace": "Palace", "cst": "CST", "SC": "VNA soldado\n(cal. instrumento)",
-                   "SW_S": "VNA soldado\n(cal. software)"},
+           "freq": "Frequency (GHz)", "peak": "peak",
+           "delay_marker": "Qu from the group delay"},
+    "es": {"src": {"palace": "Palace", "cst": "CST", "SC": "VNA soldado\n(cal.\ninstrumento)",
+                   "SW_S": "VNA soldado\n(cal.\nsoftware)"},
            "zoom_src": {"palace": "Palace (malla fina)", "cst": "CST (FD)", "SC": "VNA, soldado, cal. instrumento"},
            "th_qlr": "Banda de\nrizado (1/FBW)", "th_ql": "Teoría\n(ideal, -3 dB)", "th_qd": "Teoría\n(dieléctrico,\nparedes PEC)", "th_qdc": "Teoría\n(dieléctrico\n+ cobre)",
            "ql": r"$Q$ cargado $Q_L = f_c/\mathrm{BW}_{-3\,\mathrm{dB}}$", "qu": r"$Q_u$ efectivo (de la IL)",
            "t_ql": "(a) Q cargado", "t_qu": r"(b) $Q_u$ efectivo",
-           "freq": "Frecuencia (GHz)", "peak": "pico"},
+           "freq": "Frecuencia (GHz)", "peak": "pico",
+           "delay_marker": "Qu desde el retardo de grupo"},
 }
 _Q_COLORS = {"palace": P.NAVY, "cst": P.TURQUOISE, "SC": P.PINK, "SW_S": P.VIOLET}
 
 
-def plot_q_comparison(cm: dict, spec: FilterSpec, path: str, lang: str = "en") -> str:
-    """Bars: loaded Q and effective Qu per source, next to the theoretical values."""
+def plot_q_comparison(cm: dict, spec: FilterSpec, path: str, lang: str = "en", qt: dict | None = None) -> str:
+    """Bars: loaded Q and effective Qu per source, next to the theoretical values. Diamonds in the
+    Qu panel: the same Qu from the S21 group delay (``qt``, see ``q_delay``)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -973,6 +957,14 @@ def plot_q_comparison(cm: dict, spec: FilterSpec, path: str, lang: str = "en") -
             b.set_hatch("//"); b.set_edgecolor("w")
         for i, v in enumerate(vals):
             a.text(i, v, fmt.format(v), ha="center", va="bottom", fontsize=9)
+        if key == "qu_eff" and qt:
+            for i, k in enumerate(keys):
+                v = qt.get(k, {}).get("qu_delay")
+                if v:
+                    a.plot(len(theo) + i, v, "D", mfc="white", mec=_Q_COLORS[k], mew=2, ms=8, zorder=5,
+                           label=T["delay_marker"] if i == 0 or not a.get_legend_handles_labels()[1] else None)
+            if a.get_legend_handles_labels()[1]:
+                a.legend(fontsize=8, loc="upper right")
         a.set_xticks(range(len(vals))); a.set_xticklabels(labs, fontsize=7)
         a.set(ylabel=ylab, title=title); a.grid(axis="y", alpha=.3)
     fig.tight_layout()
@@ -1066,7 +1058,7 @@ def run(dataset: str = DEFAULT_DATASET, kit: str = "nominal", fit: bool = False,
     figs = [plot_comparison(curves, spec, out_img(f"{out_name}_comparison.png")),
             plot_calibration_check(ds, cal, out_img(f"{out_name}_calibration_check.png"))]
     for lang, sfx in (("en", ""), ("es", "_es")):
-        figs += [plot_q_comparison(cm, spec, out_img(f"{out_name}_q_comparison{sfx}.png"), lang),
+        figs += [plot_q_comparison(cm, spec, out_img(f"{out_name}_q_comparison{sfx}.png"), lang, res["q_factors"]),
                  plot_q_zoom(curves, cm, out_img(f"{out_name}_q_zoom{sfx}.png"), lang),
                  plot_q_delay(curves, res["q_factors"], out_img(f"{out_name}_q_delay{sfx}.png"), lang)]
     res["q_theory"] = q_theory(spec)
